@@ -7,5 +7,6 @@ export default [
 
   layout("routes/app-layout.tsx", [
     route("dashboard", "routes/dashboard.tsx"),
+    route("products", "routes/products.tsx"),
   ]),
 ] satisfies RouteConfig;
