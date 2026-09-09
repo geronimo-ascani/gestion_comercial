@@ -52,63 +52,6 @@ interface ProductRow {
 
 type StockStatus = "ok" | "critical" | "out";
 
-const sampleProducts: ProductRow[] = [
-  {
-    code: "PRD-001",
-    name: "Teclado mecánico RGB",
-    description: "Teclado mecánico retroiluminado con switches red.",
-    purchasePrice: "$45.000",
-    salePrice: "$72.500",
-    stock: 24,
-    minStock: 10,
-  },
-  {
-    code: "PRD-002",
-    name: "Mouse inalámbrico ergonómico",
-    description: "Mouse inalámbrico con sensor óptico de 2400 DPI.",
-    purchasePrice: "$12.000",
-    salePrice: "$19.900",
-    stock: 8,
-    minStock: 15,
-  },
-  {
-    code: "PRD-003",
-    name: "Monitor 24' Full HD",
-    description: "Monitor IPS de 23,8 pulgadas con resolución Full HD.",
-    purchasePrice: "$180.000",
-    salePrice: "$249.000",
-    stock: 0,
-    minStock: 5,
-  },
-  {
-    code: "PRD-004",
-    name: "Auriculares con cancelación de ruido",
-    description: "Auriculares over-ear con Bluetooth 5.3.",
-    purchasePrice: "$95.000",
-    salePrice: "$149.999",
-    stock: 12,
-    minStock: 6,
-  },
-  {
-    code: "PRD-005",
-    name: "Disco sólido SSD 1TB",
-    description: "SSD NVMe M.2 con velocidad de lectura de 3500 MB/s.",
-    purchasePrice: "$88.000",
-    salePrice: "$119.000",
-    stock: 5,
-    minStock: 8,
-  },
-  {
-    code: "PRD-006",
-    name: "Webcam Full HD 1080p",
-    description: "Cámara web con micrófono integrado y ajuste de inclinación.",
-    purchasePrice: "$32.000",
-    salePrice: "$48.500",
-    stock: 40,
-    minStock: 12,
-  },
-];
-
 function stockStatus(product: ProductRow): StockStatus {
   if (product.stock === 0) return "out";
   if (product.stock <= product.minStock) return "critical";
@@ -317,10 +260,10 @@ export function ProductsPage() {
           <div>
             <CardTitle>Listado de productos</CardTitle>
             <CardDescription>
-              {sampleProducts.length} productos registrados en el catálogo.
+              Los productos se cargan desde la base de datos.
             </CardDescription>
           </div>
-          <Badge variant="secondary">{sampleProducts.length} productos</Badge>
+          <Badge variant="secondary">0 productos</Badge>
         </CardHeader>
         <CardContent>
           <Table>
@@ -336,76 +279,19 @@ export function ProductsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sampleProducts.map((product) => (
-                <TableRow key={product.code}>
-                  <TableCell className="font-mono text-xs">
-                    {product.code}
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{product.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {product.description}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {product.purchasePrice}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {product.salePrice}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span
-                      className={
-                        stockStatus(product) === "out" ||
-                        stockStatus(product) === "critical"
-                          ? "font-medium text-red-500"
-                          : undefined
-                      }
-                    >
-                      {product.stock}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <StockBadge product={product} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <ProductFormDialog
-                        title="Editar producto"
-                        description="Modifique los datos del producto y guarde los cambios."
-                        product={product}
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Editar ${product.name}`}
-                          >
-                            <Pencil />
-                          </Button>
-                        }
-                      />
-                      <ProductDeleteDialog
-                        product={product}
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-destructive hover:text-destructive"
-                            aria-label={`Eliminar ${product.name}`}
-                          >
-                            <Trash2 />
-                          </Button>
-                        }
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              <TableRow>
+                <TableCell
+                  colSpan={7}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  No hay productos registrados.
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {sampleProducts.length} productos</span>
+          <span>Sin productos para mostrar</span>
         </CardFooter>
       </Card>
     </div>
