@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   ShoppingBag,
   Users,
+  UsersRound,
   BarChart3,
   Settings,
   type LucideIcon,
@@ -25,6 +26,7 @@ export const navItems: NavItem[] = [
   { to: "/sales", label: "Ventas", icon: ShoppingCart },
   { to: "/purchases", label: "Compras", icon: ShoppingBag },
   { to: "/customers", label: "Clientes", icon: Users },
+  { to: "/employees", label: "Empleados", icon: UsersRound },
   { to: "/analytics", label: "Analíticas", icon: BarChart3 },
   { to: "/settings", label: "Configuración", icon: Settings },
 ];

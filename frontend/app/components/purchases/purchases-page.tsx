@@ -28,6 +28,7 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { FieldError } from "~/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,13 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import {
+  requireText,
+  validateAddress,
+  validateDocument,
+  validateEmail,
+  validatePhone,
+} from "~/lib/validation";
 import { formatDate } from "../sales/sales-types";
 import { OrderLineItemsTable } from "../sales/sales-views";
 import type { Provider, PurchaseOrder } from "./purchases-types";
@@ -73,9 +81,14 @@ function NewProviderDialog({
   const [cuit, setCuit] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+  const [province, setProvince] = useState("");
+  const [locality, setLocality] = useState("");
+  const [street, setStreet] = useState("");
+  const [number, setNumber] = useState("");
+  const [apartment, setApartment] = useState("");
   const [bank, setBank] = useState("");
   const [account, setAccount] = useState("");
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     if (open) {
@@ -83,21 +96,50 @@ function NewProviderDialog({
       setCuit(provider?.cuit ?? "");
       setPhone(provider?.phone ?? "");
       setEmail(provider?.email ?? "");
-      setAddress(provider?.address ?? "");
+      setProvince(provider?.address?.province ?? "");
+      setLocality(provider?.address?.locality ?? "");
+      setStreet(provider?.address?.street ?? "");
+      setNumber(provider?.address?.number ?? "");
+      setApartment(provider?.address?.apartment ?? "");
       setBank(provider?.bank ?? "");
       setAccount(provider?.account ?? "");
+      setErrors({});
     }
   }, [open, provider]);
 
+  function setField(field: string, value: string, setter: (value: string) => void) {
+    setter(value);
+    setErrors((prev) => ({ ...prev, [field]: null }));
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const next: Record<string, string | null> = {
+      name: requireText(name, "Nombre / Razón social"),
+      cuit: cuit.trim()
+        ? validateDocument(cuit)
+        : requireText(cuit, "CUIT"),
+      email: email.trim()
+        ? validateEmail(email)
+        : requireText(email, "Correo electrónico"),
+      phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
+      address: validateAddress({ province, locality, street, number, apartment }),
+    };
+    setErrors(next);
+    if (Object.values(next).some((error) => error)) return;
     onSaved({
       id: provider?.id ?? crypto.randomUUID(),
       name: name.trim() || "Sin definir",
       cuit: cuit.trim(),
       phone: phone.trim(),
       email: email.trim(),
-      address: address.trim(),
+      address: {
+        province: province.trim(),
+        locality: locality.trim(),
+        street: street.trim(),
+        number: number.trim(),
+        apartment: apartment.trim(),
+      },
       bank: bank.trim(),
       account: account.trim(),
     });
@@ -112,38 +154,50 @@ function NewProviderDialog({
             {provider ? "Editar proveedor" : "Nuevo proveedor"}
           </DialogTitle>
           <DialogDescription>
-            Complete los datos del proveedor. Nombre / Razón social y CUIT son
-            obligatorios.
+            Complete los datos del proveedor. Nombre / Razón social, CUIT,
+            teléfono y correo electrónico son obligatorios.
           </DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="provider-name">Nombre / Razón social</Label>
               <Input
                 id="provider-name"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) =>
+                  setField("name", event.target.value, setName)
+                }
                 placeholder="Ej. Distribuidora San Juan"
+                aria-invalid={!!errors.name}
               />
+              <FieldError message={errors.name} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="provider-cuit">CUIT</Label>
               <Input
                 id="provider-cuit"
                 value={cuit}
-                onChange={(event) => setCuit(event.target.value)}
+                onChange={(event) =>
+                  setField("cuit", event.target.value, setCuit)
+                }
                 placeholder="20-12345678-9"
+                aria-invalid={!!errors.cuit}
               />
+              <FieldError message={errors.cuit} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="provider-phone">Teléfono</Label>
               <Input
                 id="provider-phone"
                 value={phone}
-                onChange={(event) => setPhone(event.target.value)}
+                onChange={(event) =>
+                  setField("phone", event.target.value, setPhone)
+                }
                 placeholder="+54 11 5555-0000"
+                aria-invalid={!!errors.phone}
               />
+              <FieldError message={errors.phone} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="provider-email">Correo electrónico</Label>
@@ -151,18 +205,75 @@ function NewProviderDialog({
                 id="provider-email"
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) =>
+                  setField("email", event.target.value, setEmail)
+                }
                 placeholder="ventas@proveedor.com.ar"
+                aria-invalid={!!errors.email}
               />
+              <FieldError message={errors.email} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-address">Dirección</Label>
-              <Input
-                id="provider-address"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                placeholder="Calle, número y localidad"
-              />
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Dirección</Label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="provider-street">Calle</Label>
+                  <Input
+                    id="provider-street"
+                    value={street}
+                    onChange={(event) =>
+                      setField("address", event.target.value, setStreet)
+                    }
+                    placeholder="Nombre de la calle"
+                    aria-invalid={!!errors.address}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-number">Altura</Label>
+                  <Input
+                    id="provider-number"
+                    value={number}
+                    onChange={(event) =>
+                      setField("address", event.target.value, setNumber)
+                    }
+                    placeholder="1234"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-apartment">Departamento</Label>
+                  <Input
+                    id="provider-apartment"
+                    value={apartment}
+                    onChange={(event) =>
+                      setField("address", event.target.value, setApartment)
+                    }
+                    placeholder="Ej. 3º B"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-locality">Localidad</Label>
+                  <Input
+                    id="provider-locality"
+                    value={locality}
+                    onChange={(event) =>
+                      setField("address", event.target.value, setLocality)
+                    }
+                    placeholder="Ej. Córdoba"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-province">Provincia</Label>
+                  <Input
+                    id="provider-province"
+                    value={province}
+                    onChange={(event) =>
+                      setField("address", event.target.value, setProvince)
+                    }
+                    placeholder="Ej. Buenos Aires"
+                  />
+                </div>
+              </div>
+              <FieldError message={errors.address} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="provider-bank">Banco</Label>
@@ -173,7 +284,7 @@ function NewProviderDialog({
                 placeholder="Ej. Banco Galicia"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2">
               <Label htmlFor="provider-account">Número de cuenta</Label>
               <Input
                 id="provider-account"

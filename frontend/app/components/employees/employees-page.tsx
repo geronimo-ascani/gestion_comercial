@@ -24,6 +24,13 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -32,60 +39,57 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-import { formatAddress } from "~/lib/address";
+import { formatInputDate } from "../sales/sales-types";
 import {
   requireText,
-  validateAddress,
   validateDocument,
   validateEmail,
   validatePhone,
 } from "~/lib/validation";
-import type { Customer } from "./customers-types";
+import { employeeRoleLabels, type Employee, type EmployeeRole } from "./employees-types";
 import {
-  addCustomer,
-  removeCustomer,
-  updateCustomer,
-  useCustomers,
-} from "./customers-store";
+  addEmployee,
+  removeEmployee,
+  updateEmployee,
+  useEmployees,
+} from "./employees-store";
 
-function CustomerFormDialog({
+function EmployeeFormDialog({
   open,
   onOpenChange,
-  customer,
+  employee,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customer: Customer | null;
-  onSaved: (customer: Customer) => void;
+  employee: Employee | null;
+  onSaved: (employee: Employee) => void;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [document, setDocument] = useState("");
+  const [cuil, setCuil] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [province, setProvince] = useState("");
-  const [locality, setLocality] = useState("");
-  const [street, setStreet] = useState("");
-  const [number, setNumber] = useState("");
-  const [apartment, setApartment] = useState("");
+  const [hireDate, setHireDate] = useState("");
+  const [role, setRole] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     if (open) {
-      setFirstName(customer?.firstName ?? "");
-      setLastName(customer?.lastName ?? "");
-      setDocument(customer?.document ?? "");
-      setPhone(customer?.phone ?? "");
-      setEmail(customer?.email ?? "");
-      setProvince(customer?.address?.province ?? "");
-      setLocality(customer?.address?.locality ?? "");
-      setStreet(customer?.address?.street ?? "");
-      setNumber(customer?.address?.number ?? "");
-      setApartment(customer?.address?.apartment ?? "");
+      setFirstName(employee?.firstName ?? "");
+      setLastName(employee?.lastName ?? "");
+      setCuil(employee?.cuil ?? "");
+      setPhone(employee?.phone ?? "");
+      setEmail(employee?.email ?? "");
+      setHireDate(employee?.hireDate ?? "");
+      setRole(employee?.role ?? "");
+      setPassword(employee?.password ?? "");
+      setConfirmPassword("");
       setErrors({});
     }
-  }, [open, customer]);
+  }, [open, employee]);
 
   function setField(field: string, value: string, setter: (value: string) => void) {
     setter(value);
@@ -97,31 +101,39 @@ function CustomerFormDialog({
     const next: Record<string, string | null> = {
       firstName: requireText(firstName, "Nombre"),
       lastName: requireText(lastName, "Apellido"),
-      document: document.trim()
-        ? validateDocument(document)
-        : requireText(document, "DNI/CUIT"),
+      cuil: cuil.trim()
+        ? validateDocument(cuil)
+        : requireText(cuil, "DNI/CUIL"),
       email: email.trim()
         ? validateEmail(email)
         : requireText(email, "Correo electrónico"),
       phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
-      address: validateAddress({ province, locality, street, number, apartment }),
+      hireDate: requireText(hireDate, "Fecha de ingreso"),
+      password:
+        password.trim().length === 0
+          ? null
+          : password.trim().length < 6
+            ? "Debe tener al menos 6 caracteres"
+            : null,
+      confirmPassword:
+        confirmPassword.trim().length === 0
+          ? null
+          : confirmPassword.trim() !== password.trim()
+            ? "Las contraseñas no coinciden"
+            : null,
     };
     setErrors(next);
     if (Object.values(next).some((error) => error)) return;
     onSaved({
-      id: customer?.id ?? crypto.randomUUID(),
+      id: employee?.id ?? crypto.randomUUID(),
       firstName: firstName.trim() || "Sin definir",
       lastName: lastName.trim(),
-      document: document.trim(),
+      cuil: cuil.trim(),
       phone: phone.trim(),
       email: email.trim(),
-      address: {
-        province: province.trim(),
-        locality: locality.trim(),
-        street: street.trim(),
-        number: number.trim(),
-        apartment: apartment.trim(),
-      },
+      hireDate: employee?.hireDate ?? formatInputDate(hireDate),
+      role: (role as EmployeeRole) || "ventas",
+      password: password.trim() || undefined,
     });
     onOpenChange(false);
   }
@@ -131,58 +143,58 @@ function CustomerFormDialog({
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {customer ? "Editar cliente" : "Nuevo cliente"}
+            {employee ? "Editar empleado" : "Nuevo empleado"}
           </DialogTitle>
           <DialogDescription>
-            Complete los datos del cliente. Nombre, apellido, DNI/CUIT, correo
-            electrónico y teléfono son obligatorios.
+            Complete los datos del empleado. Nombre, apellido, DNI/CUIL,
+            teléfono y fecha de ingreso son obligatorios.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="customer-first-name">Nombre</Label>
+              <Label htmlFor="employee-first-name">Nombre</Label>
               <Input
-                id="customer-first-name"
+                id="employee-first-name"
                 value={firstName}
                 onChange={(event) =>
                   setField("firstName", event.target.value, setFirstName)
                 }
-                placeholder="Ej. Juan"
+                placeholder="Ej. Lucía"
                 aria-invalid={!!errors.firstName}
               />
               <FieldError message={errors.firstName} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-last-name">Apellido</Label>
+              <Label htmlFor="employee-last-name">Apellido</Label>
               <Input
-                id="customer-last-name"
+                id="employee-last-name"
                 value={lastName}
                 onChange={(event) =>
                   setField("lastName", event.target.value, setLastName)
                 }
-                placeholder="Ej. Pérez"
+                placeholder="Ej. Fernández"
                 aria-invalid={!!errors.lastName}
               />
               <FieldError message={errors.lastName} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-document">DNI / CUIT</Label>
+              <Label htmlFor="employee-cuil">DNI / CUIL</Label>
               <Input
-                id="customer-document"
-                value={document}
+                id="employee-cuil"
+                value={cuil}
                 onChange={(event) =>
-                  setField("document", event.target.value, setDocument)
+                  setField("cuil", event.target.value, setCuil)
                 }
-                placeholder="DNI 33.251.234 / CUIT 20-..."
-                aria-invalid={!!errors.document}
+                placeholder="20-25123456-7"
+                aria-invalid={!!errors.cuil}
               />
-              <FieldError message={errors.document} />
+              <FieldError message={errors.cuil} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-phone">Teléfono</Label>
+              <Label htmlFor="employee-phone">Teléfono</Label>
               <Input
-                id="customer-phone"
+                id="employee-phone"
                 value={phone}
                 onChange={(event) =>
                   setField("phone", event.target.value, setPhone)
@@ -193,80 +205,79 @@ function CustomerFormDialog({
               <FieldError message={errors.phone} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-email">Correo electrónico</Label>
+              <Label htmlFor="employee-email">Correo electrónico</Label>
               <Input
-                id="customer-email"
+                id="employee-email"
                 type="email"
                 value={email}
                 onChange={(event) =>
                   setField("email", event.target.value, setEmail)
                 }
-                placeholder="cliente@mail.com"
+                placeholder="empleado@empresa.com"
                 aria-invalid={!!errors.email}
               />
               <FieldError message={errors.email} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-hire-date">Fecha de ingreso</Label>
+              <Input
+                id="employee-hire-date"
+                type="date"
+                value={hireDate}
+                onChange={(event) =>
+                  setField("hireDate", event.target.value, setHireDate)
+                }
+                aria-invalid={!!errors.hireDate}
+              />
+              <FieldError message={errors.hireDate} />
+            </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>Dirección</Label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="customer-street">Calle</Label>
-                  <Input
-                    id="customer-street"
-                    value={street}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setStreet)
-                    }
-                    placeholder="Nombre de la calle"
-                    aria-invalid={!!errors.address}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer-number">Altura</Label>
-                  <Input
-                    id="customer-number"
-                    value={number}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setNumber)
-                    }
-                    placeholder="1234"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer-apartment">Departamento</Label>
-                  <Input
-                    id="customer-apartment"
-                    value={apartment}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setApartment)
-                    }
-                    placeholder="Ej. 3º B"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer-locality">Localidad</Label>
-                  <Input
-                    id="customer-locality"
-                    value={locality}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setLocality)
-                    }
-                    placeholder="Ej. Córdoba"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer-province">Provincia</Label>
-                  <Input
-                    id="customer-province"
-                    value={province}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setProvince)
-                    }
-                    placeholder="Ej. Buenos Aires"
-                  />
-                </div>
-              </div>
-              <FieldError message={errors.address} />
+              <Label htmlFor="employee-role">Rol</Label>
+              <Select
+                value={role || undefined}
+                onValueChange={(value) => setRole(value ?? "")}
+              >
+                <SelectTrigger id="employee-role" className="w-full">
+                  <SelectValue placeholder="Seleccionar rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(employeeRoleLabels) as EmployeeRole[]).map(
+                    (key) => (
+                      <SelectItem key={key} value={key}>
+                        {employeeRoleLabels[key]}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="employee-password">Contraseña de acceso</Label>
+              <Input
+                id="employee-password"
+                type="password"
+                value={password}
+                onChange={(event) =>
+                  setField("password", event.target.value, setPassword)
+                }
+                placeholder="Mínimo 6 caracteres (opcional)"
+                aria-invalid={!!errors.password}
+              />
+              <FieldError message={errors.password} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="employee-confirm-password">Confirmar contraseña</Label>
+              <Input
+                id="employee-confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) =>
+                  setField("confirmPassword", event.target.value, setConfirmPassword)
+                }
+                placeholder="Repetir contraseña"
+                aria-invalid={!!errors.confirmPassword}
+              />
+              <FieldError message={errors.confirmPassword} />
             </div>
           </div>
           <DialogFooter>
@@ -274,7 +285,7 @@ function CustomerFormDialog({
               Cancelar
             </DialogClose>
             <Button type="submit">
-              {customer ? "Guardar cambios" : "Crear cliente"}
+              {employee ? "Guardar cambios" : "Crear empleado"}
             </Button>
           </DialogFooter>
         </form>
@@ -317,22 +328,22 @@ function ConfirmDeleteDialog({
   );
 }
 
-export function CustomersPage() {
+export function EmployeesPage() {
   const [formOpen, setFormOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
-  const customers = useCustomers();
+  const employees = useEmployees();
 
-  function openNewCustomer() {
-    setEditingCustomer(null);
+  function openNewEmployee() {
+    setEditingEmployee(null);
     setFormOpen(true);
   }
 
-  function handleSaved(customer: Customer) {
-    if (editingCustomer) {
-      updateCustomer(customer.id, customer);
+  function handleSaved(employee: Employee) {
+    if (editingEmployee) {
+      updateEmployee(employee.id, employee);
     } else {
-      addCustomer(customer);
+      addEmployee(employee);
     }
   }
 
@@ -340,14 +351,14 @@ export function CustomersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Clientes</h1>
+          <h1 className="text-3xl font-bold">Empleados</h1>
           <p className="text-muted-foreground">
-            Registro y gestión de clientes.
+            Perfiles de empleados de la organización.
           </p>
         </div>
-        <Button onClick={openNewCustomer}>
+        <Button onClick={openNewEmployee}>
           <Plus />
-          Nuevo cliente
+          Nuevo empleado
         </Button>
       </div>
 
@@ -356,7 +367,7 @@ export function CustomersPage() {
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Buscar cliente por nombre, DNI/CUIT o correo..."
+            placeholder="Buscar empleado por nombre, DNI/CUIL o cargo..."
           />
         </div>
         <Button variant="outline">Buscar</Button>
@@ -365,67 +376,73 @@ export function CustomersPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Clientes</CardTitle>
+            <CardTitle>Empleados</CardTitle>
           </div>
-          <Badge variant="secondary">{customers.length} clientes</Badge>
+          <Badge variant="secondary">{employees.length} empleados</Badge>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre y apellido</TableHead>
-                <TableHead>DNI / CUIT</TableHead>
+                <TableHead>DNI / CUIL</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Correo electrónico</TableHead>
-                <TableHead>Dirección</TableHead>
+                <TableHead>Fecha de ingreso</TableHead>
+                <TableHead>Rol</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {customers.length === 0 ? (
+              {employees.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No hay clientes registrados.
+                    No hay empleados registrados.
                   </TableCell>
                 </TableRow>
               ) : (
-                customers.map((customer) => (
-                  <TableRow key={customer.id}>
+                employees.map((employee) => (
+                  <TableRow key={employee.id}>
                     <TableCell className="font-medium">
-                      {customer.firstName} {customer.lastName}
+                      {employee.firstName} {employee.lastName}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {customer.document || "—"}
+                      {employee.cuil || "—"}
                     </TableCell>
-                    <TableCell>{customer.phone || "—"}</TableCell>
-                    <TableCell>{customer.email || "—"}</TableCell>
-                    <TableCell>{formatAddress(customer.address) || "—"}</TableCell>
+                    <TableCell>{employee.phone || "—"}</TableCell>
+                    <TableCell>{employee.email || "—"}</TableCell>
+                    <TableCell>{employee.hireDate || "—"}</TableCell>
+                    <TableCell>
+                      {employee.role
+                        ? employeeRoleLabels[employee.role]
+                        : "—"}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Editar cliente ${customer.firstName} ${customer.lastName}`}
+                          aria-label={`Editar empleado ${employee.firstName} ${employee.lastName}`}
                           onClick={() => {
-                            setEditingCustomer(customer);
+                            setEditingEmployee(employee);
                             setFormOpen(true);
                           }}
                         >
                           <Pencil />
                         </Button>
                         <ConfirmDeleteDialog
-                          title="¿Eliminar cliente?"
-                          description={`Se eliminará ${customer.firstName} ${customer.lastName}. Esta acción no se puede deshacer.`}
-                          onConfirm={() => removeCustomer(customer.id)}
+                          title="¿Eliminar empleado?"
+                          description={`Se eliminará ${employee.firstName} ${employee.lastName}. Esta acción no se puede deshacer.`}
+                          onConfirm={() => removeEmployee(employee.id)}
                           trigger={
                             <Button
                               variant="ghost"
                               size="icon-sm"
                               className="text-destructive hover:text-destructive"
-                              aria-label={`Eliminar cliente ${customer.firstName} ${customer.lastName}`}
+                              aria-label={`Eliminar empleado ${employee.firstName} ${employee.lastName}`}
                             >
                               <Trash2 />
                             </Button>
@@ -440,14 +457,14 @@ export function CustomersPage() {
           </Table>
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {customers.length} clientes</span>
+          <span>Mostrando {employees.length} empleados</span>
         </CardFooter>
       </Card>
 
-      <CustomerFormDialog
+      <EmployeeFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        customer={editingCustomer}
+        employee={editingEmployee}
         onSaved={handleSaved}
       />
     </div>

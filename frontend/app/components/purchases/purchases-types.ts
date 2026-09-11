@@ -1,4 +1,5 @@
 import type { LineItem } from "../sales/sales-types";
+import type { Address } from "~/lib/address";
 
 export type PurchaseOrderStatus =
   | "pendiente"
@@ -12,7 +13,7 @@ export interface Provider {
   cuit: string;
   phone: string;
   email: string;
-  address: string;
+  address: Address;
   bank: string;
   account: string;
 }

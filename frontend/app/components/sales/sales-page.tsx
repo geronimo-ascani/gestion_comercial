@@ -24,6 +24,7 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { FieldError } from "~/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import { validateAddress } from "~/lib/validation";
 import type { Budget, PaymentMethod, SalesOrder } from "./sales-types";
 import { formatDate, formatInputDate } from "./sales-types";
 import {
@@ -64,16 +66,30 @@ function NewOrderDialog({
   onCreated: (order: SalesOrder) => void;
 }) {
   const [client, setClient] = useState("");
-  const [address, setAddress] = useState("");
+  const [province, setProvince] = useState("");
+  const [locality, setLocality] = useState("");
+  const [street, setStreet] = useState("");
+  const [number, setNumber] = useState("");
+  const [apartment, setApartment] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("tarjeta");
+  const [addressError, setAddressError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const error = validateAddress({ province, locality, street, number, apartment });
+    setAddressError(error);
+    if (error) return;
     onCreated({
       number: nextNumber,
       client: client.trim() || "Sin definir",
       date: formatDate(new Date()),
-      deliveryAddress: address.trim(),
+      deliveryAddress: {
+        province: province.trim(),
+        locality: locality.trim(),
+        street: street.trim(),
+        number: number.trim(),
+        apartment: apartment.trim(),
+      },
       items: [],
       total: "$0",
       status: "pendiente",
@@ -100,7 +116,7 @@ function NewOrderDialog({
             cliente.
           </DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="order-client">Cliente</Label>
@@ -123,13 +139,71 @@ function NewOrderDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="order-address">Dirección de entrega</Label>
-            <Input
-              id="order-address"
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              placeholder="Calle, número y localidad"
-            />
+            <Label>Dirección de entrega</Label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="order-street">Calle</Label>
+                <Input
+                  id="order-street"
+                  value={street}
+                  onChange={(event) => {
+                    setStreet(event.target.value);
+                    setAddressError(null);
+                  }}
+                  placeholder="Nombre de la calle"
+                  aria-invalid={!!addressError}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order-number">Altura</Label>
+                <Input
+                  id="order-number"
+                  value={number}
+                  onChange={(event) => {
+                    setNumber(event.target.value);
+                    setAddressError(null);
+                  }}
+                  placeholder="1234"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order-apartment">Departamento</Label>
+                <Input
+                  id="order-apartment"
+                  value={apartment}
+                  onChange={(event) => {
+                    setApartment(event.target.value);
+                    setAddressError(null);
+                  }}
+                  placeholder="Ej. 3º B"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order-locality">Localidad</Label>
+                <Input
+                  id="order-locality"
+                  value={locality}
+                  onChange={(event) => {
+                    setLocality(event.target.value);
+                    setAddressError(null);
+                  }}
+                  placeholder="Ej. Córdoba"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order-province">Provincia</Label>
+                <Input
+                  id="order-province"
+                  value={province}
+                  onChange={(event) => {
+                    setProvince(event.target.value);
+                    setAddressError(null);
+                  }}
+                  placeholder="Ej. Buenos Aires"
+                />
+              </div>
+            </div>
+            <FieldError message={addressError} />
           </div>
 
           <div className="space-y-2">

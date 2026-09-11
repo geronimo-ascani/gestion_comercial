@@ -1,3 +1,5 @@
+import type { Address } from "~/lib/address";
+
 export interface Customer {
   id: string;
   firstName: string;
@@ -5,5 +7,5 @@ export interface Customer {
   document: string;
   phone: string;
   email: string;
-  address: string;
+  address: Address;
 }

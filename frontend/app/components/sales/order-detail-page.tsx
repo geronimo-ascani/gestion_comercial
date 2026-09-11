@@ -2,6 +2,7 @@ import { ArrowLeft, Printer, User } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { cn } from "~/lib/utils";
+import { formatAddress } from "~/lib/address";
 import { buttonVariants, Button } from "~/components/ui/button";
 import {
   Card,
@@ -273,7 +274,7 @@ function CustomerDetailsCard({ order }: { order: SalesOrder }) {
           <DetailRow label="Teléfono" value={order.phone ?? "—"} />
           <DetailRow
             label="Dirección de envío"
-            value={order.deliveryAddress || "—"}
+            value={formatAddress(order.deliveryAddress) || "—"}
           />
         </dl>
       </CardContent>

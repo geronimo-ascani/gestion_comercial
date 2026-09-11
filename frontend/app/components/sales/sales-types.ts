@@ -1,3 +1,5 @@
+import type { Address } from "~/lib/address";
+
 export type OrderStatus = "pendiente" | "proceso" | "enviado" | "entregado" | "cancelado";
 
 export type PaymentMethod = "efectivo" | "tarjeta" | "mercadopago";
@@ -20,7 +22,7 @@ export interface SalesOrder {
   email?: string;
   phone?: string;
   date: string;
-  deliveryAddress: string;
+  deliveryAddress: Address;
   items: LineItem[];
   subtotal?: string;
   shipping?: string;
