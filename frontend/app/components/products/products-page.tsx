@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -23,7 +24,6 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { FieldError } from "~/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -39,18 +39,11 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { Textarea } from "~/components/ui/textarea";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import { requireText } from "~/lib/validation";
 import type { Product } from "./products-types";
-import {
-  addProduct,
-  removeProduct,
-  updateProduct,
-  useProducts,
-} from "./products-store";
+import { removeProduct, useProducts } from "./products-store";
 
 type StockStatus = "ok" | "critical" | "out";
 
@@ -70,207 +63,6 @@ function StockBadge({ product }: { product: Product }) {
     return <Badge variant="warning">Stock crítico</Badge>;
   }
   return <Badge variant="success">En stock</Badge>;
-}
-
-function ProductFormDialog({
-  open,
-  onOpenChange,
-  product,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  product: Product | null;
-  onSaved: (product: Product) => void;
-}) {
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [purchasePrice, setPurchasePrice] = useState("");
-  const [salePrice, setSalePrice] = useState("");
-  const [stock, setStock] = useState("");
-  const [minStock, setMinStock] = useState("");
-  const [errors, setErrors] = useState<Record<string, string | null>>({});
-
-  useEffect(() => {
-    if (open) {
-      setCode(product?.code ?? "");
-      setName(product?.name ?? "");
-      setDescription(product?.description ?? "");
-      setPurchasePrice(product ? String(product.purchasePrice) : "");
-      setSalePrice(product ? String(product.salePrice) : "");
-      setStock(product ? String(product.stock) : "");
-      setMinStock(product ? String(product.minStock) : "");
-      setErrors({});
-    }
-  }, [open, product]);
-
-  function setField(field: string, value: string, setter: (value: string) => void) {
-    setter(value);
-    setErrors((prev) => ({ ...prev, [field]: null }));
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const next: Record<string, string | null> = {
-      name: requireText(name, "Nombre"),
-      purchasePrice:
-        parseNumberInput(purchasePrice) < 0
-          ? "El precio de compra no puede ser negativo"
-          : null,
-      salePrice:
-        parseNumberInput(salePrice) < 0
-          ? "El precio de venta no puede ser negativo"
-          : null,
-      stock:
-        Number.isInteger(parseNumberInput(stock)) &&
-        parseNumberInput(stock) >= 0
-          ? null
-          : "Ingrese un stock válido (entero, no negativo)",
-      minStock:
-        Number.isInteger(parseNumberInput(minStock)) &&
-        parseNumberInput(minStock) >= 0
-          ? null
-          : "Ingrese un stock mínimo válido (entero, no negativo)",
-    };
-    setErrors(next);
-    if (Object.values(next).some((error) => error)) return;
-    onSaved({
-      id: product?.id ?? crypto.randomUUID(),
-      code: code.trim(),
-      name: name.trim(),
-      description: description.trim(),
-      purchasePrice: parseNumberInput(purchasePrice),
-      salePrice: parseNumberInput(salePrice),
-      stock: Math.floor(parseNumberInput(stock)),
-      minStock: Math.floor(parseNumberInput(minStock)),
-    });
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
-            {product ? "Editar producto" : "Nuevo producto"}
-          </DialogTitle>
-          <DialogDescription>
-            Complete los datos del producto para agregarlo al catálogo.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="product-code">Código</Label>
-              <Input
-                id="product-code"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                placeholder="PRD-000"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="product-name">Nombre</Label>
-              <Input
-                id="product-name"
-                value={name}
-                onChange={(event) =>
-                  setField("name", event.target.value, setName)
-                }
-                placeholder="Nombre del producto"
-                aria-invalid={!!errors.name}
-              />
-              <FieldError message={errors.name} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="product-description">Descripción</Label>
-            <Textarea
-              id="product-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Descripción breve del producto"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="product-purchase-price">Precio de compra</Label>
-              <Input
-                id="product-purchase-price"
-                inputMode="decimal"
-                value={purchasePrice}
-                onChange={(event) =>
-                  setField("purchasePrice", event.target.value, setPurchasePrice)
-                }
-                placeholder="$ 0"
-                aria-invalid={!!errors.purchasePrice}
-              />
-              <FieldError message={errors.purchasePrice} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="product-sale-price">Precio de venta</Label>
-              <Input
-                id="product-sale-price"
-                inputMode="decimal"
-                value={salePrice}
-                onChange={(event) =>
-                  setField("salePrice", event.target.value, setSalePrice)
-                }
-                placeholder="$ 0"
-                aria-invalid={!!errors.salePrice}
-              />
-              <FieldError message={errors.salePrice} />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="product-stock">Stock actual</Label>
-              <Input
-                id="product-stock"
-                type="number"
-                min={0}
-                value={stock}
-                onChange={(event) =>
-                  setField("stock", event.target.value, setStock)
-                }
-                placeholder="0"
-                aria-invalid={!!errors.stock}
-              />
-              <FieldError message={errors.stock} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="product-min-stock">Stock mínimo</Label>
-              <Input
-                id="product-min-stock"
-                type="number"
-                min={0}
-                value={minStock}
-                onChange={(event) =>
-                  setField("minStock", event.target.value, setMinStock)
-                }
-                placeholder="0"
-                aria-invalid={!!errors.minStock}
-              />
-              <FieldError message={errors.minStock} />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button type="submit">
-              {product ? "Guardar cambios" : "Guardar producto"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function ProductDeleteDialog({
@@ -309,10 +101,9 @@ function ProductDeleteDialog({
 }
 
 export function ProductsPage() {
+  const navigate = useNavigate();
   const loading = useInitialLoading();
   const products = useProducts();
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [query, setQuery] = useState("");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
@@ -332,21 +123,7 @@ export function ProductsPage() {
   });
 
   function openNewProduct() {
-    setEditingProduct(null);
-    setFormOpen(true);
-  }
-
-  function handleSaved(product: Product) {
-    if (editingProduct) {
-      updateProduct(product.id, product);
-    } else {
-      addProduct({
-        ...product,
-        code:
-          product.code ||
-          `PRD-${String(products.length + 1).padStart(3, "0")}`,
-      });
-    }
+    navigate("/products/new");
   }
 
   return (
@@ -479,10 +256,9 @@ export function ProductsPage() {
                             variant="ghost"
                             size="icon-sm"
                             aria-label={`Editar producto ${product.name}`}
-                            onClick={() => {
-                              setEditingProduct(product);
-                              setFormOpen(true);
-                            }}
+                            onClick={() =>
+                              navigate(`/products/new?edit=${product.id}`)
+                            }
                           >
                             <Pencil />
                           </Button>
@@ -513,13 +289,6 @@ export function ProductsPage() {
           <span>Mostrando {filtered.length} productos</span>
         </CardFooter>
       </Card>
-
-      <ProductFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        product={editingProduct}
-        onSaved={handleSaved}
-      />
     </div>
   );
 }

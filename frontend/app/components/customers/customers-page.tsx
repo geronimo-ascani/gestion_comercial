@@ -1,5 +1,6 @@
-import { useState, type ReactElement } from "react";
+import { type ReactElement } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -31,16 +32,9 @@ import {
 } from "~/components/ui/table";
 
 import { formatAddress } from "~/lib/address";
-import type { Customer } from "./customers-types";
-import {
-  addCustomer,
-  removeCustomer,
-  updateCustomer,
-  useCustomers,
-} from "./customers-store";
+import { removeCustomer, useCustomers } from "./customers-store";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
-import { CustomerFormDialog } from "./customer-form-dialog";
 
 function ConfirmDeleteDialog({
   title,
@@ -77,24 +71,9 @@ function ConfirmDeleteDialog({
 }
 
 export function CustomersPage() {
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-
+  const navigate = useNavigate();
   const loading = useInitialLoading();
   const customers = useCustomers();
-
-  function openNewCustomer() {
-    setEditingCustomer(null);
-    setFormOpen(true);
-  }
-
-  function handleSaved(customer: Customer) {
-    if (editingCustomer) {
-      updateCustomer(customer.id, customer);
-    } else {
-      addCustomer(customer);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -105,7 +84,7 @@ export function CustomersPage() {
             Registro y gestión de clientes.
           </p>
         </div>
-        <Button onClick={openNewCustomer}>
+        <Button onClick={() => navigate("/customers/new")}>
           <Plus />
           Nuevo cliente
         </Button>
@@ -172,10 +151,9 @@ export function CustomersPage() {
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Editar cliente ${customer.firstName} ${customer.lastName}`}
-                          onClick={() => {
-                            setEditingCustomer(customer);
-                            setFormOpen(true);
-                          }}
+                          onClick={() =>
+                            navigate(`/customers/new?edit=${customer.id}`)
+                          }
                         >
                           <Pencil />
                         </Button>
@@ -207,13 +185,6 @@ export function CustomersPage() {
           <span>Mostrando {customers.length} clientes</span>
         </CardFooter>
       </Card>
-
-      <CustomerFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        customer={editingCustomer}
-        onSaved={handleSaved}
-      />
     </div>
   );
 }

@@ -1,10 +1,6 @@
-import {
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactElement,
-} from "react";
+import { useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
@@ -28,7 +24,6 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { FieldError } from "~/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -47,390 +42,15 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
-import {
-  requireText,
-  validateAddress,
-  validateDocument,
-  validateEmail,
-  validatePhone,
-} from "~/lib/validation";
-import { formatDate } from "../sales/sales-types";
-import type { LineItem } from "../sales/sales-types";
 import { OrderLineItemsTable } from "../sales/sales-views";
-import { LineItemsEditor } from "../sales/line-items-editor";
-import { useProducts } from "../products/products-store";
-import type { Provider, PurchaseOrder } from "./purchases-types";
+import type { PurchaseOrder } from "./purchases-types";
 import {
-  addProvider,
-  addPurchaseOrder,
   removeProvider,
   removePurchaseOrder,
-  updateProvider,
   useProviders,
   usePurchaseOrders,
 } from "./purchases-store";
 import { PurchaseOrderStatusBadge } from "./purchases-views";
-
-function NewProviderDialog({
-  open,
-  onOpenChange,
-  provider,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  provider: Provider | null;
-  onSaved: (provider: Provider) => void;
-}) {
-  const [name, setName] = useState("");
-  const [cuit, setCuit] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [province, setProvince] = useState("");
-  const [locality, setLocality] = useState("");
-  const [street, setStreet] = useState("");
-  const [number, setNumber] = useState("");
-  const [apartment, setApartment] = useState("");
-  const [bank, setBank] = useState("");
-  const [account, setAccount] = useState("");
-  const [errors, setErrors] = useState<Record<string, string | null>>({});
-
-  useEffect(() => {
-    if (open) {
-      setName(provider?.name ?? "");
-      setCuit(provider?.cuit ?? "");
-      setPhone(provider?.phone ?? "");
-      setEmail(provider?.email ?? "");
-      setProvince(provider?.address?.province ?? "");
-      setLocality(provider?.address?.locality ?? "");
-      setStreet(provider?.address?.street ?? "");
-      setNumber(provider?.address?.number ?? "");
-      setApartment(provider?.address?.apartment ?? "");
-      setBank(provider?.bank ?? "");
-      setAccount(provider?.account ?? "");
-      setErrors({});
-    }
-  }, [open, provider]);
-
-  function setField(field: string, value: string, setter: (value: string) => void) {
-    setter(value);
-    setErrors((prev) => ({ ...prev, [field]: null }));
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const next: Record<string, string | null> = {
-      name: requireText(name, "Nombre / Razón social"),
-      cuit: cuit.trim()
-        ? validateDocument(cuit)
-        : requireText(cuit, "CUIT"),
-      email: email.trim()
-        ? validateEmail(email)
-        : requireText(email, "Correo electrónico"),
-      phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
-      address: validateAddress({ province, locality, street, number, apartment }),
-    };
-    setErrors(next);
-    if (Object.values(next).some((error) => error)) return;
-    onSaved({
-      id: provider?.id ?? crypto.randomUUID(),
-      name: name.trim() || "Sin definir",
-      cuit: cuit.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      address: {
-        province: province.trim(),
-        locality: locality.trim(),
-        street: street.trim(),
-        number: number.trim(),
-        apartment: apartment.trim(),
-      },
-      bank: bank.trim(),
-      account: account.trim(),
-    });
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
-            {provider ? "Editar proveedor" : "Nuevo proveedor"}
-          </DialogTitle>
-          <DialogDescription>
-            Complete los datos del proveedor. Nombre / Razón social, CUIT,
-            teléfono y correo electrónico son obligatorios.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="provider-name">Nombre / Razón social</Label>
-              <Input
-                id="provider-name"
-                value={name}
-                onChange={(event) =>
-                  setField("name", event.target.value, setName)
-                }
-                placeholder="Ej. Distribuidora San Juan"
-                aria-invalid={!!errors.name}
-              />
-              <FieldError message={errors.name} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-cuit">CUIT</Label>
-              <Input
-                id="provider-cuit"
-                value={cuit}
-                onChange={(event) =>
-                  setField("cuit", event.target.value, setCuit)
-                }
-                placeholder="20-12345678-9"
-                aria-invalid={!!errors.cuit}
-              />
-              <FieldError message={errors.cuit} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-phone">Teléfono</Label>
-              <Input
-                id="provider-phone"
-                value={phone}
-                onChange={(event) =>
-                  setField("phone", event.target.value, setPhone)
-                }
-                placeholder="+54 11 5555-0000"
-                aria-invalid={!!errors.phone}
-              />
-              <FieldError message={errors.phone} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-email">Correo electrónico</Label>
-              <Input
-                id="provider-email"
-                type="email"
-                value={email}
-                onChange={(event) =>
-                  setField("email", event.target.value, setEmail)
-                }
-                placeholder="ventas@proveedor.com.ar"
-                aria-invalid={!!errors.email}
-              />
-              <FieldError message={errors.email} />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Dirección</Label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="provider-street">Calle</Label>
-                  <Input
-                    id="provider-street"
-                    value={street}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setStreet)
-                    }
-                    placeholder="Nombre de la calle"
-                    aria-invalid={!!errors.address}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="provider-number">Altura</Label>
-                  <Input
-                    id="provider-number"
-                    value={number}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setNumber)
-                    }
-                    placeholder="1234"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="provider-apartment">Departamento</Label>
-                  <Input
-                    id="provider-apartment"
-                    value={apartment}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setApartment)
-                    }
-                    placeholder="Ej. 3º B"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="provider-locality">Localidad</Label>
-                  <Input
-                    id="provider-locality"
-                    value={locality}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setLocality)
-                    }
-                    placeholder="Ej. Córdoba"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="provider-province">Provincia</Label>
-                  <Input
-                    id="provider-province"
-                    value={province}
-                    onChange={(event) =>
-                      setField("address", event.target.value, setProvince)
-                    }
-                    placeholder="Ej. Buenos Aires"
-                  />
-                </div>
-              </div>
-              <FieldError message={errors.address} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-bank">Banco</Label>
-              <Input
-                id="provider-bank"
-                value={bank}
-                onChange={(event) => setBank(event.target.value)}
-                placeholder="Ej. Banco Galicia"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-account">Número de cuenta</Label>
-              <Input
-                id="provider-account"
-                value={account}
-                onChange={(event) => setAccount(event.target.value)}
-                placeholder="CBU / número de cuenta"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button type="submit">
-              {provider ? "Guardar cambios" : "Crear proveedor"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function NewPurchaseOrderDialog({
-  open,
-  onOpenChange,
-  nextNumber,
-  providers,
-  onCreated,
-  onOpenProvider,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  nextNumber: string;
-  providers: Provider[];
-  onCreated: (order: PurchaseOrder) => void;
-  onOpenProvider: () => void;
-}) {
-  const [provider, setProvider] = useState("");
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [total, setTotal] = useState("$0");
-  const [itemsError, setItemsError] = useState<string | null>(null);
-  const products = useProducts();
-
-  useEffect(() => {
-    if (open) {
-      setProvider("");
-      setItems([]);
-      setTotal("$0");
-      setItemsError(null);
-    }
-  }, [open]);
-
-  function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
-    setItems(nextItems);
-    setTotal(nextTotal);
-    setItemsError(null);
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (items.length === 0) {
-      setItemsError("Agregue al menos un producto con cantidad.");
-      return;
-    }
-    onCreated({
-      number: nextNumber,
-      provider: provider || "Sin definir",
-      date: formatDate(new Date()),
-      items,
-      total,
-      status: "pendiente",
-    });
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Nueva orden de compra</DialogTitle>
-          <DialogDescription>
-            Seleccione el proveedor, los productos y las cantidades. Si el
-            proveedor no existe, puede cargarlo desde aquí.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="order-provider">Proveedor</Label>
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={onOpenProvider}
-              >
-                <Plus />
-                Nuevo proveedor
-              </Button>
-            </div>
-            {providers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No hay proveedores cargados. Cree uno para poder generar la
-                orden de compra.
-              </p>
-            ) : (
-              <Select value={provider || undefined} onValueChange={(value) => setProvider(value ?? "")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccionar proveedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((item) => (
-                    <SelectItem key={item.id} value={item.name}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <LineItemsEditor
-              products={products}
-              priceMode="purchase"
-              onChange={handleItemsChange}
-            />
-            <FieldError message={itemsError} />
-          </div>
-
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button type="submit">Crear orden</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function PurchaseOrderDetailDialog({
   order,
@@ -496,28 +116,16 @@ function ConfirmDeleteDialog({
 }
 
 export function PurchasesPage() {
-  const [activeTab, setActiveTab] = useState<"orders" | "providers">("orders");
-  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
-  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
-
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab: "orders" | "providers" =
+    searchParams.get("tab") === "providers" ? "providers" : "orders";
   const providers = useProviders();
   const orders = usePurchaseOrders();
   const loading = useInitialLoading();
 
-  const nextOrderNumber = `OC-${String(orders.length + 1).padStart(3, "0")}`;
-
-  function openNewProvider() {
-    setEditingProvider(null);
-    setProviderDialogOpen(true);
-  }
-
-  function handleProviderSaved(provider: Provider) {
-    if (editingProvider) {
-      updateProvider(provider.id, provider);
-    } else {
-      addProvider(provider);
-    }
+  function switchTab(tab: "orders" | "providers") {
+    setSearchParams({ tab }, { replace: true });
   }
 
   return (
@@ -529,17 +137,18 @@ export function PurchasesPage() {
             Órdenes de compra y gestión de proveedores.
           </p>
         </div>
-        {activeTab === "orders" ? (
-          <Button onClick={() => setOrderDialogOpen(true)}>
-            <Plus />
-            Nueva orden de compra
-          </Button>
-        ) : (
-          <Button onClick={openNewProvider}>
-            <Plus />
-            Nuevo proveedor
-          </Button>
-        )}
+        <Button
+          onClick={() =>
+            navigate(
+              activeTab === "orders"
+                ? "/purchases/new-order"
+                : "/purchases/new-provider"
+            )
+          }
+        >
+          <Plus />
+          {activeTab === "orders" ? "Nueva orden de compra" : "Nuevo proveedor"}
+        </Button>
       </div>
 
       <div className="flex w-full gap-2 lg:w-fit">
@@ -550,7 +159,7 @@ export function PurchasesPage() {
             activeTab === "orders" &&
               "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
           )}
-          onClick={() => setActiveTab("orders")}
+          onClick={() => switchTab("orders")}
         >
           Órdenes de compra
         </Button>
@@ -561,7 +170,7 @@ export function PurchasesPage() {
             activeTab === "providers" &&
               "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
           )}
-          onClick={() => setActiveTab("providers")}
+          onClick={() => switchTab("providers")}
         >
           Proveedores
         </Button>
@@ -650,37 +259,18 @@ export function PurchasesPage() {
                           <PurchaseOrderStatusBadge status={order.status} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <PurchaseOrderDetailDialog
-                              order={order}
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Ver orden ${order.number}`}
-                                >
-                                  <Eye />
-                                </Button>
-                              }
-                            />
-                            <ConfirmDeleteDialog
-                              title="¿Eliminar orden de compra?"
-                              description={`Se eliminará la orden ${order.number} del proveedor ${order.provider}. Esta acción no se puede deshacer.`}
-                              onConfirm={() =>
-                                removePurchaseOrder(order.number)
-                              }
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="text-destructive hover:text-destructive"
-                                  aria-label={`Eliminar orden ${order.number}`}
-                                >
-                                  <Trash2 />
-                                </Button>
-                              }
-                            />
-                          </div>
+                          <PurchaseOrderDetailDialog
+                            order={order}
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Ver orden ${order.number}`}
+                              >
+                                <Eye />
+                              </Button>
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     ))
@@ -759,10 +349,11 @@ export function PurchasesPage() {
                               variant="ghost"
                               size="icon-sm"
                               aria-label={`Editar proveedor ${provider.name}`}
-                              onClick={() => {
-                                setEditingProvider(provider);
-                                setProviderDialogOpen(true);
-                              }}
+                              onClick={() =>
+                                navigate(
+                                  `/purchases/new-provider?edit=${provider.id}`
+                                )
+                              }
                             >
                               <Pencil />
                             </Button>
@@ -796,22 +387,6 @@ export function PurchasesPage() {
           </Card>
         </section>
       )}
-
-      <NewPurchaseOrderDialog
-        open={orderDialogOpen}
-        onOpenChange={setOrderDialogOpen}
-        nextNumber={nextOrderNumber}
-        providers={providers}
-        onCreated={addPurchaseOrder}
-        onOpenProvider={openNewProvider}
-      />
-
-      <NewProviderDialog
-        open={providerDialogOpen}
-        onOpenChange={setProviderDialogOpen}
-        provider={editingProvider}
-        onSaved={handleProviderSaved}
-      />
     </div>
   );
 }

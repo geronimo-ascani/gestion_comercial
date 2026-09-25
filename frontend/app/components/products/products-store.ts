@@ -92,6 +92,15 @@ export function useProducts(): Product[] {
   return useSyncExternalStore(subscribe, getProducts, getProducts);
 }
 
+export function getNextProductCode(): string {
+  const max = products.reduce((highest, product) => {
+    const match = /(\d+)$/.exec(product.code);
+    const sequence = match ? Number(match[1]) : 0;
+    return sequence > highest ? sequence : highest;
+  }, 0);
+  return `PRD-${String(max + 1).padStart(3, "0")}`;
+}
+
 export function addProduct(product: Product) {
   products = [...products, product];
   emit();
