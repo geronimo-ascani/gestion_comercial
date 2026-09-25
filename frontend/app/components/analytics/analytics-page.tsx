@@ -39,127 +39,78 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-type Period = "mes" | "trimestre" | "año";
+import { AovPanel } from "./aov-panel";
+import {
+  aovSeries,
+  basePayments,
+  buildHeatmap,
+  formatAR,
+  oldStock,
+  periodConfigs,
+  periodOptions,
+  recurrentSeries,
+  tendencies,
+  topCustomers,
+  topProducts,
+  type Period,
+} from "./analytics-data";
+import { HeatmapPanel } from "./heatmap-panel";
+import { ImmobilizedInventory } from "./immobilized-inventory";
+import { NewVsRecurrent } from "./new-vs-recurrent-panel";
+import { RankingsPanel } from "./rankings-panel";
 
-const periodOptions: { value: Period; label: string }[] = [
-  { value: "mes", label: "Último mes" },
-  { value: "trimestre", label: "Último trimestre" },
-  { value: "año", label: "Este año" },
-];
-
-const demoByPeriod: Record<
-  Period,
-  {
-    ventas: string;
-    gastos: string;
-    neto: string;
-    margen: string;
-    deltaVentas: string;
-    deltaGastos: string;
-    deltaNeto: string;
-  }
-> = {
-  mes: {
-    ventas: "$1.230.500",
-    gastos: "$820.000",
-    neto: "$410.500",
-    margen: "33,4%",
-    deltaVentas: "+12%",
-    deltaGastos: "-3%",
-    deltaNeto: "+25%",
-  },
-  trimestre: {
-    ventas: "$3.610.200",
-    gastos: "$2.410.800",
-    neto: "$1.199.400",
-    margen: "33,2%",
-    deltaVentas: "+18%",
-    deltaGastos: "+6%",
-    deltaNeto: "+41%",
-  },
-  año: {
-    ventas: "$14.520.000",
-    gastos: "$9.880.000",
-    neto: "$4.640.000",
-    margen: "31,9%",
-    deltaVentas: "+22%",
-    deltaGastos: "+9%",
-    deltaNeto: "+48%",
-  },
-};
-
-const tendencies = [
-  { month: "Ene", ventas: 980000, gastos: 710000 },
-  { month: "Feb", ventas: 1050000, gastos: 760000 },
-  { month: "Mar", ventas: 1120000, gastos: 790000 },
-  { month: "Abr", ventas: 1080000, gastos: 820000 },
-  { month: "May", ventas: 1210000, gastos: 840000 },
-  { month: "Jun", ventas: 1180000, gastos: 810000 },
-  { month: "Jul", ventas: 1260000, gastos: 860000 },
-  { month: "Ago", ventas: 1320000, gastos: 880000 },
-  { month: "Sep", ventas: 1290000, gastos: 850000 },
-  { month: "Oct", ventas: 1370000, gastos: 900000 },
-  { month: "Nov", ventas: 1430000, gastos: 920000 },
-  { month: "Dic", ventas: 1510000, gastos: 980000 },
-];
-
-const payments = [
-  { method: "Efectivo", amount: 980000, color: "#3b82f6" },
-  { method: "Tarjeta", amount: 1420000, color: "#10b981" },
-  { method: "MercadoPago", amount: 760000, color: "#f59e0b" },
-];
-
-const topProducts = [
-  { rank: 1, product: "Gaseosa 1,5L (promo)", qty: 1240, amount: "$412.300" },
-  { rank: 2, product: "Aceite 900ml", qty: 980, amount: "$318.500" },
-  { rank: 3, product: "Harina 0000 1kg", qty: 1120, amount: "$296.200" },
-  { rank: 4, product: "Arroz 1kg", qty: 860, amount: "$238.400" },
-  { rank: 5, product: "Leche entera 1L", qty: 1540, amount: "$220.700" },
-];
-
-const topCustomers = [
-  { rank: 1, client: "Mini Market El Sol", orders: 42, amount: "$486.000" },
-  { rank: 2, client: "Almacén Los Amigos", orders: 35, amount: "$398.500" },
-  { rank: 3, client: "Despensa Doña Rosa", orders: 28, amount: "$312.900" },
-  { rank: 4, client: "Super 24hs", orders: 24, amount: "$276.300" },
-  { rank: 5, client: "Kiosco El Turco", orders: 19, amount: "$142.800" },
-];
-
-const formatAmountTooltip = (value: number) =>
-  `$${value.toLocaleString("es-AR")}`;
+function scale(value: number, factor: number): number {
+  return Math.round(value * factor);
+}
 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
-  const data = demoByPeriod[period];
+  const config = periodConfigs[period];
+
+  const payments = basePayments.map((payment) => ({
+    ...payment,
+    amount: scale(payment.amount, config.factor),
+  }));
+
+  const products = topProducts.map((product) => ({
+    ...product,
+    qty: Math.max(1, scale(product.qty, Math.max(1, config.factor))),
+  }));
+
+  const customers = topCustomers.map((customer) => ({
+    ...customer,
+    orders: Math.max(1, scale(customer.orders, config.factor)),
+    amount: scale(customer.amount, config.factor),
+  }));
 
   const kpis = [
     {
       title: "VENTAS TOTALES",
-      value: data.ventas,
-      delta: data.deltaVentas,
+      value: formatAR(config.kpis.ventas),
+      delta: config.kpis.deltaVentas,
       icon: TrendingUp,
-      positive: true,
+      badge: "success" as const,
     },
     {
       title: "GASTOS",
-      value: data.gastos,
-      delta: data.deltaGastos,
+      value: formatAR(config.kpis.gastos),
+      delta: config.kpis.deltaGastos,
       icon: TrendingDown,
-      positive: false,
+      badge: "secondary" as const,
     },
     {
       title: "INGRESOS NETOS",
-      value: data.neto,
-      delta: data.deltaNeto,
+      value: formatAR(config.kpis.neto),
+      delta: config.kpis.deltaNeto,
       icon: DollarSign,
-      positive: true,
+      badge: "success" as const,
     },
     {
       title: "MARGEN DE GANANCIA",
-      value: data.margen,
+      value: `${config.kpis.margenPct.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`,
       delta: "del neto / ventas",
       icon: TrendingUp,
-      positive: true,
+      badge: "outline" as const,
     },
   ];
 
@@ -205,12 +156,10 @@ export function AnalyticsPage() {
             <CardContent>
               <div className="flex items-center gap-2">
                 <div className="text-2xl font-bold">{kpi.value}</div>
-                <Badge variant={kpi.positive ? "default" : "secondary"}>
-                  {kpi.delta}
-                </Badge>
+                <Badge variant={kpi.badge}>{kpi.delta}</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Período seleccionado
+                {config.label.toLowerCase()}
               </p>
             </CardContent>
           </Card>
@@ -230,12 +179,10 @@ export function AnalyticsPage() {
                 <XAxis dataKey="month" stroke="var(--color-muted-foreground)" />
                 <YAxis
                   stroke="var(--color-muted-foreground)"
-                  tickFormatter={(value: number) =>
-                    `$${Math.round(value / 1000)}k`
-                  }
+                  tickFormatter={(value: number) => `$${Math.round(value / 1000)}k`}
                 />
                 <Tooltip
-                  formatter={(value) => formatAmountTooltip(Number(value))}
+                  formatter={(value) => formatAR(Number(value))}
                   contentStyle={{
                     backgroundColor: "var(--color-popover)",
                     borderColor: "var(--color-border)",
@@ -256,23 +203,31 @@ export function AnalyticsPage() {
             <CardDescription>Distribución del período</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie
                   data={payments}
                   dataKey="amount"
                   nameKey="method"
-                  innerRadius={55}
-                  outerRadius={90}
+                  innerRadius={50}
+                  outerRadius={85}
                   paddingAngle={3}
-                  label={(entry) => entry.method}
+                  label={(props) => {
+                    const entry = props as unknown as {
+                      method: string;
+                      amount: number;
+                    };
+                    return `${entry.method} · ${Math.round(
+                      (entry.amount / totalPayments) * 100
+                    )}%`;
+                  }}
                 >
                   {payments.map((entry) => (
                     <Cell key={entry.method} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) => formatAmountTooltip(Number(value))}
+                  formatter={(value) => formatAR(Number(value))}
                   contentStyle={{
                     backgroundColor: "var(--color-popover)",
                     borderColor: "var(--color-border)",
@@ -304,38 +259,30 @@ export function AnalyticsPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Productos más vendidos</CardTitle>
-            <CardDescription>Ranking del período</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead>Producto</TableHead>
-                  <TableHead className="text-right">Cantidad</TableHead>
-                  <TableHead className="text-right">Importe</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topProducts.map((product) => (
-                  <TableRow key={product.rank}>
-                    <TableCell className="font-medium">{product.rank}</TableCell>
-                    <TableCell>{product.product}</TableCell>
-                    <TableCell className="text-right">{product.qty}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {product.amount}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <HeatmapPanel data={buildHeatmap(config.factor)} />
+        </div>
+        <div className="lg:col-span-1">
+          <AovPanel
+            series={aovSeries}
+            currentAov={aovSeries[aovSeries.length - 1].aov}
+            currentUpt={aovSeries[aovSeries.length - 1].upt}
+          />
+        </div>
+      </div>
 
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <ImmobilizedInventory items={oldStock} />
+        </div>
+        <div className="lg:col-span-1">
+          <NewVsRecurrent series={recurrentSeries} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <RankingsPanel products={products} />
         <Card>
           <CardHeader>
             <CardTitle>Clientes por facturación</CardTitle>
@@ -352,13 +299,13 @@ export function AnalyticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {topCustomers.map((customer) => (
-                  <TableRow key={customer.rank}>
-                    <TableCell className="font-medium">{customer.rank}</TableCell>
+                {customers.map((customer, index) => (
+                  <TableRow key={customer.client}>
+                    <TableCell className="font-medium">{index + 1}</TableCell>
                     <TableCell>{customer.client}</TableCell>
                     <TableCell className="text-right">{customer.orders}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {customer.amount}
+                      {formatAR(customer.amount)}
                     </TableCell>
                   </TableRow>
                 ))}
