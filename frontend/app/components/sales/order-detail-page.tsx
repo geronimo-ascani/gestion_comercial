@@ -27,6 +27,8 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import { Skeleton, TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import type { OrderStatus, SalesOrder } from "./sales-types";
 import { updateOrder, useOrders } from "./sales-store";
 import { OrderStatusBadge, PaymentBadge } from "./sales-views";
@@ -34,6 +36,7 @@ import { OrderStatusBadge, PaymentBadge } from "./sales-views";
 export function OrderDetailPage() {
   const { number } = useParams<{ number: string }>();
   const orders = useOrders();
+  const loading = useInitialLoading();
   const order = orders.find((item) => item.number === number);
 
   return (
@@ -67,7 +70,9 @@ export function OrderDetailPage() {
         )}
       </div>
 
-      {!order ? (
+      {loading ? (
+        <OrderDetailSkeleton />
+      ) : !order ? (
         <Card>
           <CardContent className="flex h-40 flex-col items-center justify-center gap-3 text-center">
             <p className="text-muted-foreground">
@@ -329,6 +334,54 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <dd className={cn("font-medium", isNegative && "text-emerald-600")}>
         {value}
       </dd>
+    </div>
+  );
+}
+
+function DetailSkeletonCard({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10">
+      {children}
+    </div>
+  );
+}
+
+function OrderDetailSkeleton() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-5">
+      <div className="space-y-6 lg:col-span-3">
+        <DetailSkeletonCard>
+          <Skeleton className="h-5 w-40" />
+          <TableSkeleton rows={5} columns={5} />
+        </DetailSkeletonCard>
+        <DetailSkeletonCard>
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-56 max-w-full" />
+          <Skeleton className="h-4 w-48 max-w-full" />
+          <Skeleton className="h-4 w-44 max-w-full" />
+          <Skeleton className="h-4 w-40 max-w-full" />
+        </DetailSkeletonCard>
+      </div>
+      <div className="space-y-6 lg:col-span-2">
+        <DetailSkeletonCard>
+          <Skeleton className="h-5 w-40" />
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-4 w-full" />
+          ))}
+        </DetailSkeletonCard>
+        <DetailSkeletonCard>
+          <Skeleton className="h-5 w-36" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <div className="border-t border-border pt-4">
+            <Skeleton className="h-5 w-24" />
+          </div>
+        </DetailSkeletonCard>
+      </div>
     </div>
   );
 }

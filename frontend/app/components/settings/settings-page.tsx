@@ -39,6 +39,8 @@ import {
 } from "~/components/ui/table";
 
 import { requireText } from "~/lib/validation";
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import {
   employeeRoleLabels,
   type EmployeeRole,
@@ -168,6 +170,7 @@ function ChangePasswordDialog({
 export function SettingsPage() {
   const employees = useEmployees();
   const currentUser = useCurrentUser();
+  const loading = useInitialLoading();
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -254,15 +257,18 @@ export function SettingsPage() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre y apellido</TableHead>
-                <TableHead>DNI / CUIL</TableHead>
-                <TableHead>Correo electrónico</TableHead>
-                <TableHead className="w-44">Rol</TableHead>
-              </TableRow>
-            </TableHeader>
+          {loading ? (
+            <TableSkeleton rows={6} columns={4} />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre y apellido</TableHead>
+                  <TableHead>DNI / CUIL</TableHead>
+                  <TableHead>Correo electrónico</TableHead>
+                  <TableHead className="w-44">Rol</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
@@ -315,7 +321,8 @@ export function SettingsPage() {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
           <span>Mostrando {filtered.length} empleados</span>

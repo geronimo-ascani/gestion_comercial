@@ -45,6 +45,8 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import {
   requireText,
   validateAddress,
@@ -481,6 +483,7 @@ export function PurchasesPage() {
 
   const providers = useProviders();
   const orders = usePurchaseOrders();
+  const loading = useInitialLoading();
 
   const nextOrderNumber = `OC-${String(orders.length + 1).padStart(3, "0")}`;
 
@@ -582,18 +585,21 @@ export function PurchasesPage() {
               <Badge variant="secondary">{orders.length} órdenes</Badge>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>N° Orden</TableHead>
-                    <TableHead>Proveedor</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Productos</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
+              {loading ? (
+                <TableSkeleton rows={6} columns={7} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Orden</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead className="text-right">Productos</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {orders.length === 0 ? (
                     <TableRow>
@@ -661,6 +667,7 @@ export function PurchasesPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
               <span>Mostrando {orders.length} órdenes</span>
@@ -690,17 +697,20 @@ export function PurchasesPage() {
               <Badge variant="secondary">{providers.length} proveedores</Badge>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre / Razón social</TableHead>
-                    <TableHead>CUIT</TableHead>
-                    <TableHead>Teléfono</TableHead>
-                    <TableHead>Correo electrónico</TableHead>
-                    <TableHead>Banco</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
+              {loading ? (
+                <TableSkeleton rows={6} columns={6} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre / Razón social</TableHead>
+                      <TableHead>CUIT</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead>Correo electrónico</TableHead>
+                      <TableHead>Banco</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {providers.length === 0 ? (
                     <TableRow>
@@ -758,6 +768,7 @@ export function PurchasesPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
               <span>Mostrando {providers.length} proveedores</span>

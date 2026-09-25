@@ -6,6 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { KpiSkeleton, PanelSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 
 const kpis = [
@@ -16,6 +18,8 @@ const kpis = [
 ];
 
 export function DashboardPage() {
+  const loading = useInitialLoading();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -28,6 +32,10 @@ export function DashboardPage() {
         <Button variant="outline">Exportar reporte</Button>
       </div>
 
+      {loading ? (
+        <DashboardSkeleton />
+      ) : (
+        <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <Card key={kpi.title}>
@@ -87,6 +95,33 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <KpiSkeleton count={4} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <PanelSkeleton
+          height={300}
+          titleClassName="h-5 w-40"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10 lg:col-span-2"
+        />
+        <PanelSkeleton
+          height={300}
+          titleClassName="h-5 w-36"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
+        />
+      </div>
+      <PanelSkeleton
+        height={160}
+        titleClassName="h-5 w-36"
+        className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
+      />
     </div>
   );
 }

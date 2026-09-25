@@ -39,6 +39,8 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { Textarea } from "~/components/ui/textarea";
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 
 interface ProductRow {
   code: string;
@@ -192,6 +194,7 @@ function ProductDeleteDialog({
 }
 
 export function ProductsPage() {
+  const loading = useInitialLoading();
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -266,29 +269,33 @@ export function ProductsPage() {
           <Badge variant="secondary">0 productos</Badge>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Código</TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead className="text-right">Precio compra</TableHead>
-                <TableHead className="text-right">Precio venta</TableHead>
-                <TableHead className="text-right">Stock</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  No hay productos registrados.
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          {loading ? (
+            <TableSkeleton rows={6} columns={7} />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">Precio compra</TableHead>
+                  <TableHead className="text-right">Precio venta</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    No hay productos registrados.
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
           <span>Sin productos para mostrar</span>

@@ -39,6 +39,9 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import { KpiSkeleton, PanelSkeleton, Skeleton, TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
+
 import { AovPanel } from "./aov-panel";
 import {
   aovSeries,
@@ -65,6 +68,7 @@ function scale(value: number, factor: number): number {
 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
+  const loading = useInitialLoading();
   const config = periodConfigs[period];
 
   const payments = basePayments.map((payment) => ({
@@ -146,6 +150,10 @@ export function AnalyticsPage() {
         Datos de demostración hasta conectar el backend.
       </p>
 
+      {loading ? (
+        <AnalyticsSkeleton />
+      ) : (
+        <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <Card key={kpi.title}>
@@ -313,6 +321,54 @@ export function AnalyticsPage() {
             </Table>
           </CardContent>
         </Card>
+      </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <KpiSkeleton count={4} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <PanelSkeleton
+          height={340}
+          titleClassName="h-5 w-44"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10 lg:col-span-2"
+        />
+        <PanelSkeleton
+          height={340}
+          titleClassName="h-5 w-48"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <PanelSkeleton
+          height={300}
+          titleClassName="h-5 w-40"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10 lg:col-span-2"
+        />
+        <PanelSkeleton
+          height={300}
+          titleClassName="h-5 w-40"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PanelSkeleton
+          height={320}
+          titleClassName="h-5 w-40"
+          className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
+        />
+        <div className="space-y-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+          <TableSkeleton rows={6} columns={4} />
+        </div>
       </div>
     </div>
   );

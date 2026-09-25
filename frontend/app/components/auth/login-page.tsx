@@ -45,10 +45,10 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md [--card-spacing:--spacing(6)]">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <LogIn className="h-5 w-5" />
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-lg bg-blue-600 text-white">
+            <LogIn className="h-6 w-6" />
           </div>
           <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
           <CardDescription>
@@ -56,7 +56,7 @@ export function LoginPage() {
           </CardDescription>
         </CardHeader>
         <form noValidate onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="mt-3 space-y-6 pb-8">
             <div className="space-y-2">
               <Label htmlFor="email">Correo electrónico</Label>
               <Input
@@ -95,7 +95,7 @@ export function LoginPage() {
               <FieldError message={errors.password} />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
+          <CardFooter className="flex-col space-y-5 pt-7">
             <Button className="w-full" size="lg" type="submit">
               Iniciar sesión
             </Button>

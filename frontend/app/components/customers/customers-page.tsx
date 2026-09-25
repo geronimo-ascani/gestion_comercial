@@ -47,6 +47,8 @@ import {
   updateCustomer,
   useCustomers,
 } from "./customers-store";
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 
 function CustomerFormDialog({
   open,
@@ -321,6 +323,7 @@ export function CustomersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
+  const loading = useInitialLoading();
   const customers = useCustomers();
 
   function openNewCustomer() {
@@ -370,8 +373,11 @@ export function CustomersPage() {
           <Badge variant="secondary">{customers.length} clientes</Badge>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
+          {loading ? (
+            <TableSkeleton rows={6} columns={6} />
+          ) : (
+            <Table>
+              <TableHeader>
               <TableRow>
                 <TableHead>Nombre y apellido</TableHead>
                 <TableHead>DNI / CUIT</TableHead>
@@ -438,6 +444,7 @@ export function CustomersPage() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
           <span>Mostrando {customers.length} clientes</span>

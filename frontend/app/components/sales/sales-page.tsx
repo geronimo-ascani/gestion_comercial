@@ -41,6 +41,8 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import { validateAddress } from "~/lib/validation";
 import type { Budget, PaymentMethod, SalesOrder } from "./sales-types";
 import { formatDate, formatInputDate } from "./sales-types";
@@ -409,6 +411,7 @@ function BudgetDetailDialog({ budget, trigger }: { budget: Budget; trigger: Reac
 export function SalesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"orders" | "budgets">("orders");
+  const loading = useInitialLoading();
   const orders = useOrders();
   const budgets = useBudgets();
 
@@ -515,19 +518,22 @@ export function SalesPage() {
               <Badge variant="secondary">{orders.length} pedidos</Badge>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>N° Pedido</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Productos</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Pago</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
+              {loading ? (
+                <TableSkeleton rows={6} columns={8} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Pedido</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead className="text-right">Productos</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Pago</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {orders.length === 0 ? (
                     <TableRow>
@@ -591,6 +597,7 @@ export function SalesPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
               <span>Mostrando {orders.length} pedidos</span>
@@ -637,19 +644,22 @@ export function SalesPage() {
               <Badge variant="secondary">{budgets.length} presupuestos</Badge>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>N° Presupuesto</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Vence</TableHead>
-                    <TableHead className="text-right">Productos</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
+              {loading ? (
+                <TableSkeleton rows={6} columns={8} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Presupuesto</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Vence</TableHead>
+                      <TableHead className="text-right">Productos</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {budgets.length === 0 ? (
                     <TableRow>
@@ -699,6 +709,7 @@ export function SalesPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
               <span>Mostrando {budgets.length} presupuestos</span>

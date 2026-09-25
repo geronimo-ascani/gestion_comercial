@@ -47,6 +47,8 @@ import {
   validatePhone,
 } from "~/lib/validation";
 import { employeeRoleLabels, type Employee, type EmployeeRole } from "./employees-types";
+import { TableSkeleton } from "~/components/ui/skeleton";
+import { useInitialLoading } from "~/lib/use-initial-loading";
 import {
   addEmployee,
   removeEmployee,
@@ -333,6 +335,7 @@ export function EmployeesPage() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
   const employees = useEmployees();
+  const loading = useInitialLoading();
 
   function openNewEmployee() {
     setEditingEmployee(null);
@@ -381,18 +384,21 @@ export function EmployeesPage() {
           <Badge variant="secondary">{employees.length} empleados</Badge>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre y apellido</TableHead>
-                <TableHead>DNI / CUIL</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead>Correo electrónico</TableHead>
-                <TableHead>Fecha de ingreso</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
+          {loading ? (
+            <TableSkeleton rows={6} columns={7} />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre y apellido</TableHead>
+                  <TableHead>DNI / CUIL</TableHead>
+                  <TableHead>Teléfono</TableHead>
+                  <TableHead>Correo electrónico</TableHead>
+                  <TableHead>Fecha de ingreso</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {employees.length === 0 ? (
                 <TableRow>
@@ -455,6 +461,7 @@ export function EmployeesPage() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
           <span>Mostrando {employees.length} empleados</span>
