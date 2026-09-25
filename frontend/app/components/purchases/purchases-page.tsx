@@ -55,7 +55,10 @@ import {
   validatePhone,
 } from "~/lib/validation";
 import { formatDate } from "../sales/sales-types";
+import type { LineItem } from "../sales/sales-types";
 import { OrderLineItemsTable } from "../sales/sales-views";
+import { LineItemsEditor } from "../sales/line-items-editor";
+import { useProducts } from "../products/products-store";
 import type { Provider, PurchaseOrder } from "./purchases-types";
 import {
   addProvider,
@@ -326,19 +329,38 @@ function NewPurchaseOrderDialog({
   onOpenProvider: () => void;
 }) {
   const [provider, setProvider] = useState("");
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [total, setTotal] = useState("$0");
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const products = useProducts();
 
   useEffect(() => {
-    if (open) setProvider("");
+    if (open) {
+      setProvider("");
+      setItems([]);
+      setTotal("$0");
+      setItemsError(null);
+    }
   }, [open]);
+
+  function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
+    setItems(nextItems);
+    setTotal(nextTotal);
+    setItemsError(null);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (items.length === 0) {
+      setItemsError("Agregue al menos un producto con cantidad.");
+      return;
+    }
     onCreated({
       number: nextNumber,
       provider: provider || "Sin definir",
       date: formatDate(new Date()),
-      items: [],
-      total: "$0",
+      items,
+      total,
       status: "pendiente",
     });
     onOpenChange(false);
@@ -390,14 +412,12 @@ function NewPurchaseOrderDialog({
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="order-items">Productos</Label>
-              <Button variant="ghost" size="sm" type="button">
-                <Plus />
-                Agregar producto
-              </Button>
-            </div>
-            <OrderLineItemsTable items={[]} total="" />
+            <LineItemsEditor
+              products={products}
+              priceMode="purchase"
+              onChange={handleItemsChange}
+            />
+            <FieldError message={itemsError} />
           </div>
 
           <DialogFooter>

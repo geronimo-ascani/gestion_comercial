@@ -32,6 +32,7 @@ import { useInitialLoading } from "~/lib/use-initial-loading";
 import type { OrderStatus, SalesOrder } from "./sales-types";
 import { updateOrder, useOrders } from "./sales-store";
 import { OrderStatusBadge, PaymentBadge } from "./sales-views";
+import { useCustomers } from "../customers/customers-store";
 
 export function OrderDetailPage() {
   const { number } = useParams<{ number: string }>();
@@ -263,6 +264,14 @@ function OrderTimelineCard({ order }: { order: SalesOrder }) {
 }
 
 function CustomerDetailsCard({ order }: { order: SalesOrder }) {
+  const customers = useCustomers();
+  const customer = order.clientId
+    ? customers.find((item) => item.id === order.clientId)
+    : undefined;
+  const displayName = customer
+    ? `${customer.firstName} ${customer.lastName}`
+    : order.client;
+
   return (
     <Card>
       <CardHeader>
@@ -273,7 +282,9 @@ function CustomerDetailsCard({ order }: { order: SalesOrder }) {
       </CardHeader>
       <CardContent>
         <dl className="space-y-3">
-          <DetailRow label="Razón social" value={order.company ?? order.client} />
+          <DetailRow label="Nombre y apellido" value={displayName} />
+          {customer && <DetailRow label="ID cliente" value={customer.id} />}
+          {order.company && <DetailRow label="Razón social" value={order.company} />}
           <DetailRow label="Persona de contacto" value={order.contact ?? "—"} />
           <DetailRow label="Email" value={order.email ?? "—"} />
           <DetailRow label="Teléfono" value={order.phone ?? "—"} />

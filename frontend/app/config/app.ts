@@ -6,7 +6,6 @@ import {
   Users,
   UsersRound,
   BarChart3,
-  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,7 +27,6 @@ export const navItems: NavItem[] = [
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/employees", label: "Empleados", icon: UsersRound },
   { to: "/analytics", label: "Analíticas", icon: BarChart3 },
-  { to: "/settings", label: "Configuración", icon: Settings },
 ];
 
 export const headerConfig = {

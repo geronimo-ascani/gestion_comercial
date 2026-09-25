@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { Eye, FileText, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -44,7 +44,7 @@ import {
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { validateAddress } from "~/lib/validation";
-import type { Budget, PaymentMethod, SalesOrder } from "./sales-types";
+import type { Budget, LineItem, PaymentMethod, SalesOrder } from "./sales-types";
 import { formatDate, formatInputDate } from "./sales-types";
 import {
   addBudget,
@@ -59,6 +59,11 @@ import {
   OrderStatusBadge,
   PaymentBadge,
 } from "./sales-views";
+import { LineItemsEditor } from "./line-items-editor";
+import { addCustomer, useCustomers } from "../customers/customers-store";
+import type { Customer } from "../customers/customers-types";
+import { CustomerFormDialog } from "../customers/customer-form-dialog";
+import { useProducts } from "../products/products-store";
 
 function NewOrderDialog({
   nextNumber,
@@ -67,6 +72,9 @@ function NewOrderDialog({
   nextNumber: string;
   onCreated: (order: SalesOrder) => void;
 }) {
+  const customers = useCustomers();
+  const products = useProducts();
+  const [open, setOpen] = useState(false);
   const [client, setClient] = useState("");
   const [province, setProvince] = useState("");
   const [locality, setLocality] = useState("");
@@ -74,16 +82,75 @@ function NewOrderDialog({
   const [number, setNumber] = useState("");
   const [apartment, setApartment] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("tarjeta");
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [total, setTotal] = useState("$0");
   const [addressError, setAddressError] = useState<string | null>(null);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const [clientOpen, setClientOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setClient("");
+      setProvince("");
+      setLocality("");
+      setStreet("");
+      setNumber("");
+      setApartment("");
+      setPayment("tarjeta");
+      setItems([]);
+      setTotal("$0");
+      setAddressError(null);
+      setItemsError(null);
+      setClientError(null);
+    }
+  }, [open]);
+
+  function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
+    setItems(nextItems);
+    setTotal(nextTotal);
+    setItemsError(null);
+  }
+
+  function handleClientSaved(customer: Customer) {
+    addCustomer(customer);
+    setClient(customer.id);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const error = validateAddress({ province, locality, street, number, apartment });
-    setAddressError(error);
-    if (error) return;
+    const addressErrorNext = !province.trim()
+      ? "La provincia es obligatoria"
+      : !locality.trim()
+        ? "La localidad es obligatoria"
+        : !street.trim()
+          ? "La calle es obligatoria"
+          : !number.trim()
+            ? "La altura es obligatoria"
+            : validateAddress({
+                province,
+                locality,
+                street,
+                number,
+                apartment,
+              });
+    setAddressError(addressErrorNext);
+    if (addressErrorNext) return;
+    if (!client) {
+      setClientError("Seleccione un cliente");
+      return;
+    }
+    if (items.length === 0) {
+      setItemsError("Agregue al menos un producto con cantidad.");
+      return;
+    }
+    const customer = customers.find((item) => item.id === client);
     onCreated({
       number: nextNumber,
-      client: client.trim() || "Sin definir",
+      client: customer
+        ? `${customer.firstName} ${customer.lastName}`
+        : "Sin definir",
+      clientId: client,
       date: formatDate(new Date()),
       deliveryAddress: {
         province: province.trim(),
@@ -92,15 +159,16 @@ function NewOrderDialog({
         number: number.trim(),
         apartment: apartment.trim(),
       },
-      items: [],
-      total: "$0",
+      items,
+      total,
       status: "pendiente",
       payment,
     });
+    setOpen(false);
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
           <Button>
@@ -124,16 +192,43 @@ function NewOrderDialog({
               <Label htmlFor="order-client">Cliente</Label>
               <Select
                 value={client || undefined}
-                onValueChange={(value) => setClient(value ?? "")}
+                onValueChange={(value) => {
+                  setClient(value ?? "");
+                  setClientError(null);
+                }}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccionar cliente" />
+                <SelectTrigger className="w-full" aria-invalid={!!clientError}>
+                  <SelectValue placeholder="Seleccionar cliente">
+                    {(selected) => {
+                      if (!selected) return "Seleccionar cliente";
+                      const picked = customers.find((item) => item.id === selected);
+                      return picked
+                        ? `${picked.firstName} ${picked.lastName}`
+                        : selected;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent />
+                <SelectContent>
+                  {customers.map((customer) => (
+                    <SelectItem
+                      key={customer.id}
+                      value={customer.id}
+                      label={`${customer.firstName} ${customer.lastName}`}
+                    >
+                      {customer.firstName} {customer.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
+              <FieldError message={clientError} />
             </div>
             <div className="flex items-end">
-              <Button variant="outline" className="w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                type="button"
+                onClick={() => setClientOpen(true)}
+              >
                 <Plus />
                 Nuevo cliente
               </Button>
@@ -209,14 +304,12 @@ function NewOrderDialog({
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="order-items">Productos</Label>
-              <Button variant="ghost" size="sm">
-                <Plus />
-                Agregar producto
-              </Button>
-            </div>
-            <OrderLineItemsTable items={[]} total="" />
+            <LineItemsEditor
+              products={products}
+              priceMode="sale"
+              onChange={handleItemsChange}
+            />
+            <FieldError message={itemsError} />
           </div>
 
           <div className="space-y-2">
@@ -244,6 +337,13 @@ function NewOrderDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <CustomerFormDialog
+        open={clientOpen}
+        onOpenChange={setClientOpen}
+        customer={null}
+        onSaved={handleClientSaved}
+      />
     </Dialog>
   );
 }
@@ -255,24 +355,60 @@ function NewBudgetDialog({
   nextNumber: string;
   onCreated: (budget: Budget) => void;
 }) {
+  const customers = useCustomers();
+  const products = useProducts();
+  const [open, setOpen] = useState(false);
   const [client, setClient] = useState("");
   const [expires, setExpires] = useState("");
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [total, setTotal] = useState("$0");
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setClient("");
+      setExpires("");
+      setItems([]);
+      setTotal("$0");
+      setItemsError(null);
+      setClientError(null);
+    }
+  }, [open]);
+
+  function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
+    setItems(nextItems);
+    setTotal(nextTotal);
+    setItemsError(null);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!client) {
+      setClientError("Seleccione un cliente");
+      return;
+    }
+    if (items.length === 0) {
+      setItemsError("Agregue al menos un producto con cantidad.");
+      return;
+    }
+    const customer = customers.find((item) => item.id === client);
     onCreated({
       number: nextNumber,
-      client: client.trim() || "Sin definir",
+      client: customer
+        ? `${customer.firstName} ${customer.lastName}`
+        : "Sin definir",
       date: formatDate(new Date()),
       expires: formatInputDate(expires),
-      items: [],
-      total: "$0",
+      items,
+      total,
       status: "pendiente",
     });
+    setOpen(false);
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
           <Button>
@@ -295,13 +431,35 @@ function NewBudgetDialog({
             <Label htmlFor="budget-client">Cliente</Label>
             <Select
               value={client || undefined}
-              onValueChange={(value) => setClient(value ?? "")}
+              onValueChange={(value) => {
+                setClient(value ?? "");
+                setClientError(null);
+              }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Seleccionar cliente" />
+              <SelectTrigger className="w-full" aria-invalid={!!clientError}>
+<SelectValue placeholder="Seleccionar cliente">
+                  {(selected) => {
+                    if (!selected) return "Seleccionar cliente";
+                    const picked = customers.find((item) => item.id === selected);
+                    return picked
+                      ? `${picked.firstName} ${picked.lastName}`
+                      : selected;
+                  }}
+                </SelectValue>
               </SelectTrigger>
-              <SelectContent />
+              <SelectContent>
+                {customers.map((customer) => (
+                  <SelectItem
+                    key={customer.id}
+                    value={customer.id}
+                    label={`${customer.firstName} ${customer.lastName}`}
+                  >
+                    {customer.firstName} {customer.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
+            <FieldError message={clientError} />
           </div>
 
           <div className="space-y-2">
@@ -315,14 +473,12 @@ function NewBudgetDialog({
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="budget-items">Productos</Label>
-              <Button variant="ghost" size="sm">
-                <Plus />
-                Agregar producto
-              </Button>
-            </div>
-            <OrderLineItemsTable items={[]} total="" />
+            <LineItemsEditor
+              products={products}
+              priceMode="sale"
+              onChange={handleItemsChange}
+            />
+            <FieldError message={itemsError} />
           </div>
 
           <DialogFooter>

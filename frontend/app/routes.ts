@@ -13,7 +13,6 @@ export default [
     route("employees", "routes/employees.tsx"),
     route("sales", "routes/sales.tsx"),
     route("customers", "routes/customers.tsx"),
-    route("settings", "routes/settings.tsx"),
     route("analytics", "routes/analytics.tsx"),
     route("sales/:number", "routes/sales-detail.tsx"),
   ]),

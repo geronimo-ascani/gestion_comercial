@@ -17,6 +17,7 @@ export interface LineItem {
 export interface SalesOrder {
   number: string;
   client: string;
+  clientId?: string;
   company?: string;
   contact?: string;
   email?: string;
