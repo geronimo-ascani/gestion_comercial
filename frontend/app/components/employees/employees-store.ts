@@ -2,7 +2,32 @@ import { useSyncExternalStore } from "react";
 
 import type { Employee } from "./employees-types";
 
-let employees: Employee[] = [];
+const demoEmployees: Employee[] = [
+  {
+    id: "EMP-001",
+    firstName: "María",
+    lastName: "González",
+    cuil: "20-30223344-5",
+    phone: "+54 11 5555-0101",
+    email: "maria@empresa.com",
+    hireDate: "01/03/2023",
+    role: "administrador",
+    password: "123456",
+  },
+  {
+    id: "EMP-002",
+    firstName: "Juan",
+    lastName: "Pérez",
+    cuil: "20-25123456-7",
+    phone: "+54 11 5555-0202",
+    email: "juan@empresa.com",
+    hireDate: "15/06/2024",
+    role: "ventas",
+    password: "123456",
+  },
+];
+
+let employees: Employee[] = [...demoEmployees];
 
 const listeners = new Set<() => void>();
 

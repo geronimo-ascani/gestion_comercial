@@ -28,7 +28,3 @@ export const navItems: NavItem[] = [
   { to: "/employees", label: "Empleados", icon: UsersRound },
   { to: "/analytics", label: "Analíticas", icon: BarChart3 },
 ];
-
-export const headerConfig = {
-  searchPlaceholder: "Buscar productos, clientes, pedidos...",
-};
