@@ -43,7 +43,7 @@ import {
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { OrderLineItemsTable } from "../sales/sales-views";
-import type { PurchaseOrder } from "./purchases-types";
+import type { PurchaseOrder, PurchaseOrderStatus } from "./purchases-types";
 import {
   removeProvider,
   removePurchaseOrder,
@@ -124,6 +124,23 @@ export function PurchasesPage() {
   const orders = usePurchaseOrders();
   const loading = useInitialLoading();
 
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderStatus, setOrderStatus] = useState<"all" | PurchaseOrderStatus>("all");
+  const [providerQuery, setProviderQuery] = useState("");
+
+  const filteredOrders = orders.filter((order) => {
+    const haystack = `${order.number} ${order.provider}`.toLowerCase();
+    const matchesQuery = haystack.includes(orderQuery.trim().toLowerCase());
+    const matchesStatus = orderStatus === "all" || order.status === orderStatus;
+    return matchesQuery && matchesStatus;
+  });
+
+  const filteredProviders = providers.filter((provider) => {
+    const haystack =
+      `${provider.name} ${provider.cuit} ${provider.phone} ${provider.email} ${provider.bank}`.toLowerCase();
+    return haystack.includes(providerQuery.trim().toLowerCase());
+  });
+
   function switchTab(tab: "orders" | "providers") {
     setSearchParams({ tab }, { replace: true });
   }
@@ -178,18 +195,25 @@ export function PurchasesPage() {
 
       {activeTab === "orders" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8"
+                className="h-10 w-full bg-card pl-10 shadow-sm"
                 placeholder="Buscar por proveedor o número de orden..."
+                value={orderQuery}
+                onChange={(event) => setOrderQuery(event.target.value)}
               />
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-2">
                 <Label htmlFor="order-status-filter">Estado</Label>
-                <Select defaultValue="all">
+                <Select
+                  value={orderStatus}
+                  onValueChange={(value) =>
+                    setOrderStatus(value as "all" | PurchaseOrderStatus)
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -202,7 +226,11 @@ export function PurchasesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="outline">Buscar</Button>
+              {orderQuery && (
+                <span className="text-sm text-muted-foreground">
+                  {filteredOrders.length} de {orders.length} órdenes
+                </span>
+              )}
             </div>
           </div>
 
@@ -230,17 +258,19 @@ export function PurchasesPage() {
                     </TableRow>
                   </TableHeader>
                 <TableBody>
-                  {orders.length === 0 ? (
+                  {filteredOrders.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={7}
                         className="h-24 text-center text-muted-foreground"
                       >
-                        No hay órdenes de compra registradas.
+                        {orders.length === 0
+                          ? "No hay órdenes de compra registradas."
+                          : "No se encontraron órdenes para la búsqueda."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    orders.map((order) => (
+                    filteredOrders.map((order) => (
                       <TableRow key={order.number}>
                         <TableCell className="font-mono text-xs">
                           {order.number}
@@ -280,7 +310,7 @@ export function PurchasesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              <span>Mostrando {orders.length} órdenes</span>
+              <span>Mostrando {filteredOrders.length} de {orders.length} órdenes</span>
             </CardFooter>
           </Card>
         </section>
@@ -288,15 +318,21 @@ export function PurchasesPage() {
 
       {activeTab === "providers" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8"
-                placeholder="Buscar proveedor por nombre o CUIT..."
+                className="h-10 w-full bg-card pl-10 shadow-sm"
+                placeholder="Buscar proveedor por nombre, CUIT, correo o banco..."
+                value={providerQuery}
+                onChange={(event) => setProviderQuery(event.target.value)}
               />
             </div>
-            <Button variant="outline">Buscar</Button>
+            {providerQuery && (
+              <span className="text-sm text-muted-foreground">
+                {filteredProviders.length} de {providers.length} proveedores
+              </span>
+            )}
           </div>
 
           <Card>
@@ -322,17 +358,19 @@ export function PurchasesPage() {
                     </TableRow>
                   </TableHeader>
                 <TableBody>
-                  {providers.length === 0 ? (
+                  {filteredProviders.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
                         className="h-24 text-center text-muted-foreground"
                       >
-                        No hay proveedores registrados.
+                        {providers.length === 0
+                          ? "No hay proveedores registrados."
+                          : "No se encontraron proveedores para la búsqueda."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    providers.map((provider) => (
+                    filteredProviders.map((provider) => (
                       <TableRow key={provider.id}>
                         <TableCell className="font-medium">
                           {provider.name}
@@ -382,7 +420,7 @@ export function PurchasesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              <span>Mostrando {providers.length} proveedores</span>
+              <span>Mostrando {filteredProviders.length} de {providers.length} proveedores</span>
             </CardFooter>
           </Card>
         </section>

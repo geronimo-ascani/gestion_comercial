@@ -1,4 +1,4 @@
-import { type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -74,6 +74,13 @@ export function CustomersPage() {
   const navigate = useNavigate();
   const loading = useInitialLoading();
   const customers = useCustomers();
+  const [query, setQuery] = useState("");
+
+  const filtered = customers.filter((customer) => {
+    const haystack =
+      `${customer.firstName} ${customer.lastName} ${customer.document} ${customer.phone} ${customer.email} ${formatAddress(customer.address)}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
 
   return (
     <div className="space-y-6">
@@ -90,15 +97,21 @@ export function CustomersPage() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="relative w-full lg:max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-8"
-            placeholder="Buscar cliente por nombre, DNI/CUIT o correo..."
+            className="h-10 w-full bg-card pl-10 shadow-sm"
+            placeholder="Buscar cliente por nombre, DNI/CUIT, correo o dirección..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <Button variant="outline">Buscar</Button>
+        {query && (
+          <span className="text-sm text-muted-foreground">
+            {filtered.length} de {customers.length} clientes
+          </span>
+        )}
       </div>
 
       <Card>
@@ -124,17 +137,19 @@ export function CustomersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {customers.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No hay clientes registrados.
+                    {customers.length === 0
+                      ? "No hay clientes registrados."
+                      : "No se encontraron clientes para la búsqueda."}
                   </TableCell>
                 </TableRow>
               ) : (
-                customers.map((customer) => (
+                filtered.map((customer) => (
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">
                       {customer.firstName} {customer.lastName}
@@ -182,7 +197,7 @@ export function CustomersPage() {
           )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {customers.length} clientes</span>
+          <span>Mostrando {filtered.length} de {customers.length} clientes</span>
         </CardFooter>
       </Card>
     </div>

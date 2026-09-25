@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Bell, LogOut, PanelLeft, PanelLeftClose } from "lucide-react";
+import {
+  Bell,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  PanelLeft,
+  PanelLeftClose,
+  Sun,
+} from "lucide-react";
 
+import { appConfig } from "~/config/app";
+import { useTheme } from "~/lib/theme";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -26,6 +36,7 @@ export function AppHeader({
   const navigate = useNavigate();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const currentUser = useCurrentUser();
+  const { theme, toggleTheme } = useTheme();
 
   const initials = currentUser
     ? `${currentUser.firstName.charAt(0)}${currentUser.lastName.charAt(0)}`.toUpperCase()
@@ -37,20 +48,40 @@ export function AppHeader({
   }
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-border bg-background px-6">
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={collapsed ? "Expandir panel lateral" : "Plegar panel lateral"}
-        onClick={onToggle}
-      >
-        {collapsed ? <PanelLeft /> : <PanelLeftClose />}
-      </Button>
+    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-6 shadow-sm">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
+          <LayoutDashboard className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-semibold">{appConfig.title}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={collapsed ? "Expandir panel lateral" : "Plegar panel lateral"}
+          onClick={onToggle}
+        >
+          {collapsed ? <PanelLeft /> : <PanelLeftClose />}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={
+            theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"
+          }
+          onClick={toggleTheme}
+        >
+          {theme === "dark" ? (
+            <Sun className="text-muted-foreground" />
+          ) : (
+            <Moon className="text-muted-foreground" />
+          )}
+        </Button>
+      </div>
 
       <div className="flex items-center gap-2">
         {currentUser ? (
           <>
-            <div className="flex items-center gap-3 rounded-lg border border-border bg-background py-1 pr-3 pl-1">
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary py-1 pr-3 pl-1">
               <div
                 className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-sm font-semibold text-white"
                 aria-hidden="true"

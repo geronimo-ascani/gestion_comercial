@@ -9,7 +9,7 @@ export function AppSidebar({ collapsed }: { collapsed: boolean }) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
+        "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-[width] duration-200",
         collapsed ? "w-16" : "w-[240px]"
       )}
     >

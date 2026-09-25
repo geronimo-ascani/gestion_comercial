@@ -1,4 +1,4 @@
-import { type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -72,9 +72,18 @@ function ConfirmDeleteDialog({
 
 export function EmployeesPage() {
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
 
   const employees = useEmployees();
   const loading = useInitialLoading();
+
+  const filtered = employees.filter((employee) => {
+    const haystack =
+      `${employee.firstName} ${employee.lastName} ${employee.cuil} ${employee.phone} ${employee.email} ${
+        employee.role ? employeeRoleLabels[employee.role] : ""
+      }`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
 
   function openNewEmployee() {
     navigate("/employees/new");
@@ -95,15 +104,21 @@ export function EmployeesPage() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="relative w-full lg:max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-8"
-            placeholder="Buscar empleado por nombre, DNI/CUIL o cargo..."
+            className="h-10 w-full bg-card pl-10 shadow-sm"
+            placeholder="Buscar empleado por nombre, DNI/CUIL, correo o rol..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <Button variant="outline">Buscar</Button>
+        {query && (
+          <span className="text-sm text-muted-foreground">
+            {filtered.length} de {employees.length} empleados
+          </span>
+        )}
       </div>
 
       <Card>
@@ -130,17 +145,19 @@ export function EmployeesPage() {
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {employees.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No hay empleados registrados.
+                    {employees.length === 0
+                      ? "No hay empleados registrados."
+                      : "No se encontraron empleados para la búsqueda."}
                   </TableCell>
                 </TableRow>
               ) : (
-                employees.map((employee) => (
+                filtered.map((employee) => (
                   <TableRow key={employee.id}>
                     <TableCell className="font-medium">
                       {employee.firstName} {employee.lastName}
@@ -193,7 +210,7 @@ export function EmployeesPage() {
           )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {employees.length} empleados</span>
+          <span>Mostrando {filtered.length} de {employees.length} empleados</span>
         </CardFooter>
       </Card>
     </div>

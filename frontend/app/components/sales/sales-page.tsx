@@ -42,7 +42,13 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
-import type { Budget, SalesOrder } from "./sales-types";
+import type {
+  Budget,
+  BudgetStatus,
+  OrderStatus,
+  PaymentMethod,
+  SalesOrder,
+} from "./sales-types";
 import { removeOrder, useBudgets, useOrders } from "./sales-store";
 import {
   BudgetStatusBadge,
@@ -131,6 +137,27 @@ export function SalesPage() {
   const orders = useOrders();
   const budgets = useBudgets();
 
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
+  const [orderPayment, setOrderPayment] = useState<"all" | PaymentMethod>("all");
+  const [budgetQuery, setBudgetQuery] = useState("");
+  const [budgetStatus, setBudgetStatus] = useState<"all" | BudgetStatus>("all");
+
+  const filteredOrders = orders.filter((order) => {
+    const haystack = `${order.number} ${order.client} ${order.payment}`.toLowerCase();
+    const matchesQuery = haystack.includes(orderQuery.trim().toLowerCase());
+    const matchesStatus = orderStatus === "all" || order.status === orderStatus;
+    const matchesPayment = orderPayment === "all" || order.payment === orderPayment;
+    return matchesQuery && matchesStatus && matchesPayment;
+  });
+
+  const filteredBudgets = budgets.filter((budget) => {
+    const haystack = `${budget.number} ${budget.client}`.toLowerCase();
+    const matchesQuery = haystack.includes(budgetQuery.trim().toLowerCase());
+    const matchesStatus = budgetStatus === "all" || budget.status === budgetStatus;
+    return matchesQuery && matchesStatus;
+  });
+
   function switchTab(tab: "orders" | "budgets") {
     setSearchParams({ tab }, { replace: true });
   }
@@ -181,18 +208,25 @@ export function SalesPage() {
 
       {activeTab === "orders" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8"
+                className="h-10 w-full bg-card pl-10 shadow-sm"
                 placeholder="Buscar por cliente o número de pedido..."
+                value={orderQuery}
+                onChange={(event) => setOrderQuery(event.target.value)}
               />
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-2">
                 <Label htmlFor="order-status-filter">Estado</Label>
-                <Select defaultValue="all">
+                <Select
+                  value={orderStatus}
+                  onValueChange={(value) =>
+                    setOrderStatus(value as "all" | OrderStatus)
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -208,7 +242,12 @@ export function SalesPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="order-payment-filter">Pago</Label>
-                <Select defaultValue="all">
+                <Select
+                  value={orderPayment}
+                  onValueChange={(value) =>
+                    setOrderPayment(value as "all" | PaymentMethod)
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -220,7 +259,11 @@ export function SalesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="outline">Buscar</Button>
+              {orderQuery && (
+                <span className="text-sm text-muted-foreground">
+                  {filteredOrders.length} de {orders.length} pedidos
+                </span>
+              )}
             </div>
           </div>
 
@@ -249,17 +292,19 @@ export function SalesPage() {
                     </TableRow>
                   </TableHeader>
                 <TableBody>
-                  {orders.length === 0 ? (
+                  {filteredOrders.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={8}
                         className="h-24 text-center text-muted-foreground"
                       >
-                        No hay pedidos registrados.
+                        {orders.length === 0
+                          ? "No hay pedidos registrados."
+                          : "No se encontraron pedidos para la búsqueda."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    orders.map((order) => (
+                    filteredOrders.map((order) => (
                       <TableRow key={order.number}>
                         <TableCell className="font-mono text-xs">
                           {order.number}
@@ -314,7 +359,7 @@ export function SalesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              <span>Mostrando {orders.length} pedidos</span>
+              <span>Mostrando {filteredOrders.length} de {orders.length} pedidos</span>
             </CardFooter>
           </Card>
         </section>
@@ -322,18 +367,25 @@ export function SalesPage() {
 
       {activeTab === "budgets" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8"
+                className="h-10 w-full bg-card pl-10 shadow-sm"
                 placeholder="Buscar presupuesto por cliente o número..."
+                value={budgetQuery}
+                onChange={(event) => setBudgetQuery(event.target.value)}
               />
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-2">
                 <Label htmlFor="budget-status-filter">Estado</Label>
-                <Select defaultValue="all">
+                <Select
+                  value={budgetStatus}
+                  onValueChange={(value) =>
+                    setBudgetStatus(value as "all" | BudgetStatus)
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -346,7 +398,11 @@ export function SalesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="outline">Buscar</Button>
+              {budgetQuery && (
+                <span className="text-sm text-muted-foreground">
+                  {filteredBudgets.length} de {budgets.length} presupuestos
+                </span>
+              )}
             </div>
           </div>
 
@@ -375,17 +431,19 @@ export function SalesPage() {
                     </TableRow>
                   </TableHeader>
                 <TableBody>
-                  {budgets.length === 0 ? (
+                  {filteredBudgets.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={8}
                         className="h-24 text-center text-muted-foreground"
                       >
-                        No hay presupuestos registrados.
+                        {budgets.length === 0
+                          ? "No hay presupuestos registrados."
+                          : "No se encontraron presupuestos para la búsqueda."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    budgets.map((budget) => (
+                    filteredBudgets.map((budget) => (
                       <TableRow key={budget.number}>
                         <TableCell className="font-mono text-xs">
                           {budget.number}
@@ -426,7 +484,7 @@ export function SalesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              <span>Mostrando {budgets.length} presupuestos</span>
+              <span>Mostrando {filteredBudgets.length} de {budgets.length} presupuestos</span>
             </CardFooter>
           </Card>
         </section>
