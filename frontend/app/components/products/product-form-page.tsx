@@ -7,17 +7,41 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
 import { Textarea } from "~/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
 
 import { formatMoney, parseNumberInput } from "~/lib/currency";
 import { requireText } from "~/lib/validation";
-import type { Product } from "./products-types";
+import {
+  ivaConditionLabels,
+  ivaRates,
+  type IvaCondition,
+  type Product,
+} from "./products-types";
+import { calculateMarginValue, calculateSalePrice } from "./products-calc";
 import {
   addProduct,
   getNextProductCode,
   updateProduct,
   useProducts,
 } from "./products-store";
+
+function deriveMargin(
+  purchasePrice: number,
+  salePrice: number,
+  ivaRate: number
+): number {
+  if (purchasePrice <= 0) return 0;
+  return (
+    Math.round((salePrice / (purchasePrice * (1 + ivaRate)) - 1) * 1000) / 10
+  );
+}
 
 export function ProductFormPage() {
   const navigate = useNavigate();
@@ -35,14 +59,38 @@ export function ProductFormPage() {
   const [purchasePrice, setPurchasePrice] = useState(
     editing ? String(editing.purchasePrice) : ""
   );
-  const [salePrice, setSalePrice] = useState(
-    editing ? String(editing.salePrice) : ""
+  const [margin, setMargin] = useState(
+    editing
+      ? String(
+          editing.margin ??
+            deriveMargin(
+              editing.purchasePrice,
+              editing.salePrice,
+              editing.ivaCondition ? ivaRates[editing.ivaCondition] : 0
+            )
+        )
+      : ""
+  );
+  const [ivaCondition, setIvaCondition] = useState<IvaCondition>(
+    editing?.ivaCondition ?? "gravado21"
   );
   const [stock, setStock] = useState(editing ? String(editing.stock) : "");
   const [minStock, setMinStock] = useState(
     editing ? String(editing.minStock) : ""
   );
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+
+  const purchaseAmount = parseNumberInput(purchasePrice);
+  const marginAmount = margin.trim() === "" ? 0 : parseNumberInput(margin);
+  const ivaRate = ivaRates[ivaCondition];
+  const priceValid =
+    purchaseAmount > 0 && Number.isFinite(marginAmount) && marginAmount >= 0;
+  const marginValueDisplay = priceValid
+    ? formatMoney(calculateMarginValue(purchaseAmount, marginAmount))
+    : "";
+  const salePriceDisplay = priceValid
+    ? formatMoney(calculateSalePrice(purchaseAmount, marginAmount, ivaRate))
+    : "";
 
   function setField(field: string, value: string, setter: (value: string) => void) {
     setter(value);
@@ -56,15 +104,14 @@ export function ProductFormPage() {
       purchasePrice:
         purchasePrice.trim() === ""
           ? "El precio de compra es obligatorio"
-          : parseNumberInput(purchasePrice) <= 0
+          : purchaseAmount <= 0
             ? "El precio de compra debe ser mayor que 0"
             : null,
-      salePrice:
-        salePrice.trim() === ""
-          ? "El precio de venta es obligatorio"
-          : parseNumberInput(salePrice) <= 0
-            ? "El precio de venta debe ser mayor que 0"
-            : null,
+      margin:
+        margin.trim() !== "" &&
+        (!Number.isFinite(marginAmount) || marginAmount < 0)
+          ? "El margen debe ser un porcentaje mayor o igual a 0"
+          : null,
       stock:
         Number.isInteger(parseNumberInput(stock)) &&
         parseNumberInput(stock) >= 0
@@ -83,10 +130,12 @@ export function ProductFormPage() {
       code,
       name: name.trim(),
       description: description.trim(),
-      purchasePrice: parseNumberInput(purchasePrice),
-      salePrice: parseNumberInput(salePrice),
+      purchasePrice: purchaseAmount,
+      margin: marginAmount,
+      salePrice: calculateSalePrice(purchaseAmount, marginAmount, ivaRate),
       stock: Math.floor(parseNumberInput(stock)),
       minStock: Math.floor(parseNumberInput(minStock)),
+      ivaCondition,
     };
     if (editing) {
       updateProduct(product.id, product);
@@ -164,19 +213,75 @@ export function ProductFormPage() {
                 <FieldError message={errors.purchasePrice} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="product-sale-price">Precio de venta</Label>
+                <Label htmlFor="product-margin">Margen (%)</Label>
                 <Input
-                  id="product-sale-price"
+                  id="product-margin"
                   inputMode="decimal"
-                  value={salePrice}
+                  value={margin}
                   onChange={(event) =>
-                    setField("salePrice", event.target.value, setSalePrice)
+                    setField("margin", event.target.value, setMargin)
                   }
-                  placeholder="$ 0"
-                  aria-invalid={!!errors.salePrice}
+                  placeholder="0"
+                  aria-invalid={!!errors.margin}
+                  aria-describedby="product-margin-help"
                 />
-                <FieldError message={errors.salePrice} />
+                <p id="product-margin-help" className="text-xs text-muted-foreground">
+                  El margen resultante se calcula como el precio de compra + este porcentaje.
+                </p>
+                <FieldError message={errors.margin} />
               </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="product-margin-value">Margen</Label>
+                <Input
+                  id="product-margin-value"
+                  readOnly
+                  value={marginValueDisplay}
+                  placeholder="$ 0,00"
+                  className="font-medium"
+                  aria-describedby="product-margin-value-help"
+                />
+                <p id="product-margin-value-help" className="text-xs text-muted-foreground">
+                  Precio de compra más el margen aplicado.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-iva-condition">Condición de IVA</Label>
+                <Select
+                  value={ivaCondition}
+                  onValueChange={(value) => setIvaCondition(value as IvaCondition)}
+                >
+                  <SelectTrigger id="product-iva-condition" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ivaConditionLabels) as IvaCondition[]).map(
+                      (condition) => (
+                        <SelectItem key={condition} value={condition}>
+                          {ivaConditionLabels[condition]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="product-sale-price">Precio de venta</Label>
+              <Input
+                id="product-sale-price"
+                readOnly
+                value={salePriceDisplay}
+                placeholder="$ 0,00"
+                className="font-medium"
+                aria-describedby="product-sale-price-help"
+              />
+              <p id="product-sale-price-help" className="text-xs text-muted-foreground">
+                Margen más el IVA según la condición seleccionada.
+              </p>
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">

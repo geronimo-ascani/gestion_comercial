@@ -42,8 +42,12 @@ import {
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import type { Product } from "./products-types";
+import { ivaConditionLabels, type Product } from "./products-types";
 import { removeProduct, useProducts } from "./products-store";
+
+function formatPercent(value: number): string {
+  return `${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`;
+}
 
 type StockStatus = "ok" | "critical" | "out";
 
@@ -203,7 +207,7 @@ export function ProductsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={7} />
+            <TableSkeleton rows={6} columns={9} />
           ) : (
             <Table>
               <TableHeader>
@@ -211,7 +215,9 @@ export function ProductsPage() {
                   <TableHead>Código</TableHead>
                   <TableHead>Producto</TableHead>
                   <TableHead className="text-right">Precio compra</TableHead>
+                  <TableHead className="text-right">Margen</TableHead>
                   <TableHead className="text-right">Precio venta</TableHead>
+                  <TableHead>Condición IVA</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -221,7 +227,7 @@ export function ProductsPage() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={9}
                       className="h-24 text-center text-muted-foreground"
                     >
                       {products.length === 0
@@ -242,7 +248,23 @@ export function ProductsPage() {
                         {formatMoney(product.purchasePrice)}
                       </TableCell>
                       <TableCell className="text-right">
+                        <div>
+                          {formatMoney(
+                            product.purchasePrice *
+                              (1 + (product.margin ?? 0) / 100)
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {product.margin != null ? formatPercent(product.margin) : "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
                         {formatMoney(product.salePrice)}
+                      </TableCell>
+                      <TableCell>
+                        {product.ivaCondition
+                          ? ivaConditionLabels[product.ivaCondition]
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         {product.stock}
