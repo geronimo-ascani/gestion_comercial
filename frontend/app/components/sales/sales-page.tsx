@@ -1,8 +1,7 @@
 import { useState, type ReactElement } from "react";
-import { Eye, FileText, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -47,9 +46,8 @@ import type {
   BudgetStatus,
   OrderStatus,
   PaymentMethod,
-  SalesOrder,
 } from "./sales-types";
-import { removeOrder, useBudgets, useOrders } from "./sales-store";
+import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
@@ -57,25 +55,24 @@ import {
   PaymentBadge,
 } from "./sales-views";
 
-function DeleteOrderDialog({
-  order,
+function ConfirmDeleteDialog({
+  title,
+  description,
   trigger,
   onDelete,
 }: {
-  order: SalesOrder;
+  title: string;
+  description: string;
   trigger: ReactElement;
-  onDelete: (number: string) => void;
+  onDelete: () => void;
 }) {
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>¿Eliminar pedido?</DialogTitle>
-          <DialogDescription>
-            Esta acción no se puede deshacer. Se eliminará el pedido {order.number}{" "}
-            del cliente {order.client}.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
@@ -83,10 +80,7 @@ function DeleteOrderDialog({
           </DialogClose>
           <DialogClose
             render={
-              <Button
-                variant="destructive"
-                onClick={() => onDelete(order.number)}
-              />
+              <Button variant="destructive" onClick={onDelete} />
             }
           >
             Eliminar
@@ -183,23 +177,15 @@ export function SalesPage() {
 
       <div className="flex w-full gap-2 lg:w-fit">
         <Button
-          variant="outline"
-          className={cn(
-            "flex-1 px-4",
-            activeTab === "orders" &&
-              "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-          )}
+          variant={activeTab === "orders" ? "default" : "outline"}
+          className="flex-1 px-4"
           onClick={() => switchTab("orders")}
         >
           Pedidos
         </Button>
         <Button
-          variant="outline"
-          className={cn(
-            "flex-1 px-4",
-            activeTab === "budgets" &&
-              "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-          )}
+          variant={activeTab === "budgets" ? "default" : "outline"}
+          className="flex-1 px-4"
           onClick={() => switchTab("budgets")}
         >
           Presupuestos
@@ -335,9 +321,20 @@ export function SalesPage() {
                             >
                               <Eye />
                             </Button>
-                            <DeleteOrderDialog
-                              order={order}
-                              onDelete={removeOrder}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Editar pedido ${order.number}`}
+                              onClick={() =>
+                                navigate(`/sales/new-order?edit=${order.number}`)
+                              }
+                            >
+                              <Pencil />
+                            </Button>
+                            <ConfirmDeleteDialog
+                              title="¿Eliminar pedido?"
+                              description={`Esta acción no se puede deshacer. Se eliminará el pedido ${order.number} del cliente ${order.client}.`}
+                              onDelete={() => removeOrder(order.number)}
                               trigger={
                                 <Button
                                   variant="ghost"
@@ -463,18 +460,45 @@ export function SalesPage() {
                           <BudgetStatusBadge status={budget.status} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <BudgetDetailDialog
-                            budget={budget}
-                            trigger={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Ver presupuesto ${budget.number}`}
-                              >
-                                <Eye />
-                              </Button>
-                            }
-                          />
+                          <div className="flex justify-end gap-1">
+                            <BudgetDetailDialog
+                              budget={budget}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Ver presupuesto ${budget.number}`}
+                                >
+                                  <Eye />
+                                </Button>
+                              }
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Editar presupuesto ${budget.number}`}
+                              onClick={() =>
+                                navigate(`/sales/new-budget?edit=${budget.number}`)
+                              }
+                            >
+                              <Pencil />
+                            </Button>
+                            <ConfirmDeleteDialog
+                              title="¿Eliminar presupuesto?"
+                              description={`Esta acción no se puede deshacer. Se eliminará el presupuesto ${budget.number} del cliente ${budget.client}.`}
+                              onDelete={() => removeBudget(budget.number)}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-destructive hover:text-destructive"
+                                  aria-label={`Eliminar presupuesto ${budget.number}`}
+                                >
+                                  <Trash2 />
+                                </Button>
+                              }
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

@@ -1,24 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
+import { Combobox } from "~/components/ui/combobox";
 
 import type { LineItem } from "./sales-types";
-import { formatDate, formatInputDate } from "./sales-types";
-import { addBudget, useBudgets } from "./sales-store";
+import { formatDateForInput, formatDate, formatInputDate } from "./sales-types";
+import { addBudget, updateBudget, useBudgets } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
 import { useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
@@ -29,14 +23,23 @@ export function NewBudgetPage() {
   const budgets = useBudgets();
   const customers = useCustomers();
   const products = useProducts();
+  const [searchParams] = useSearchParams();
+
+  const editNumber = searchParams.get("edit");
+  const editing = editNumber
+    ? (budgets.find((budget) => budget.number === editNumber) ?? null)
+    : null;
 
   const nextBudgetNumber = `PST-${String(budgets.length + 1).padStart(3, "0")}`;
   const backTo = "/sales?tab=budgets";
 
-  const [client, setClient] = useState("");
-  const [expires, setExpires] = useState("");
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [total, setTotal] = useState("$0");
+  const [client, setClient] = useState(editing?.clientId ?? "");
+  const [expires, setExpires] = useState(
+    editing ? formatDateForInput(editing.expires) : ""
+  );
+  const [items, setItems] = useState<LineItem[]>(editing?.items ?? []);
+  const [total, setTotal] = useState(editing?.total ?? "$0");
+  const [expiresError, setExpiresError] = useState<string | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
 
@@ -45,6 +48,16 @@ export function NewBudgetPage() {
       ?.clienteId;
     if (preselected) setClient(preselected);
   }, [location.state]);
+
+  useEffect(() => {
+    setClient(editing?.clientId ?? "");
+    setExpires(editing ? formatDateForInput(editing.expires) : "");
+    setItems(editing?.items ?? []);
+    setTotal(editing?.total ?? "$0");
+    setExpiresError(null);
+    setItemsError(null);
+    setClientError(null);
+  }, [editNumber, editing]);
 
   function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
     setItems(nextItems);
@@ -58,20 +71,32 @@ export function NewBudgetPage() {
       setClientError("Seleccione un cliente");
       return;
     }
+    if (!expires) {
+      setExpiresError("La fecha de vencimiento es obligatoria");
+      return;
+    }
     if (items.length === 0) {
       setItemsError("Agregue al menos un producto con cantidad.");
       return;
     }
     const customer = customers.find((item) => item.id === client);
-    addBudget({
-      number: nextBudgetNumber,
+    const budgetData = {
       client: customer ? `${customer.firstName} ${customer.lastName}` : "Sin definir",
-      date: formatDate(new Date()),
+      clientId: client,
       expires: formatInputDate(expires),
       items,
       total,
-      status: "pendiente",
-    });
+    };
+    if (editing) {
+      updateBudget(editing.number, budgetData);
+    } else {
+      addBudget({
+        number: nextBudgetNumber,
+        ...budgetData,
+        date: formatDate(new Date()),
+        status: "pendiente",
+      });
+    }
     navigate(backTo);
   }
 
@@ -79,7 +104,7 @@ export function NewBudgetPage() {
     <FormPage
       backLabel="Volver a Ventas"
       backTo={backTo}
-      title="Nuevo presupuesto"
+      title={editing ? `Editar presupuesto ${editing.number}` : "Nuevo presupuesto"}
       description="Cargue el cliente, la fecha de vencimiento y los productos. Al crear el presupuesto, el comprobante se envía automáticamente por email al cliente."
     >
       <Card>
@@ -88,38 +113,29 @@ export function NewBudgetPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="budget-client">Cliente</Label>
-                <Select
-                  value={client || undefined}
-                  onValueChange={(value) => {
-                    setClient(value ?? "");
+                <Combobox
+                  id="budget-client"
+                  value={client}
+                  onValueChange={(customerId) => {
+                    setClient(customerId);
                     setClientError(null);
                   }}
-                >
-                  <SelectTrigger className="w-full" aria-invalid={!!clientError}>
-                    <SelectValue placeholder="Seleccionar cliente">
-                      {(selected) => {
-                        if (!selected) return "Seleccionar cliente";
-                        const picked = customers.find(
-                          (item) => item.id === selected
-                        );
-                        return picked
-                          ? `${picked.firstName} ${picked.lastName}`
-                          : selected;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem
-                        key={customer.id}
-                        value={customer.id}
-                        label={`${customer.firstName} ${customer.lastName}`}
-                      >
-                        {customer.firstName} {customer.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={customers.map((customer) => ({
+                    value: customer.id,
+                    label: `${customer.firstName} ${customer.lastName}`,
+                    description: customer.document || undefined,
+                    keywords: [
+                      customer.document,
+                      customer.email,
+                      customer.phone,
+                    ].filter((item): item is string => Boolean(item)),
+                  }))}
+                  placeholder="Seleccionar cliente"
+                  searchPlaceholder="Buscar cliente por nombre, DNI o correo..."
+                  notFoundText="No se encontraron clientes"
+                  emptyText="No hay clientes cargados"
+                  ariaInvalid={!!clientError}
+                />
                 <FieldError message={clientError} />
               </div>
               <div className="space-y-2">
@@ -128,8 +144,13 @@ export function NewBudgetPage() {
                   id="budget-expires"
                   type="date"
                   value={expires}
-                  onChange={(event) => setExpires(event.target.value)}
+                  onChange={(event) => {
+                    setExpires(event.target.value);
+                    setExpiresError(null);
+                  }}
+                  aria-invalid={!!expiresError}
                 />
+                <FieldError message={expiresError} />
               </div>
               <div className="flex items-end">
                 <Button
@@ -150,8 +171,10 @@ export function NewBudgetPage() {
 
             <div className="space-y-2">
               <LineItemsEditor
+                key={editing ? editing.number : "new"}
                 products={products}
                 priceMode="sale"
+                initialItems={editing?.items}
                 onChange={handleItemsChange}
               />
               <FieldError message={itemsError} />
@@ -161,7 +184,9 @@ export function NewBudgetPage() {
             <Button type="button" variant="outline" onClick={() => navigate(backTo)}>
               Cancelar
             </Button>
-            <Button type="submit">Crear presupuesto</Button>
+            <Button type="submit">
+              {editing ? "Guardar cambios" : "Crear presupuesto"}
+            </Button>
           </CardFooter>
         </form>
       </Card>

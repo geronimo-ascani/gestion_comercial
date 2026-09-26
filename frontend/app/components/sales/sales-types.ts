@@ -37,6 +37,7 @@ export interface SalesOrder {
 export interface Budget {
   number: string;
   client: string;
+  clientId?: string;
   date: string;
   expires: string;
   items: LineItem[];
@@ -54,6 +55,12 @@ export function formatInputDate(value: string): string {
   if (!value) return "";
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
+}
+
+export function formatDateForInput(value: string): string {
+  if (!value) return "";
+  const [day, month, year] = value.split("/");
+  return `${year}-${month}-${day}`;
 }
 
 export const paymentLabels: Record<PaymentMethod, string> = {

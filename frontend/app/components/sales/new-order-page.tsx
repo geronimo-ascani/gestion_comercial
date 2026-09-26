@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter } from "~/components/ui/card";
@@ -15,11 +15,11 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
+import { Combobox } from "~/components/ui/combobox";
 
-import { validateAddress } from "~/lib/validation";
 import type { LineItem, PaymentMethod } from "./sales-types";
 import { formatDate } from "./sales-types";
-import { addOrder, useOrders } from "./sales-store";
+import { addOrder, updateOrder, useOrders } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
 import { useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
@@ -30,20 +30,36 @@ export function NewOrderPage() {
   const orders = useOrders();
   const customers = useCustomers();
   const products = useProducts();
+  const [searchParams] = useSearchParams();
+
+  const editNumber = searchParams.get("edit");
+  const editing = editNumber
+    ? (orders.find((order) => order.number === editNumber) ?? null)
+    : null;
 
   const nextOrderNumber = `PV-${String(orders.length + 1).padStart(3, "0")}`;
   const backTo = "/sales?tab=orders";
 
-  const [client, setClient] = useState("");
-  const [province, setProvince] = useState("");
-  const [locality, setLocality] = useState("");
-  const [street, setStreet] = useState("");
-  const [number, setNumber] = useState("");
-  const [apartment, setApartment] = useState("");
-  const [payment, setPayment] = useState<PaymentMethod>("tarjeta");
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [total, setTotal] = useState("$0");
-  const [addressError, setAddressError] = useState<string | null>(null);
+  const [client, setClient] = useState(editing?.clientId ?? "");
+  const [province, setProvince] = useState(
+    editing?.deliveryAddress.province ?? ""
+  );
+  const [locality, setLocality] = useState(
+    editing?.deliveryAddress.locality ?? ""
+  );
+  const [street, setStreet] = useState(editing?.deliveryAddress.street ?? "");
+  const [number, setNumber] = useState(editing?.deliveryAddress.number ?? "");
+  const [apartment, setApartment] = useState(
+    editing?.deliveryAddress.apartment ?? ""
+  );
+  const [payment, setPayment] = useState<PaymentMethod>(
+    editing?.payment ?? "tarjeta"
+  );
+  const [items, setItems] = useState<LineItem[]>(editing?.items ?? []);
+  const [total, setTotal] = useState(editing?.total ?? "$0");
+  const [addressErrors, setAddressErrors] = useState<
+    Record<string, string | null>
+  >({});
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
 
@@ -53,6 +69,21 @@ export function NewOrderPage() {
     if (preselected) setClient(preselected);
   }, [location.state]);
 
+  useEffect(() => {
+    setClient(editing?.clientId ?? "");
+    setProvince(editing?.deliveryAddress.province ?? "");
+    setLocality(editing?.deliveryAddress.locality ?? "");
+    setStreet(editing?.deliveryAddress.street ?? "");
+    setNumber(editing?.deliveryAddress.number ?? "");
+    setApartment(editing?.deliveryAddress.apartment ?? "");
+    setPayment(editing?.payment ?? "tarjeta");
+    setItems(editing?.items ?? []);
+    setTotal(editing?.total ?? "$0");
+    setAddressErrors({});
+    setItemsError(null);
+    setClientError(null);
+  }, [editNumber, editing]);
+
   function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
     setItems(nextItems);
     setTotal(nextTotal);
@@ -61,17 +92,24 @@ export function NewOrderPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const addressErrorNext = !province.trim()
-      ? "La provincia es obligatoria"
-      : !locality.trim()
-        ? "La localidad es obligatoria"
-        : !street.trim()
-          ? "La calle es obligatoria"
-          : !number.trim()
-            ? "La altura es obligatoria"
-            : validateAddress({ province, locality, street, number, apartment });
-    setAddressError(addressErrorNext);
-    if (addressErrorNext) return;
+    const nextAddressErrors: Record<string, string | null> = {
+      province: !province.trim() ? "La provincia es obligatoria" : null,
+      locality: !locality.trim() ? "La localidad es obligatoria" : null,
+      street: !street.trim()
+        ? "La calle es obligatoria"
+        : street.trim().length < 3
+          ? "Dirección demasiado corta"
+          : !/[A-Za-zÁÉÍÓÚáéíóúñÑ]/.test(street)
+            ? "Debe incluir el nombre de la calle"
+            : null,
+      number: !number.trim()
+        ? "La altura es obligatoria"
+        : !/^[0-9][0-9A-Za-z/-]*$/.test(number.trim())
+          ? "Altura inválida"
+          : null,
+    };
+    setAddressErrors(nextAddressErrors);
+    if (Object.values(nextAddressErrors).some(Boolean)) return;
     if (!client) {
       setClientError("Seleccione un cliente");
       return;
@@ -81,11 +119,9 @@ export function NewOrderPage() {
       return;
     }
     const customer = customers.find((item) => item.id === client);
-    addOrder({
-      number: nextOrderNumber,
+    const orderData = {
       client: customer ? `${customer.firstName} ${customer.lastName}` : "Sin definir",
       clientId: client,
-      date: formatDate(new Date()),
       deliveryAddress: {
         province: province.trim(),
         locality: locality.trim(),
@@ -95,8 +131,18 @@ export function NewOrderPage() {
       },
       items,
       total,
-      status: "pendiente",
       payment,
+    };
+    if (editing) {
+      updateOrder(editing.number, orderData);
+      navigate(backTo);
+      return;
+    }
+    addOrder({
+      number: nextOrderNumber,
+      ...orderData,
+      date: formatDate(new Date()),
+      status: "pendiente",
     });
     navigate(`/sales/${nextOrderNumber}`);
   }
@@ -105,7 +151,7 @@ export function NewOrderPage() {
     <FormPage
       backLabel="Volver a Ventas"
       backTo={backTo}
-      title="Nuevo pedido de venta"
+      title={editing ? `Editar pedido ${editing.number}` : "Nuevo pedido de venta"}
       description="Cargue el cliente, los productos y el método de pago. Al crear el pedido, el comprobante se envía automáticamente por email al cliente."
     >
       <Card>
@@ -114,38 +160,29 @@ export function NewOrderPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="order-client">Cliente</Label>
-                <Select
-                  value={client || undefined}
-                  onValueChange={(value) => {
-                    setClient(value ?? "");
+                <Combobox
+                  id="order-client"
+                  value={client}
+                  onValueChange={(customerId) => {
+                    setClient(customerId);
                     setClientError(null);
                   }}
-                >
-                  <SelectTrigger className="w-full" aria-invalid={!!clientError}>
-                    <SelectValue placeholder="Seleccionar cliente">
-                      {(selected) => {
-                        if (!selected) return "Seleccionar cliente";
-                        const picked = customers.find(
-                          (item) => item.id === selected
-                        );
-                        return picked
-                          ? `${picked.firstName} ${picked.lastName}`
-                          : selected;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem
-                        key={customer.id}
-                        value={customer.id}
-                        label={`${customer.firstName} ${customer.lastName}`}
-                      >
-                        {customer.firstName} {customer.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={customers.map((customer) => ({
+                    value: customer.id,
+                    label: `${customer.firstName} ${customer.lastName}`,
+                    description: customer.document || undefined,
+                    keywords: [
+                      customer.document,
+                      customer.email,
+                      customer.phone,
+                    ].filter((item): item is string => Boolean(item)),
+                  }))}
+                  placeholder="Seleccionar cliente"
+                  searchPlaceholder="Buscar cliente por nombre, DNI o correo..."
+                  notFoundText="No se encontraron clientes"
+                  emptyText="No hay clientes cargados"
+                  ariaInvalid={!!clientError}
+                />
                 <FieldError message={clientError} />
               </div>
               <div className="flex items-end">
@@ -175,11 +212,12 @@ export function NewOrderPage() {
                     value={street}
                     onChange={(event) => {
                       setStreet(event.target.value);
-                      setAddressError(null);
+                      setAddressErrors((prev) => ({ ...prev, street: null }));
                     }}
                     placeholder="Nombre de la calle"
-                    aria-invalid={!!addressError}
+                    aria-invalid={!!addressErrors.street}
                   />
+                  <FieldError message={addressErrors.street} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="order-number">Altura</Label>
@@ -188,10 +226,12 @@ export function NewOrderPage() {
                     value={number}
                     onChange={(event) => {
                       setNumber(event.target.value);
-                      setAddressError(null);
+                      setAddressErrors((prev) => ({ ...prev, number: null }));
                     }}
                     placeholder="1234"
+                    aria-invalid={!!addressErrors.number}
                   />
+                  <FieldError message={addressErrors.number} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="order-apartment">Departamento</Label>
@@ -200,7 +240,7 @@ export function NewOrderPage() {
                     value={apartment}
                     onChange={(event) => {
                       setApartment(event.target.value);
-                      setAddressError(null);
+                      setAddressErrors((prev) => ({ ...prev, apartment: null }));
                     }}
                     placeholder="Ej. 3º B"
                   />
@@ -212,10 +252,12 @@ export function NewOrderPage() {
                     value={locality}
                     onChange={(event) => {
                       setLocality(event.target.value);
-                      setAddressError(null);
+                      setAddressErrors((prev) => ({ ...prev, locality: null }));
                     }}
                     placeholder="Ej. Córdoba"
+                    aria-invalid={!!addressErrors.locality}
                   />
+                  <FieldError message={addressErrors.locality} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="order-province">Provincia</Label>
@@ -224,19 +266,22 @@ export function NewOrderPage() {
                     value={province}
                     onChange={(event) => {
                       setProvince(event.target.value);
-                      setAddressError(null);
+                      setAddressErrors((prev) => ({ ...prev, province: null }));
                     }}
                     placeholder="Ej. Buenos Aires"
+                    aria-invalid={!!addressErrors.province}
                   />
+                  <FieldError message={addressErrors.province} />
                 </div>
               </div>
-              <FieldError message={addressError} />
             </div>
 
             <div className="space-y-2">
               <LineItemsEditor
+                key={editing ? editing.number : "new"}
                 products={products}
                 priceMode="sale"
+                initialItems={editing?.items}
                 onChange={handleItemsChange}
               />
               <FieldError message={itemsError} />
@@ -265,7 +310,9 @@ export function NewOrderPage() {
             <Button type="button" variant="outline" onClick={() => navigate(backTo)}>
               Cancelar
             </Button>
-            <Button type="submit">Crear pedido</Button>
+            <Button type="submit">
+              {editing ? "Guardar cambios" : "Crear pedido"}
+            </Button>
           </CardFooter>
         </form>
       </Card>

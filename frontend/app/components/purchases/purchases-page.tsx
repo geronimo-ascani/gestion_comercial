@@ -2,7 +2,6 @@ import { useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -170,23 +169,15 @@ export function PurchasesPage() {
 
       <div className="flex w-full gap-2 lg:w-fit">
         <Button
-          variant="outline"
-          className={cn(
-            "flex-1 px-4",
-            activeTab === "orders" &&
-              "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-          )}
+          variant={activeTab === "orders" ? "default" : "outline"}
+          className="flex-1 px-4"
           onClick={() => switchTab("orders")}
         >
           Órdenes de compra
         </Button>
         <Button
-          variant="outline"
-          className={cn(
-            "flex-1 px-4",
-            activeTab === "providers" &&
-              "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-          )}
+          variant={activeTab === "providers" ? "default" : "outline"}
+          className="flex-1 px-4"
           onClick={() => switchTab("providers")}
         >
           Proveedores

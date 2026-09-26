@@ -55,3 +55,15 @@ export function addBudget(budget: Budget) {
   budgets = [...budgets, budget];
   emit();
 }
+
+export function updateBudget(number: string, patch: Partial<Budget>) {
+  budgets = budgets.map((budget) =>
+    budget.number === number ? { ...budget, ...patch } : budget
+  );
+  emit();
+}
+
+export function removeBudget(number: string) {
+  budgets = budgets.filter((budget) => budget.number !== number);
+  emit();
+}

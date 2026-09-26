@@ -4,13 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Combobox } from "~/components/ui/combobox";
 
 import { formatMoney, parseNumberInput } from "~/lib/currency";
 import type { Product } from "../products/products-types";
@@ -29,14 +23,24 @@ interface LineItemsEditorProps {
   products: Product[];
   priceMode: PriceMode;
   onChange: (items: LineItem[], total: string) => void;
+  initialItems?: LineItem[];
 }
 
 export function LineItemsEditor({
   products,
   priceMode,
   onChange,
+  initialItems = [],
 }: LineItemsEditorProps) {
-  const [lines, setLines] = useState<EditorLine[]>([]);
+  const [lines, setLines] = useState<EditorLine[]>(() =>
+    initialItems.map((item) => ({
+      productId:
+        products.find((product) => product.code === item.sku)?.id ?? "",
+      productName: item.product,
+      qty: String(item.qty),
+      price: String(parseNumberInput(item.unitPrice)),
+    }))
+  );
 
   useEffect(() => {
     const items: LineItem[] = lines
@@ -143,31 +147,21 @@ export function LineItemsEditor({
                 key={index}
                 className="flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center"
               >
-                <Select
-                  value={line.productId || undefined}
-                  onValueChange={(value) => selectProduct(index, value ?? "")}
-                >
-                  <SelectTrigger className="w-full sm:min-w-0 sm:flex-1">
-                    <SelectValue placeholder="Seleccionar producto">
-                      {(selected) => {
-                        if (!selected) return "Seleccionar producto";
-                        const picked = products.find((item) => item.id === selected);
-                        return picked ? picked.name : selected;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {available.map((product) => (
-                      <SelectItem
-                        key={product.id}
-                        value={product.id}
-                        label={product.name}
-                      >
-                        {product.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  value={line.productId || ""}
+                  onValueChange={(productId) => selectProduct(index, productId)}
+                  options={available.map((product) => ({
+                    value: product.id,
+                    label: product.name,
+                    description: product.code,
+                    keywords: [product.code, product.description],
+                  }))}
+                  placeholder="Buscar producto…"
+                  searchPlaceholder="Buscar por nombre o código..."
+                  notFoundText="No se encontraron productos"
+                  emptyText="No hay más productos disponibles"
+                  className="w-full sm:min-w-0 sm:flex-1"
+                />
                 <Input
                   type="number"
                   min={1}
