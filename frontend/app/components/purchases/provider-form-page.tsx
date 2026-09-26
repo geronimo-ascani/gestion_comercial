@@ -60,7 +60,7 @@ export function ProviderFormPage() {
         ? validateEmail(email)
         : requireText(email, "Correo electrónico"),
       phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
-      address: validateAddress({ province, locality, street, number, apartment }),
+      ...validateAddress({ province, locality, street, number, apartment }, { required: true }),
     };
     setErrors(next);
     if (Object.values(next).some((error) => error)) return;
@@ -93,7 +93,7 @@ export function ProviderFormPage() {
       backLabel="Volver"
       backTo={backTo}
       title={editing ? "Editar proveedor" : "Nuevo proveedor"}
-      description="Complete los datos del proveedor. Nombre / Razón social, CUIT, teléfono y correo electrónico son obligatorios."
+      description="Complete los datos del proveedor. Nombre / Razón social, CUIT, teléfono, correo electrónico y dirección son obligatorios."
     >
       <Card>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
@@ -161,11 +161,12 @@ export function ProviderFormPage() {
                       id="provider-street"
                       value={street}
                       onChange={(event) =>
-                        setField("address", event.target.value, setStreet)
+                        setField("street", event.target.value, setStreet)
                       }
                       placeholder="Nombre de la calle"
-                      aria-invalid={!!errors.address}
+                      aria-invalid={!!errors.street}
                     />
+                    <FieldError message={errors.street} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="provider-number">Altura</Label>
@@ -173,10 +174,12 @@ export function ProviderFormPage() {
                       id="provider-number"
                       value={number}
                       onChange={(event) =>
-                        setField("address", event.target.value, setNumber)
+                        setField("number", event.target.value, setNumber)
                       }
                       placeholder="1234"
+                      aria-invalid={!!errors.number}
                     />
+                    <FieldError message={errors.number} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="provider-apartment">Departamento</Label>
@@ -184,7 +187,7 @@ export function ProviderFormPage() {
                       id="provider-apartment"
                       value={apartment}
                       onChange={(event) =>
-                        setField("address", event.target.value, setApartment)
+                        setField("apartment", event.target.value, setApartment)
                       }
                       placeholder="Ej. 3º B"
                     />
@@ -195,10 +198,12 @@ export function ProviderFormPage() {
                       id="provider-locality"
                       value={locality}
                       onChange={(event) =>
-                        setField("address", event.target.value, setLocality)
+                        setField("locality", event.target.value, setLocality)
                       }
                       placeholder="Ej. Córdoba"
+                      aria-invalid={!!errors.locality}
                     />
+                    <FieldError message={errors.locality} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="provider-province">Provincia</Label>
@@ -206,13 +211,14 @@ export function ProviderFormPage() {
                       id="provider-province"
                       value={province}
                       onChange={(event) =>
-                        setField("address", event.target.value, setProvince)
+                        setField("province", event.target.value, setProvince)
                       }
                       placeholder="Ej. Buenos Aires"
+                      aria-invalid={!!errors.province}
                     />
+                    <FieldError message={errors.province} />
                   </div>
                 </div>
-                <FieldError message={errors.address} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-bank">Banco</Label>

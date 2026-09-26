@@ -6,14 +6,8 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter } from "~/components/ui/card";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
+import { Combobox } from "~/components/ui/combobox";
 
 import type { LineItem } from "../sales/sales-types";
 import { formatDate } from "../sales/sales-types";
@@ -60,9 +54,10 @@ export function NewPurchaseOrderPage() {
       setItemsError("Agregue al menos un producto con cantidad.");
       return;
     }
+    const picked = providers.find((item) => item.id === provider);
     const purchaseOrder: PurchaseOrder = {
       number: nextOrderNumber,
-      provider: provider,
+      provider: picked ? picked.name : "Sin definir",
       date: formatDate(new Date()),
       items,
       total,
@@ -85,46 +80,27 @@ export function NewPurchaseOrderPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="order-provider">Proveedor</Label>
-                {providers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No hay proveedores cargados. Cree uno para poder generar la
-                    orden de compra.
-                  </p>
-                ) : (
-                  <Select
-                    value={provider || undefined}
-                    onValueChange={(value) => {
-                      setProvider(value ?? "");
-                      setProviderError(null);
-                    }}
-                  >
-                    <SelectTrigger
-                      className="w-full"
-                      aria-invalid={!!providerError}
-                    >
-                      <SelectValue placeholder="Seleccionar proveedor">
-                        {(selected) => {
-                          if (!selected) return "Seleccionar proveedor";
-                          const picked = providers.find(
-                            (item) => item.id === selected
-                          );
-                          return picked ? picked.name : selected;
-                        }}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {providers.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                          label={item.name}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                <Combobox
+                  id="order-provider"
+                  value={provider}
+                  onValueChange={(value) => {
+                    setProvider(value);
+                    setProviderError(null);
+                  }}
+                  options={providers.map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    description: item.cuit || undefined,
+                    keywords: [item.cuit, item.email, item.phone].filter(
+                      (item): item is string => Boolean(item)
+                    ),
+                  }))}
+                  placeholder="Seleccionar proveedor"
+                  searchPlaceholder="Buscar proveedor por nombre o CUIT..."
+                  notFoundText="No se encontraron proveedores"
+                  emptyText="No hay proveedores cargados"
+                  ariaInvalid={!!providerError}
+                />
                 <FieldError message={providerError} />
               </div>
               <div className="flex items-end">

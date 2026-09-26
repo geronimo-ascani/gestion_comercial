@@ -8,4 +8,5 @@ export interface Customer {
   phone: string;
   email: string;
   address: Address;
+  balance?: number;
 }

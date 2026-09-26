@@ -15,6 +15,7 @@ import {
   validateEmail,
   validatePhone,
 } from "~/lib/validation";
+import { parseNumberInput } from "~/lib/currency";
 import { addCustomer, updateCustomer, useCustomers } from "./customers-store";
 import type { Customer } from "./customers-types";
 
@@ -40,6 +41,9 @@ export function CustomerFormPage() {
   const [street, setStreet] = useState(editing?.address?.street ?? "");
   const [number, setNumber] = useState(editing?.address?.number ?? "");
   const [apartment, setApartment] = useState(editing?.address?.apartment ?? "");
+  const [balance, setBalance] = useState(
+    editing && typeof editing.balance === "number" ? String(editing.balance) : ""
+  );
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   function setField(field: string, value: string, setter: (value: string) => void) {
@@ -59,7 +63,15 @@ export function CustomerFormPage() {
         ? validateEmail(email)
         : requireText(email, "Correo electrónico"),
       phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
-      address: validateAddress({ province, locality, street, number, apartment }),
+      balance: balance.trim()
+        ? Number.isFinite(parseNumberInput(balance))
+          ? null
+          : "Saldo inválido"
+        : null,
+      ...validateAddress(
+        { province, locality, street, number, apartment },
+        { required: true }
+      ),
     };
     setErrors(next);
     if (Object.values(next).some((error) => error)) return;
@@ -70,6 +82,7 @@ export function CustomerFormPage() {
       document: document.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      balance: balance.trim() ? parseNumberInput(balance) : 0,
       address: {
         province: province.trim(),
         locality: locality.trim(),
@@ -91,7 +104,7 @@ export function CustomerFormPage() {
       backLabel="Volver"
       backTo={backTo}
       title={editing ? "Editar cliente" : "Nuevo cliente"}
-      description="Complete los datos del cliente. Nombre, apellido, DNI/CUIT, correo electrónico y teléfono son obligatorios."
+      description="Complete los datos del cliente. Nombre, apellido, DNI/CUIT, correo electrónico, teléfono y dirección son obligatorios."
     >
       <Card>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
@@ -163,6 +176,20 @@ export function CustomerFormPage() {
                 />
                 <FieldError message={errors.email} />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer-balance">Saldo en cuenta corriente</Label>
+                <Input
+                  id="customer-balance"
+                  inputMode="decimal"
+                  value={balance}
+                  onChange={(event) =>
+                    setField("balance", event.target.value, setBalance)
+                  }
+                  placeholder="0"
+                  aria-invalid={!!errors.balance}
+                />
+                <FieldError message={errors.balance} />
+              </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label>Dirección</Label>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -172,11 +199,12 @@ export function CustomerFormPage() {
                       id="customer-street"
                       value={street}
                       onChange={(event) =>
-                        setField("address", event.target.value, setStreet)
+                        setField("street", event.target.value, setStreet)
                       }
                       placeholder="Nombre de la calle"
-                      aria-invalid={!!errors.address}
+                      aria-invalid={!!errors.street}
                     />
+                    <FieldError message={errors.street} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="customer-number">Altura</Label>
@@ -184,10 +212,12 @@ export function CustomerFormPage() {
                       id="customer-number"
                       value={number}
                       onChange={(event) =>
-                        setField("address", event.target.value, setNumber)
+                        setField("number", event.target.value, setNumber)
                       }
                       placeholder="1234"
+                      aria-invalid={!!errors.number}
                     />
+                    <FieldError message={errors.number} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="customer-apartment">Departamento</Label>
@@ -195,7 +225,7 @@ export function CustomerFormPage() {
                       id="customer-apartment"
                       value={apartment}
                       onChange={(event) =>
-                        setField("address", event.target.value, setApartment)
+                        setField("apartment", event.target.value, setApartment)
                       }
                       placeholder="Ej. 3º B"
                     />
@@ -206,10 +236,12 @@ export function CustomerFormPage() {
                       id="customer-locality"
                       value={locality}
                       onChange={(event) =>
-                        setField("address", event.target.value, setLocality)
+                        setField("locality", event.target.value, setLocality)
                       }
                       placeholder="Ej. Córdoba"
+                      aria-invalid={!!errors.locality}
                     />
+                    <FieldError message={errors.locality} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="customer-province">Provincia</Label>
@@ -217,13 +249,14 @@ export function CustomerFormPage() {
                       id="customer-province"
                       value={province}
                       onChange={(event) =>
-                        setField("address", event.target.value, setProvince)
+                        setField("province", event.target.value, setProvince)
                       }
                       placeholder="Ej. Buenos Aires"
+                      aria-invalid={!!errors.province}
                     />
+                    <FieldError message={errors.province} />
                   </div>
                 </div>
-                <FieldError message={errors.address} />
               </div>
             </div>
           </CardContent>

@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -32,9 +32,53 @@ import {
 } from "~/components/ui/table";
 
 import { formatAddress } from "~/lib/address";
+import { formatMoney } from "~/lib/currency";
 import { removeCustomer, useCustomers } from "./customers-store";
+import type { Customer } from "./customers-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+
+function CustomerDetailDialog({
+  customer,
+  trigger,
+}: {
+  customer: Customer;
+  trigger: ReactElement;
+}) {
+  const details: Array<[string, string]> = [
+    ["Documento", customer.document || "—"],
+    ["Teléfono", customer.phone || "—"],
+    ["Correo electrónico", customer.email || "—"],
+    ["Dirección", formatAddress(customer.address) || "—"],
+    ["Saldo en cuenta corriente", formatMoney(customer.balance ?? 0)],
+  ];
+  return (
+    <Dialog>
+      <DialogTrigger render={trigger} />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {customer.firstName} {customer.lastName}
+          </DialogTitle>
+          <DialogDescription>Datos del cliente</DialogDescription>
+        </DialogHeader>
+        <dl className="space-y-3">
+          {details.map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4">
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="text-right text-sm font-medium break-all">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>
+            Cerrar
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ConfirmDeleteDialog({
   title,
@@ -102,7 +146,7 @@ export function CustomersPage() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="h-10 w-full bg-card pl-10 shadow-sm"
-            placeholder="Buscar cliente por nombre, DNI/CUIT, correo o dirección..."
+            placeholder="Buscar cliente por nombre, DNI/CUIT o teléfono..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -123,7 +167,7 @@ export function CustomersPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={6} />
+            <TableSkeleton rows={6} columns={5} />
           ) : (
             <Table>
               <TableHeader>
@@ -131,8 +175,7 @@ export function CustomersPage() {
                 <TableHead>Nombre y apellido</TableHead>
                 <TableHead>DNI / CUIT</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>Correo electrónico</TableHead>
-                <TableHead>Dirección</TableHead>
+                <TableHead className="text-right">Saldo</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -140,7 +183,7 @@ export function CustomersPage() {
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={5}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {customers.length === 0
@@ -158,10 +201,31 @@ export function CustomersPage() {
                       {customer.document || "—"}
                     </TableCell>
                     <TableCell>{customer.phone || "—"}</TableCell>
-                    <TableCell>{customer.email || "—"}</TableCell>
-                    <TableCell>{formatAddress(customer.address) || "—"}</TableCell>
+                    <TableCell
+                      className={`text-right font-medium tabular-nums ${
+                        (customer.balance ?? 0) < 0
+                          ? "text-destructive"
+                          : (customer.balance ?? 0) > 0
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {formatMoney(customer.balance ?? 0)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <CustomerDetailDialog
+                          customer={customer}
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Ver cliente ${customer.firstName} ${customer.lastName}`}
+                            >
+                              <Eye />
+                            </Button>
+                          }
+                        />
                         <Button
                           variant="ghost"
                           size="icon-sm"

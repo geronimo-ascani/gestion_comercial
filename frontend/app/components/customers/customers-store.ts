@@ -10,6 +10,7 @@ let customers: Customer[] = [
     document: "27.123.456",
     phone: "+54 11 5458-1024",
     email: "maria.gonzalez@gmail.com",
+    balance: 125000,
     address: {
       province: "Buenos Aires",
       locality: "CABA",
@@ -40,6 +41,7 @@ let customers: Customer[] = [
     document: "23.987.321",
     phone: "+54 341 422-9102",
     email: "laura.fernandez@gmail.com",
+    balance: -45000,
     address: {
       province: "Santa Fe",
       locality: "Rosario",
