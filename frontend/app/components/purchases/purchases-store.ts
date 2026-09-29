@@ -9,6 +9,7 @@ let providers: Provider[] = [
     cuit: "30-00012345-1",
     phone: "+54 11 4342-1100",
     email: "ventas@distribuidorasanjuan.com.ar",
+    balance: 85000,
     address: {
       province: "Buenos Aires",
       locality: "CABA",
@@ -41,6 +42,7 @@ let providers: Provider[] = [
     cuit: "30-00056789-9",
     phone: "+54 261 429-3322",
     email: "admin@alimentoscuyo.com.ar",
+    balance: -32000,
     address: {
       province: "Mendoza",
       locality: "Mendoza",

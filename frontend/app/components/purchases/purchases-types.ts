@@ -16,6 +16,7 @@ export interface Provider {
   address: Address;
   bank: string;
   account: string;
+  balance?: number;
 }
 
 export interface PurchaseOrder {

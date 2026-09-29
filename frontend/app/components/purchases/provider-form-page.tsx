@@ -15,6 +15,7 @@ import {
   validateEmail,
   validatePhone,
 } from "~/lib/validation";
+import { parseNumberInput } from "~/lib/currency";
 import { addProvider, updateProvider, useProviders } from "./purchases-store";
 import type { Provider } from "./purchases-types";
 
@@ -42,6 +43,9 @@ export function ProviderFormPage() {
   const [apartment, setApartment] = useState(editing?.address?.apartment ?? "");
   const [bank, setBank] = useState(editing?.bank ?? "");
   const [account, setAccount] = useState(editing?.account ?? "");
+  const [balance, setBalance] = useState(
+    editing && typeof editing.balance === "number" ? String(editing.balance) : ""
+  );
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   function setField(field: string, value: string, setter: (value: string) => void) {
@@ -60,6 +64,11 @@ export function ProviderFormPage() {
         ? validateEmail(email)
         : requireText(email, "Correo electrónico"),
       phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
+      balance: balance.trim()
+        ? Number.isFinite(parseNumberInput(balance))
+          ? null
+          : "Saldo inválido"
+        : null,
       ...validateAddress({ province, locality, street, number, apartment }, { required: true }),
     };
     setErrors(next);
@@ -79,6 +88,7 @@ export function ProviderFormPage() {
       },
       bank: bank.trim(),
       account: account.trim(),
+      balance: balance.trim() ? parseNumberInput(balance) : 0,
     };
     if (editing) {
       updateProvider(provider.id, provider);
@@ -151,6 +161,20 @@ export function ProviderFormPage() {
                   aria-invalid={!!errors.email}
                 />
                 <FieldError message={errors.email} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-balance">Saldo en cuenta corriente</Label>
+                <Input
+                  id="provider-balance"
+                  inputMode="decimal"
+                  value={balance}
+                  onChange={(event) =>
+                    setField("balance", event.target.value, setBalance)
+                  }
+                  placeholder="0"
+                  aria-invalid={!!errors.balance}
+                />
+                <FieldError message={errors.balance} />
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label>Dirección</Label>

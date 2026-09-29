@@ -41,8 +41,10 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { formatAddress } from "~/lib/address";
+import { formatMoney } from "~/lib/currency";
 import { OrderLineItemsTable } from "../sales/sales-views";
-import type { PurchaseOrder, PurchaseOrderStatus } from "./purchases-types";
+import type { Provider, PurchaseOrder, PurchaseOrderStatus } from "./purchases-types";
 import {
   removeProvider,
   removePurchaseOrder,
@@ -50,6 +52,46 @@ import {
   usePurchaseOrders,
 } from "./purchases-store";
 import { PurchaseOrderStatusBadge } from "./purchases-views";
+
+function ProviderDetailDialog({
+  provider,
+  trigger,
+}: {
+  provider: Provider;
+  trigger: ReactElement;
+}) {
+  const details: Array<[string, string]> = [
+    ["CUIT", provider.cuit || "—"],
+    ["Teléfono", provider.phone || "—"],
+    ["Correo electrónico", provider.email || "—"],
+    ["Dirección", formatAddress(provider.address) || "—"],
+    ["Banco", provider.bank || "—"],
+    ["Número de cuenta", provider.account || "—"],
+    ["Saldo en cuenta corriente", formatMoney(provider.balance ?? 0)],
+  ];
+  return (
+    <Dialog>
+      <DialogTrigger render={trigger} />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{provider.name}</DialogTitle>
+          <DialogDescription>Datos del proveedor</DialogDescription>
+        </DialogHeader>
+        <dl className="space-y-3">
+          {details.map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4">
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="text-right text-sm font-medium break-all">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cerrar</DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function PurchaseOrderDetailDialog({
   order,
@@ -314,7 +356,7 @@ export function PurchasesPage() {
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="h-10 w-full bg-card pl-10 shadow-sm"
-                placeholder="Buscar proveedor por nombre, CUIT, correo o banco..."
+                placeholder="Buscar proveedor por nombre, CUIT o banco..."
                 value={providerQuery}
                 onChange={(event) => setProviderQuery(event.target.value)}
               />
@@ -335,7 +377,7 @@ export function PurchasesPage() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <TableSkeleton rows={6} columns={6} />
+                <TableSkeleton rows={6} columns={4} />
               ) : (
                 <Table>
                   <TableHeader>
@@ -343,8 +385,6 @@ export function PurchasesPage() {
                       <TableHead>Nombre / Razón social</TableHead>
                       <TableHead>CUIT</TableHead>
                       <TableHead>Teléfono</TableHead>
-                      <TableHead>Correo electrónico</TableHead>
-                      <TableHead>Banco</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -352,7 +392,7 @@ export function PurchasesPage() {
                   {filteredProviders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={4}
                         className="h-24 text-center text-muted-foreground"
                       >
                         {providers.length === 0
@@ -370,10 +410,20 @@ export function PurchasesPage() {
                           {provider.cuit || "—"}
                         </TableCell>
                         <TableCell>{provider.phone || "—"}</TableCell>
-                        <TableCell>{provider.email || "—"}</TableCell>
-                        <TableCell>{provider.bank || "—"}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <ProviderDetailDialog
+                              provider={provider}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Ver proveedor ${provider.name}`}
+                                >
+                                  <Eye />
+                                </Button>
+                              }
+                            />
                             <Button
                               variant="ghost"
                               size="icon-sm"
