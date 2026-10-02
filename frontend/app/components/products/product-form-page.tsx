@@ -16,12 +16,19 @@ import {
 } from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
 
-import { formatMoney, parseNumberInput } from "~/lib/currency";
+import {
+  formatMoney,
+  parseNumberInput,
+  parsePercentInput,
+} from "~/lib/currency";
 import { requireText } from "~/lib/validation";
 import {
+  defaultIvaOperationCode,
   ivaConditionLabels,
+  ivaOperationCodeLabels,
   ivaRates,
   type IvaCondition,
+  type IvaOperationCode,
   type Product,
 } from "./products-types";
 import { calculateMarginValue, calculateSalePrice } from "./products-calc";
@@ -74,6 +81,11 @@ export function ProductFormPage() {
   const [ivaCondition, setIvaCondition] = useState<IvaCondition>(
     editing?.ivaCondition ?? "gravado21"
   );
+  const [operationCode, setOperationCode] = useState<IvaOperationCode>(
+    editing?.ivaOperationCode ??
+      defaultIvaOperationCode[editing?.ivaCondition ?? "gravado21"] ??
+      "E"
+  );
   const [stock, setStock] = useState(editing ? String(editing.stock) : "");
   const [minStock, setMinStock] = useState(
     editing ? String(editing.minStock) : ""
@@ -81,7 +93,7 @@ export function ProductFormPage() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   const purchaseAmount = parseNumberInput(purchasePrice);
-  const marginAmount = margin.trim() === "" ? 0 : parseNumberInput(margin);
+  const marginAmount = margin.trim() === "" ? 0 : parsePercentInput(margin);
   const ivaRate = ivaRates[ivaCondition];
   const priceValid =
     purchaseAmount > 0 && Number.isFinite(marginAmount) && marginAmount >= 0;
@@ -95,6 +107,11 @@ export function ProductFormPage() {
   function setField(field: string, value: string, setter: (value: string) => void) {
     setter(value);
     setErrors((prev) => ({ ...prev, [field]: null }));
+  }
+
+  function handleIvaChange(value: IvaCondition) {
+    setIvaCondition(value);
+    setOperationCode(defaultIvaOperationCode[value] ?? "E");
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -136,6 +153,8 @@ export function ProductFormPage() {
       stock: Math.floor(parseNumberInput(stock)),
       minStock: Math.floor(parseNumberInput(minStock)),
       ivaCondition,
+      ivaOperationCode:
+        ivaRates[ivaCondition] === 0 ? operationCode : undefined,
     };
     if (editing) {
       updateProduct(product.id, product);
@@ -234,24 +253,24 @@ export function ProductFormPage() {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="product-margin-value">Margen</Label>
+                <Label htmlFor="product-net">Neto</Label>
                 <Input
-                  id="product-margin-value"
+                  id="product-net"
                   readOnly
                   value={marginValueDisplay}
                   placeholder="$ 0,00"
-                  className="font-medium"
-                  aria-describedby="product-margin-value-help"
+                  className="font-medium bg-muted text-muted-foreground cursor-not-allowed"
+                  aria-describedby="product-net-help"
                 />
-                <p id="product-margin-value-help" className="text-xs text-muted-foreground">
-                  Precio de compra más el margen aplicado.
+                <p id="product-net-help" className="text-xs text-muted-foreground">
+                  Precio de compra más el margen aplicado. Se calcula automáticamente.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-iva-condition">Condición de IVA</Label>
                 <Select
                   value={ivaCondition}
-                  onValueChange={(value) => setIvaCondition(value as IvaCondition)}
+                  onValueChange={(value) => handleIvaChange(value as IvaCondition)}
                 >
                   <SelectTrigger id="product-iva-condition" className="w-full">
                     <SelectValue />
@@ -259,26 +278,69 @@ export function ProductFormPage() {
                   <SelectContent>
                     {(Object.keys(ivaConditionLabels) as IvaCondition[]).map(
                       (condition) => (
-                        <SelectItem key={condition} value={condition}>
+                        <SelectItem
+                          key={condition}
+                          value={condition}
+                          label={ivaConditionLabels[condition]}
+                        >
                           {ivaConditionLabels[condition]}
                         </SelectItem>
                       )
                     )}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Alícuotas estandarizadas por ARCA para facturación
+                  electrónica y Libro IVA Digital.
+                </p>
               </div>
             </div>
 
+            {ivaRates[ivaCondition] === 0 && (
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="product-operation-code">
+                  Código de operación (ARCA)
+                </Label>
+                <Select
+                  value={operationCode}
+                  onValueChange={(value) =>
+                    setOperationCode(value as IvaOperationCode)
+                  }
+                >
+                  <SelectTrigger id="product-operation-code" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ivaOperationCodeLabels) as IvaOperationCode[]).map(
+                      (code) => (
+                        <SelectItem
+                          key={code}
+                          value={code}
+                          label={`${code} · ${ivaOperationCodeLabels[code]}`}
+                        >
+                          {code} · {ivaOperationCodeLabels[code]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Obligatorio cuando la alícuota es 0,00 % (código 0003) o la
+                  operación posee un tratamiento especial.
+                </p>
+              </div>
+            )}
+
             <div className="mt-4 space-y-2">
               <Label htmlFor="product-sale-price">Precio de venta</Label>
-              <Input
-                id="product-sale-price"
-                readOnly
-                value={salePriceDisplay}
-                placeholder="$ 0,00"
-                className="font-medium"
-                aria-describedby="product-sale-price-help"
-              />
+<Input
+                  id="product-sale-price"
+                  readOnly
+                  value={salePriceDisplay}
+                  placeholder="$ 0,00"
+                  className="font-medium bg-muted text-muted-foreground cursor-not-allowed"
+                  aria-describedby="product-sale-price-help"
+                />
               <p id="product-sale-price-help" className="text-xs text-muted-foreground">
                 Margen más el IVA según la condición seleccionada.
               </p>

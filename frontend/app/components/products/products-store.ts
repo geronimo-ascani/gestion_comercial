@@ -1,7 +1,12 @@
 import { useSyncExternalStore } from "react";
 
 import { calculateSalePrice } from "./products-calc";
-import { ivaRates, type IvaCondition, type Product } from "./products-types";
+import {
+  ivaRates,
+  type IvaCondition,
+  type IvaOperationCode,
+  type Product,
+} from "./products-types";
 
 function seed(
   id: string,
@@ -12,7 +17,8 @@ function seed(
   margin: number,
   stock: number,
   minStock: number,
-  ivaCondition: IvaCondition
+  ivaCondition: IvaCondition,
+  ivaOperationCode?: IvaOperationCode
 ): Product {
   const salePrice = calculateSalePrice(purchasePrice, margin, ivaRates[ivaCondition]);
   return {
@@ -26,15 +32,16 @@ function seed(
     stock,
     minStock,
     ivaCondition,
+    ivaOperationCode,
   };
 }
 
 const demoProducts: Product[] = [
   seed("prod-1", "PRD-001", 'Notebook Gamer 15"', "16 GB RAM · 512 GB SSD · RTX 4060", 850000, 30, 8, 3, "gravado21"),
-  seed("prod-2", "PRD-002", 'Monitor 24" Full HD', "Panel IPS · 75 Hz", 180000, 40, 0, 5, "gravado21"),
-  seed("prod-3", "PRD-003", "Teclado mecánico TKL", "Switches red · retroiluminado", 45000, 70, 25, 5, "gravado10_5"),
-  seed("prod-4", "PRD-004", "Mouse ergonómico", "Inalámbrico · 1600 DPI", 18000, 80, 40, 10, "gravado21"),
-  seed("prod-5", "PRD-005", "Auriculares Bluetooth", "Cancelación de ruido", 52000, 60, 4, 6, "exento"),
+  seed("prod-2", "PRD-002", 'Monitor 24" Full HD', "Panel IPS · 75 Hz", 180000, 40, 0, 5, "gravado27"),
+  seed("prod-3", "PRD-003", "Teclado mecánico TKL", "Switches red · retroiluminado", 45000, 70, 25, 5, "gravado5"),
+  seed("prod-4", "PRD-004", "Mouse ergonómico", "Inalámbrico · 1600 DPI", 18000, 80, 40, 10, "gravado10_5"),
+  seed("prod-5", "PRD-005", "Auriculares Bluetooth", "Cancelación de ruido", 52000, 60, 4, 6, "exento", "E"),
   seed("prod-6", "PRD-006", "Disco SSD 1TB NVMe", "Lectura 3500 MB/s", 96000, 45, 12, 4, "gravado21"),
 ];
 

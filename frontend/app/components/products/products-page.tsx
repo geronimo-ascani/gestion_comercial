@@ -42,7 +42,7 @@ import {
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import { ivaConditionLabels, type Product } from "./products-types";
+import { ivaArcaCodes, ivaConditionLabels, type Product } from "./products-types";
 import { removeProduct, useProducts } from "./products-store";
 
 function formatPercent(value: number): string {
@@ -207,14 +207,13 @@ export function ProductsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={9} />
+            <TableSkeleton rows={6} columns={8} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
                   <TableHead>Producto</TableHead>
-                  <TableHead className="text-right">Precio compra</TableHead>
                   <TableHead className="text-right">Margen</TableHead>
                   <TableHead className="text-right">Precio venta</TableHead>
                   <TableHead>Condición IVA</TableHead>
@@ -227,7 +226,7 @@ export function ProductsPage() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={8}
                       className="h-24 text-center text-muted-foreground"
                     >
                       {products.length === 0
@@ -245,26 +244,27 @@ export function ProductsPage() {
                         {product.name}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatMoney(product.purchasePrice)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div>
-                          {formatMoney(
-                            product.purchasePrice *
-                              (1 + (product.margin ?? 0) / 100)
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {product.margin != null ? formatPercent(product.margin) : "—"}
-                        </div>
+                        {product.margin != null
+                          ? formatPercent(product.margin)
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatMoney(product.salePrice)}
                       </TableCell>
                       <TableCell>
-                        {product.ivaCondition
-                          ? ivaConditionLabels[product.ivaCondition]
-                          : "—"}
+                        {product.ivaCondition ? (
+                          <div>
+                            {ivaConditionLabels[product.ivaCondition]}
+                            <div className="text-xs text-muted-foreground">
+                              ARCA {ivaArcaCodes[product.ivaCondition]}
+                              {product.ivaOperationCode
+                                ? ` · Op ${product.ivaOperationCode}`
+                                : ""}
+                            </div>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         {product.stock}
