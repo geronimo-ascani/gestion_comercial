@@ -27,6 +27,14 @@ export const ivaRates: Record<IvaCondition, number> = {
   no_gravado: 0,
 };
 
+export function ivaRateLabel(condition: IvaCondition): string {
+  const percent = ivaRates[condition] * 100;
+  return `${percent.toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} %`;
+}
+
 export const ivaArcaCodes: Record<IvaCondition, string> = {
   gravado27: "0006",
   gravado21: "0005",

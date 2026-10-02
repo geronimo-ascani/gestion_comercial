@@ -41,8 +41,9 @@ import {
 } from "~/components/ui/table";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import { ivaArcaCodes, ivaConditionLabels, type Product } from "./products-types";
+import { ivaConditionLabels, type Product } from "./products-types";
 import { removeProduct, useProducts } from "./products-store";
 
 function formatPercent(value: number): string {
@@ -112,11 +113,12 @@ export function ProductsPage() {
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [status, setStatus] = useState<"all" | StockStatus>("all");
+  const debouncedQuery = useDebouncedValue(query);
 
   const filtered = products.filter((product) => {
     const haystack =
       `${product.code} ${product.name} ${product.description}`.toLowerCase();
-    const matchesQuery = haystack.includes(query.trim().toLowerCase());
+    const matchesQuery = haystack.includes(debouncedQuery.trim().toLowerCase());
     const min = parseNumberInput(priceMin);
     const max = parseNumberInput(priceMax);
     const matchesPrice =
@@ -255,12 +257,11 @@ export function ProductsPage() {
                         {product.ivaCondition ? (
                           <div>
                             {ivaConditionLabels[product.ivaCondition]}
-                            <div className="text-xs text-muted-foreground">
-                              ARCA {ivaArcaCodes[product.ivaCondition]}
-                              {product.ivaOperationCode
-                                ? ` · Op ${product.ivaOperationCode}`
-                                : ""}
-                            </div>
+                            {product.ivaOperationCode && (
+                              <div className="text-xs text-muted-foreground">
+                                Op {product.ivaOperationCode}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           "—"

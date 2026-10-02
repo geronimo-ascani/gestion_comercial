@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -37,6 +37,7 @@ import { removeCustomer, useCustomers } from "./customers-store";
 import type { Customer } from "./customers-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 
 function CustomerDetailDialog({
   customer,
@@ -119,12 +120,7 @@ export function CustomersPage() {
   const loading = useInitialLoading();
   const customers = useCustomers();
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
+  const debouncedQuery = useDebouncedValue(query);
 
   const filtered = customers.filter((customer) => {
     const haystack =

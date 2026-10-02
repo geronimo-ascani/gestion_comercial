@@ -41,6 +41,7 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 import type {
   Budget,
   BudgetStatus,
@@ -136,10 +137,12 @@ export function SalesPage() {
   const [orderPayment, setOrderPayment] = useState<"all" | PaymentMethod>("all");
   const [budgetQuery, setBudgetQuery] = useState("");
   const [budgetStatus, setBudgetStatus] = useState<"all" | BudgetStatus>("all");
+  const debouncedOrderQuery = useDebouncedValue(orderQuery);
+  const debouncedBudgetQuery = useDebouncedValue(budgetQuery);
 
   const filteredOrders = orders.filter((order) => {
     const haystack = `${order.number} ${order.client} ${order.payment}`.toLowerCase();
-    const matchesQuery = haystack.includes(orderQuery.trim().toLowerCase());
+    const matchesQuery = haystack.includes(debouncedOrderQuery.trim().toLowerCase());
     const matchesStatus = orderStatus === "all" || order.status === orderStatus;
     const matchesPayment = orderPayment === "all" || order.payment === orderPayment;
     return matchesQuery && matchesStatus && matchesPayment;
@@ -147,7 +150,7 @@ export function SalesPage() {
 
   const filteredBudgets = budgets.filter((budget) => {
     const haystack = `${budget.number} ${budget.client}`.toLowerCase();
-    const matchesQuery = haystack.includes(budgetQuery.trim().toLowerCase());
+    const matchesQuery = haystack.includes(debouncedBudgetQuery.trim().toLowerCase());
     const matchesStatus = budgetStatus === "all" || budget.status === budgetStatus;
     return matchesQuery && matchesStatus;
   });

@@ -29,7 +29,7 @@ export function DashboardPage() {
             Métricas operativas del sistema para el período actual.
           </p>
         </div>
-        <Button variant="outline">Exportar reporte</Button>
+        <Button>Exportar reporte</Button>
       </div>
 
       {loading ? (

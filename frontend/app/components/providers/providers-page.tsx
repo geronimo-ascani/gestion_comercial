@@ -33,6 +33,7 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatAddress } from "~/lib/address";
 import { formatMoney } from "~/lib/currency";
 import type { Provider } from "../purchases/purchases-types";
@@ -117,11 +118,12 @@ export function ProvidersPage() {
   const loading = useInitialLoading();
   const providers = useProviders();
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query);
 
   const filteredProviders = providers.filter((provider) => {
     const haystack =
       `${provider.name} ${provider.cuit} ${provider.phone} ${provider.email} ${provider.bank}`.toLowerCase();
-    return haystack.includes(query.trim().toLowerCase());
+    return haystack.includes(debouncedQuery.trim().toLowerCase());
   });
 
   return (

@@ -41,6 +41,7 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { OrderLineItemsTable } from "../sales/sales-views";
 import type { PurchaseOrder, PurchaseOrderStatus } from "./purchases-types";
 import { usePurchaseOrders } from "./purchases-store";
@@ -82,10 +83,11 @@ export function PurchasesPage() {
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | PurchaseOrderStatus>("all");
+  const debouncedOrderQuery = useDebouncedValue(orderQuery);
 
   const filteredOrders = orders.filter((order) => {
     const haystack = `${order.number} ${order.provider}`.toLowerCase();
-    const matchesQuery = haystack.includes(orderQuery.trim().toLowerCase());
+    const matchesQuery = haystack.includes(debouncedOrderQuery.trim().toLowerCase());
     const matchesStatus = orderStatus === "all" || order.status === orderStatus;
     return matchesQuery && matchesStatus;
   });

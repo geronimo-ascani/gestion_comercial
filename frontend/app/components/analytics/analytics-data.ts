@@ -1,4 +1,4 @@
-export type Period = "mes" | "trimestre" | "año";
+export type Period = "hoy" | "7d" | "mes" | "trimestre" | "año";
 
 export interface KpiSet {
   ventas: number;
@@ -17,12 +17,40 @@ export interface PeriodConfig {
 }
 
 export const periodOptions: { value: Period; label: string }[] = [
+  { value: "hoy", label: "Hoy" },
+  { value: "7d", label: "Últimos 7 días" },
   { value: "mes", label: "Último mes" },
   { value: "trimestre", label: "Último trimestre" },
   { value: "año", label: "Este año" },
 ];
 
 export const periodConfigs: Record<Period, PeriodConfig> = {
+  hoy: {
+    label: "Hoy",
+    factor: 0.033,
+    kpis: {
+      ventas: 45_000,
+      gastos: 30_500,
+      neto: 14_500,
+      margenPct: 32.2,
+      deltaVentas: "+9%",
+      deltaGastos: "-1%",
+      deltaNeto: "+11%",
+    },
+  },
+  "7d": {
+    label: "Últimos 7 días",
+    factor: 0.24,
+    kpis: {
+      ventas: 298_500,
+      gastos: 198_000,
+      neto: 100_500,
+      margenPct: 33.7,
+      deltaVentas: "+6%",
+      deltaGastos: "+2%",
+      deltaNeto: "+14%",
+    },
+  },
   mes: {
     label: "Último mes",
     factor: 1,
@@ -177,7 +205,7 @@ export function buildHeatmap(factor: number) {
   return {
     days: heatDayLabels,
     hours: heatHours,
-    values: baseHeatValues.map((row) => row.map((value) => Math.round(value * factor))),
+    values: baseHeatValues.map((row) => row.map((value) => Math.max(1, Math.round(value * factor)))),
   };
 }
 

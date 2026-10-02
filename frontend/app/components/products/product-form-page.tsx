@@ -26,6 +26,7 @@ import {
   defaultIvaOperationCode,
   ivaConditionLabels,
   ivaOperationCodeLabels,
+  ivaRateLabel,
   ivaRates,
   type IvaCondition,
   type IvaOperationCode,
@@ -273,7 +274,13 @@ export function ProductFormPage() {
                   onValueChange={(value) => handleIvaChange(value as IvaCondition)}
                 >
                   <SelectTrigger id="product-iva-condition" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value) =>
+                        value
+                          ? ivaRateLabel(value as IvaCondition)
+                          : "Seleccionar condición"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(ivaConditionLabels) as IvaCondition[]).map(
@@ -308,7 +315,13 @@ export function ProductFormPage() {
                   }
                 >
                   <SelectTrigger id="product-operation-code" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value) =>
+                        value
+                          ? `${value} · ${ivaOperationCodeLabels[value as IvaOperationCode]}`
+                          : "Seleccionar código"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(ivaOperationCodeLabels) as IvaOperationCode[]).map(

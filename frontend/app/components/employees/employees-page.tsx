@@ -34,6 +34,7 @@ import {
 import { employeeRoleLabels } from "./employees-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { removeEmployee, useEmployees } from "./employees-store";
 
 function ConfirmDeleteDialog({
@@ -73,6 +74,7 @@ function ConfirmDeleteDialog({
 export function EmployeesPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query);
 
   const employees = useEmployees();
   const loading = useInitialLoading();
@@ -82,7 +84,7 @@ export function EmployeesPage() {
       `${employee.firstName} ${employee.lastName} ${employee.cuil} ${employee.phone} ${employee.email} ${
         employee.role ? employeeRoleLabels[employee.role] : ""
       }`.toLowerCase();
-    return haystack.includes(query.trim().toLowerCase());
+    return haystack.includes(debouncedQuery.trim().toLowerCase());
   });
 
   function openNewEmployee() {

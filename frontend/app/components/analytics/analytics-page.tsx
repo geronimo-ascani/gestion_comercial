@@ -142,7 +142,7 @@ export function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline">Exportar reporte</Button>
+          <Button>Exportar reporte</Button>
         </div>
       </div>
 
