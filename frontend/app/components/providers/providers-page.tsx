@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -31,36 +31,36 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-import { formatAddress } from "~/lib/address";
-import { formatMoney } from "~/lib/currency";
-import { removeCustomer, useCustomers } from "./customers-store";
-import type { Customer } from "./customers-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { formatAddress } from "~/lib/address";
+import { formatMoney } from "~/lib/currency";
+import type { Provider } from "../purchases/purchases-types";
+import { removeProvider, useProviders } from "../purchases/purchases-store";
 
-function CustomerDetailDialog({
-  customer,
+function ProviderDetailDialog({
+  provider,
   trigger,
 }: {
-  customer: Customer;
+  provider: Provider;
   trigger: ReactElement;
 }) {
   const details: Array<[string, string]> = [
-    ["Documento", customer.document || "—"],
-    ["Teléfono", customer.phone || "—"],
-    ["Correo electrónico", customer.email || "—"],
-    ["Dirección", formatAddress(customer.address) || "—"],
-    ["Saldo en cuenta corriente", formatMoney(customer.balance ?? 0)],
+    ["CUIT", provider.cuit || "—"],
+    ["Teléfono", provider.phone || "—"],
+    ["Correo electrónico", provider.email || "—"],
+    ["Dirección", formatAddress(provider.address) || "—"],
+    ["Banco", provider.bank || "—"],
+    ["Número de cuenta", provider.account || "—"],
+    ["Saldo en cuenta corriente", formatMoney(provider.balance ?? 0)],
   ];
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {customer.firstName} {customer.lastName}
-          </DialogTitle>
-          <DialogDescription>Datos del cliente</DialogDescription>
+          <DialogTitle>{provider.name}</DialogTitle>
+          <DialogDescription>Datos del proveedor</DialogDescription>
         </DialogHeader>
         <dl className="space-y-3">
           {details.map(([label, value]) => (
@@ -71,9 +71,7 @@ function CustomerDetailDialog({
           ))}
         </dl>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cerrar
-          </DialogClose>
+          <DialogClose render={<Button variant="outline" />}>Cerrar</DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -114,119 +112,94 @@ function ConfirmDeleteDialog({
   );
 }
 
-export function CustomersPage() {
+export function ProvidersPage() {
   const navigate = useNavigate();
   const loading = useInitialLoading();
-  const customers = useCustomers();
+  const providers = useProviders();
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const filtered = customers.filter((customer) => {
+  const filteredProviders = providers.filter((provider) => {
     const haystack =
-      `${customer.firstName} ${customer.lastName} ${customer.document} ${customer.phone} ${customer.email} ${formatAddress(customer.address)}`.toLowerCase();
-    return haystack.includes(debouncedQuery.trim().toLowerCase());
+      `${provider.name} ${provider.cuit} ${provider.phone} ${provider.email} ${provider.bank}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
   });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Clientes</h1>
+          <h1 className="text-3xl font-bold">Proveedores</h1>
           <p className="text-muted-foreground">
-            Registro y gestión de clientes.
+            Registro y gestión de proveedores.
           </p>
         </div>
-        <Button onClick={() => navigate("/customers/new")}>
+        <Button onClick={() => navigate("/purchases/new-provider")}>
           <Plus />
-          Nuevo cliente
+          Nuevo proveedor
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-10 w-full bg-card pl-10 shadow-sm"
-            placeholder="Buscar cliente por nombre, DNI/CUIT o teléfono..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        {query && (
-          <span className="text-sm text-muted-foreground">
-            {filtered.length} de {customers.length} clientes
-          </span>
-        )}
+      <div className="relative w-full max-w-sm">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="h-10 w-full bg-card pl-10 shadow-sm"
+          placeholder="Buscar proveedor por nombre, CUIT o banco..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Clientes</CardTitle>
+            <CardTitle>Listado de proveedores</CardTitle>
           </div>
-          <Badge variant="secondary">{customers.length} clientes</Badge>
+          <Badge variant="secondary">{providers.length} proveedores</Badge>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={5} />
+            <TableSkeleton rows={6} columns={4} />
           ) : (
             <Table>
               <TableHeader>
-              <TableRow>
-                <TableHead>Nombre y apellido</TableHead>
-                <TableHead>DNI / CUIT</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead className="text-right">Saldo</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
+                <TableRow>
+                  <TableHead>Nombre / Razón social</TableHead>
+                  <TableHead>CUIT</TableHead>
+                  <TableHead>Teléfono</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {filteredProviders.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={4}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    {customers.length === 0
-                      ? "No hay clientes registrados."
-                      : "No se encontraron clientes para la búsqueda."}
+                    {providers.length === 0
+                      ? "No hay proveedores registrados."
+                      : "No se encontraron proveedores para la búsqueda."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((customer) => (
-                  <TableRow key={customer.id}>
+                filteredProviders.map((provider) => (
+                  <TableRow key={provider.id}>
                     <TableCell className="font-medium">
-                      {customer.firstName} {customer.lastName}
+                      {provider.name}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {customer.document || "—"}
+                      {provider.cuit || "—"}
                     </TableCell>
-                    <TableCell>{customer.phone || "—"}</TableCell>
-                    <TableCell
-                      className={`text-right font-medium tabular-nums ${
-                        (customer.balance ?? 0) < 0
-                          ? "text-destructive"
-                          : (customer.balance ?? 0) > 0
-                            ? "text-primary"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {formatMoney(customer.balance ?? 0)}
-                    </TableCell>
+                    <TableCell>{provider.phone || "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <CustomerDetailDialog
-                          customer={customer}
+                        <ProviderDetailDialog
+                          provider={provider}
                           trigger={
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              aria-label={`Ver cliente ${customer.firstName} ${customer.lastName}`}
+                              aria-label={`Ver proveedor ${provider.name}`}
                             >
                               <Eye />
                             </Button>
@@ -235,23 +208,25 @@ export function CustomersPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Editar cliente ${customer.firstName} ${customer.lastName}`}
+                          aria-label={`Editar proveedor ${provider.name}`}
                           onClick={() =>
-                            navigate(`/customers/new?edit=${customer.id}`)
+                            navigate(
+                              `/purchases/new-provider?edit=${provider.id}`
+                            )
                           }
                         >
                           <Pencil />
                         </Button>
                         <ConfirmDeleteDialog
-                          title="¿Eliminar cliente?"
-                          description={`Se eliminará ${customer.firstName} ${customer.lastName}. Esta acción no se puede deshacer.`}
-                          onConfirm={() => removeCustomer(customer.id)}
+                          title="¿Eliminar proveedor?"
+                          description={`Se eliminará el proveedor ${provider.name}. Esta acción no se puede deshacer.`}
+                          onConfirm={() => removeProvider(provider.id)}
                           trigger={
                             <Button
                               variant="ghost"
                               size="icon-sm"
                               className="text-destructive hover:text-destructive"
-                              aria-label={`Eliminar cliente ${customer.firstName} ${customer.lastName}`}
+                              aria-label={`Eliminar proveedor ${provider.name}`}
                             >
                               <Trash2 />
                             </Button>
@@ -267,7 +242,7 @@ export function CustomersPage() {
           )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {filtered.length} de {customers.length} clientes</span>
+          <span>Mostrando {filteredProviders.length} de {providers.length} proveedores</span>
         </CardFooter>
       </Card>
     </div>

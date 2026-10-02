@@ -29,8 +29,7 @@ export function ProviderFormPage() {
     ? (providers.find((provider) => provider.id === editId) ?? null)
     : null;
   const backTo =
-    (location.state as { backTo?: string } | null)?.backTo ??
-    "/purchases?tab=providers";
+    (location.state as { backTo?: string } | null)?.backTo ?? "/providers";
 
   const [name, setName] = useState(editing?.name ?? "");
   const [cuit, setCuit] = useState(editing?.cuit ?? "");

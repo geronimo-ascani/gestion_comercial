@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   Bell,
-  LayoutDashboard,
   LogOut,
   Moon,
   PanelLeft,
@@ -10,7 +9,6 @@ import {
   Sun,
 } from "lucide-react";
 
-import { appConfig } from "~/config/app";
 import { useTheme } from "~/lib/theme";
 import { Button } from "~/components/ui/button";
 import {
@@ -50,30 +48,26 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-6 shadow-sm">
       <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-          <LayoutDashboard className="h-4 w-4" />
-        </div>
-        <span className="text-sm font-semibold">{appConfig.title}</span>
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-lg"
           aria-label={collapsed ? "Expandir panel lateral" : "Plegar panel lateral"}
           onClick={onToggle}
         >
-          {collapsed ? <PanelLeft /> : <PanelLeftClose />}
+          {collapsed ? <PanelLeft className="size-5" /> : <PanelLeftClose className="size-5" />}
         </Button>
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-lg"
           aria-label={
             theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"
           }
           onClick={toggleTheme}
         >
           {theme === "dark" ? (
-            <Sun className="text-muted-foreground" />
+            <Sun className="size-5 text-muted-foreground" />
           ) : (
-            <Moon className="text-muted-foreground" />
+            <Moon className="size-5 text-muted-foreground" />
           )}
         </Button>
       </div>
