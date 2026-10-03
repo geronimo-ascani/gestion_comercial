@@ -254,18 +254,9 @@ export function ProductsPage() {
                         {formatMoney(product.salePrice)}
                       </TableCell>
                       <TableCell>
-                        {product.ivaCondition ? (
-                          <div>
-                            {ivaConditionLabels[product.ivaCondition]}
-                            {product.ivaOperationCode && (
-                              <div className="text-xs text-muted-foreground">
-                                Op {product.ivaOperationCode}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          "—"
-                        )}
+                        {product.ivaCondition
+                          ? ivaConditionLabels[product.ivaCondition]
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         {product.stock}

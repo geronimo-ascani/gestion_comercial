@@ -15,7 +15,6 @@ import {
 } from "recharts";
 
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
 import {
   Card,
   CardContent,
@@ -142,7 +141,6 @@ export function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button>Exportar reporte</Button>
         </div>
       </div>
 

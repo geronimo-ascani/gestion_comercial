@@ -122,3 +122,42 @@ body {
 .dark {
   color-scheme: dark;
 }
+
+@media print {
+  html,
+  body {
+    background: #ffffff;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  [data-slot="dialog-content"] {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .report-print-root,
+  .report-print-root * {
+    visibility: visible;
+  }
+
+  .report-print-root {
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff;
+  }
+
+  .report-print-root .sheet {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    break-inside: avoid;
+  }
+}

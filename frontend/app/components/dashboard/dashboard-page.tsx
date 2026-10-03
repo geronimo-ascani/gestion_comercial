@@ -9,6 +9,9 @@ import {
 import { KpiSkeleton, PanelSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { useState } from "react";
+import { ReportPreviewDialog } from "~/components/reports/report-preview-dialog";
+import { ExecutiveReportSheet } from "~/components/reports/executive-report-sheet";
 
 const kpis = [
   { title: "VENTAS TOTALES", icon: TrendingUp },
@@ -19,6 +22,7 @@ const kpis = [
 
 export function DashboardPage() {
   const loading = useInitialLoading();
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -29,7 +33,7 @@ export function DashboardPage() {
             Métricas operativas del sistema para el período actual.
           </p>
         </div>
-        <Button>Exportar reporte</Button>
+        <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
       </div>
 
       {loading ? (
@@ -97,6 +101,14 @@ export function DashboardPage() {
       </Card>
       </>
       )}
+
+      <ReportPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        title="Previsualización de reporte"
+      >
+        <ExecutiveReportSheet />
+      </ReportPreviewDialog>
     </div>
   );
 }

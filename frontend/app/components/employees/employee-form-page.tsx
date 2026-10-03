@@ -227,9 +227,14 @@ export function EmployeeFormPage() {
                   onChange={(event) =>
                     setField("password", event.target.value, setPassword)
                   }
+                  minLength={6}
                   placeholder="Mínimo 6 caracteres (opcional)"
                   aria-invalid={!!errors.password}
+                  aria-describedby="employee-password-hint"
                 />
+                <p id="employee-password-hint" className="text-xs text-muted-foreground">
+                  Mínimo 6 caracteres.
+                </p>
                 <FieldError message={errors.password} />
               </div>
               <div className="space-y-2 sm:col-span-2">

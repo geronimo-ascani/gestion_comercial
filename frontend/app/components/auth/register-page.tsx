@@ -59,7 +59,12 @@ export function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+              aria-describedby="password-hint"
             />
+            <p id="password-hint" className="text-xs text-muted-foreground">
+              Mínimo 6 caracteres.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
