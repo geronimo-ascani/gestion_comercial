@@ -15,6 +15,7 @@ import {
 } from "recharts";
 
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import {
   Card,
   CardContent,
@@ -40,6 +41,8 @@ import {
 
 import { KpiSkeleton, PanelSkeleton, Skeleton, TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import { ExecutiveReportSheet } from "~/components/reports/executive-report-sheet";
+import { ReportPreviewDialog } from "~/components/reports/report-preview-dialog";
 
 import { AovPanel } from "./aov-panel";
 import {
@@ -67,6 +70,7 @@ function scale(value: number, factor: number): number {
 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const loading = useInitialLoading();
   const config = periodConfigs[period];
 
@@ -141,6 +145,7 @@ export function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
         </div>
       </div>
 
@@ -322,6 +327,14 @@ export function AnalyticsPage() {
       </div>
         </>
       )}
+
+      <ReportPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        title="Previsualización de reporte"
+      >
+        <ExecutiveReportSheet />
+      </ReportPreviewDialog>
     </div>
   );
 }
