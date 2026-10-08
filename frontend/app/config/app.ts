@@ -6,6 +6,7 @@ import {
   Truck,
   Users,
   UsersRound,
+  Receipt,
   BarChart3,
   type LucideIcon,
 } from "lucide-react";
@@ -27,6 +28,7 @@ export const navItems: NavItem[] = [
   { to: "/purchases", label: "Compras", icon: ShoppingBag },
   { to: "/providers", label: "Proveedores", icon: Truck },
   { to: "/customers", label: "Clientes", icon: Users },
+  { to: "/payments", label: "Pagos", icon: Receipt },
   { to: "/employees", label: "Empleados", icon: UsersRound },
   { to: "/analytics", label: "Analíticas", icon: BarChart3 },
 ];

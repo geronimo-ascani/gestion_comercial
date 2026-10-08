@@ -47,8 +47,11 @@ import type {
   BudgetStatus,
   OrderStatus,
   PaymentMethod,
+  SalesOrder,
 } from "./sales-types";
-import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
+import { removeBudget, removeOrder, convertBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
+import { applyOrderStock, restoreOrderStock } from "./sales-stock";
+import { createInvoiceFromOrder } from "../payments/payments-store";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
@@ -92,7 +95,15 @@ function ConfirmDeleteDialog({
   );
 }
 
-function BudgetDetailDialog({ budget, trigger }: { budget: Budget; trigger: ReactElement }) {
+function BudgetDetailDialog({
+  budget,
+  trigger,
+  onConvert,
+}: {
+  budget: Budget;
+  trigger: ReactElement;
+  onConvert: () => void;
+}) {
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
@@ -113,10 +124,16 @@ function BudgetDetailDialog({ budget, trigger }: { budget: Budget; trigger: Reac
           <DialogClose render={<Button variant="outline" />}>
             Cerrar
           </DialogClose>
-          <Button type="submit">
+          <DialogClose
+            render={
+              <Button onClick={onConvert} disabled={budget.status === "convertido"} />
+            }
+          >
             <FileText />
-            Convertir en pedido
-          </Button>
+            {budget.status === "convertido"
+              ? "Ya convertido"
+              : "Convertir en pedido"}
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -157,6 +174,20 @@ export function SalesPage() {
 
   function switchTab(tab: "orders" | "budgets") {
     setSearchParams({ tab }, { replace: true });
+  }
+
+  function handleConvertBudget(budget: Budget) {
+    const order = convertBudget(budget.number);
+    if (!order) return;
+    applyOrderStock(order.items);
+    const invoiceNumber = createInvoiceFromOrder(order);
+    updateOrder(order.number, { invoiceNumber });
+    navigate(`/sales/${order.number}`);
+  }
+
+  function handleRemoveOrder(order: SalesOrder) {
+    if (order.status !== "cancelado") restoreOrderStock(order.items);
+    removeOrder(order.number);
   }
 
   return (
@@ -337,7 +368,7 @@ export function SalesPage() {
                             <ConfirmDeleteDialog
                               title="¿Eliminar pedido?"
                               description={`Esta acción no se puede deshacer. Se eliminará el pedido ${order.number} del cliente ${order.client}.`}
-                              onDelete={() => removeOrder(order.number)}
+                              onDelete={() => handleRemoveOrder(order)}
                               trigger={
                                 <Button
                                   variant="ghost"
@@ -466,6 +497,7 @@ export function SalesPage() {
                           <div className="flex justify-end gap-1">
                             <BudgetDetailDialog
                               budget={budget}
+                              onConvert={() => handleConvertBudget(budget)}
                               trigger={
                                 <Button
                                   variant="ghost"

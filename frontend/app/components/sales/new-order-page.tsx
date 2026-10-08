@@ -21,8 +21,10 @@ import type { LineItem, PaymentMethod } from "./sales-types";
 import { formatDate } from "./sales-types";
 import { addOrder, updateOrder, useOrders } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
+import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from "./sales-stock";
 import { useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
+import { createInvoiceFromOrder } from "../payments/payments-store";
 
 export function NewOrderPage() {
   const navigate = useNavigate();
@@ -118,10 +120,17 @@ export function NewOrderPage() {
       setItemsError("Agregue al menos un producto con cantidad.");
       return;
     }
+    const stockError = stockValidationMessage(items, products);
+    if (stockError) {
+      setItemsError(stockError);
+      return;
+    }
     const customer = customers.find((item) => item.id === client);
     const orderData = {
       client: customer ? `${customer.firstName} ${customer.lastName}` : "Sin definir",
       clientId: client,
+      email: customer?.email,
+      phone: customer?.phone,
       deliveryAddress: {
         province: province.trim(),
         locality: locality.trim(),
@@ -134,16 +143,22 @@ export function NewOrderPage() {
       payment,
     };
     if (editing) {
+      applyOrderStockDelta(editing.items, items);
       updateOrder(editing.number, orderData);
       navigate(backTo);
       return;
     }
-    addOrder({
+    applyOrderStock(items);
+    const newOrder = {
       number: nextOrderNumber,
       ...orderData,
       date: formatDate(new Date()),
-      status: "pendiente",
-    });
+      status: "pendiente" as const,
+      paymentStatus: "pendiente" as const,
+    };
+    addOrder(newOrder);
+    const invoiceNumber = createInvoiceFromOrder(newOrder);
+    updateOrder(newOrder.number, { invoiceNumber });
     navigate(`/sales/${nextOrderNumber}`);
   }
 

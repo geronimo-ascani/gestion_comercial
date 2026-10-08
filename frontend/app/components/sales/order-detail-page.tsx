@@ -1,4 +1,5 @@
-import { ArrowLeft, Printer, User } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Download, FileText, RefreshCw, User } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { cn } from "~/lib/utils";
@@ -31,8 +32,13 @@ import { Skeleton, TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import type { OrderStatus, SalesOrder } from "./sales-types";
 import { updateOrder, useOrders } from "./sales-store";
-import { OrderStatusBadge, PaymentBadge } from "./sales-views";
+import { applyOrderStock, restoreOrderStock } from "./sales-stock";
+import { OrderPaymentStatusBadge, OrderStatusBadge, PaymentBadge } from "./sales-views";
 import { useCustomers } from "../customers/customers-store";
+import { createInvoiceFromOrder, resendInvoice, useInvoices } from "../payments/payments-store";
+import { InvoiceSendBadge, InvoiceStatusBadge } from "../payments/payments-views";
+import { RecordPaymentDialog } from "../payments/record-payment-dialog";
+import { exportInvoiceAsPdf } from "~/lib/invoice-pdf";
 
 export function OrderDetailPage() {
   const { number } = useParams<{ number: string }>();
@@ -61,14 +67,6 @@ export function OrderDetailPage() {
             </p>
           )}
         </div>
-        {order && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline">
-              <Printer />
-              Imprimir PDF
-            </Button>
-          </div>
-        )}
       </div>
 
       {loading ? (
@@ -93,6 +91,7 @@ export function OrderDetailPage() {
           <div className="space-y-6 lg:col-span-2">
             <CustomerDetailsCard order={order} />
             <OrderSummaryCard order={order} />
+            <OrderPaymentCard order={order} />
           </div>
         </div>
       )}
@@ -202,9 +201,15 @@ function OrderTimelineCard({ order }: { order: SalesOrder }) {
           <Label htmlFor="order-status">Estado</Label>
           <Select
             value={order.status}
-            onValueChange={(value) =>
-              updateOrder(order.number, { status: value as OrderStatus })
-            }
+            onValueChange={(value) => {
+              const next = value as OrderStatus;
+              if (order.status !== "cancelado" && next === "cancelado") {
+                restoreOrderStock(order.items);
+              } else if (order.status === "cancelado" && next !== "cancelado") {
+                applyOrderStock(order.items);
+              }
+              updateOrder(order.number, { status: next });
+            }}
           >
             <SelectTrigger id="order-status" className="w-40">
               <SelectValue />
@@ -333,6 +338,133 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
           <PaymentBadge payment={order.payment} />
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+function OrderPaymentCard({ order }: { order: SalesOrder }) {
+  const invoices = useInvoices();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const invoice = invoices.find((item) => item.orderNumber === order.number);
+
+  function handleEmitInvoice() {
+    if (order.invoiceNumber) return;
+    const number = createInvoiceFromOrder(order);
+    updateOrder(order.number, { invoiceNumber: number });
+    setFeedback("Comprobante emitido y enviado por email.");
+  }
+
+  function handleResend() {
+    if (!invoice) return;
+    if (resendInvoice(invoice.number)) {
+      setFeedback(`Comprobante reenviado a ${order.email ?? "el cliente"}.`);
+    }
+  }
+
+  async function handleDownload() {
+    if (!invoice) return;
+    setGenerating(true);
+    try {
+      await exportInvoiceAsPdf(order, invoice);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  const resendCount = (invoice?.sendCount ?? 0) - 1;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="size-4 text-muted-foreground" />
+          Factura y pago
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <dl className="space-y-3">
+          <div className="flex items-center justify-between">
+            <dt className="text-sm text-muted-foreground">N° de factura</dt>
+            <dd className="font-mono text-sm font-medium">
+              {order.invoiceNumber ?? "Sin emitir"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-sm text-muted-foreground">Estado de pago</dt>
+            <dd>
+              <OrderPaymentStatusBadge status={order.paymentStatus} />
+            </dd>
+          </div>
+          {invoice && (
+            <>
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-muted-foreground">
+                  Estado de factura
+                </dt>
+                <dd>
+                  <InvoiceStatusBadge status={invoice.status} />
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-muted-foreground">
+                  Envío del comprobante
+                </dt>
+                <dd>
+                  <InvoiceSendBadge sendCount={invoice.sendCount} />
+                </dd>
+              </div>
+            </>
+          )}
+        </dl>
+
+        {invoice?.sentAt && (
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            Enviado a {order.email ?? "el cliente"} el {invoice.sentAt}.
+            {resendCount > 0 && invoice.lastSentAt && (
+              <> Reenviado el {invoice.lastSentAt} (x{resendCount}).</>
+            )}
+          </p>
+        )}
+
+        {feedback && (
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {feedback}
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {!order.invoiceNumber && (
+            <Button variant="outline" onClick={handleEmitInvoice}>
+              <FileText />
+              Emitir comprobante
+            </Button>
+          )}
+          {invoice && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={handleDownload} disabled={generating}>
+                <Download />
+                {generating ? "Generando…" : "Descargar PDF"}
+              </Button>
+              <Button variant="outline" onClick={handleResend}>
+                <RefreshCw />
+                Reenviar
+              </Button>
+            </div>
+          )}
+          <Button onClick={() => setDialogOpen(true)}>
+            <User />
+            Registrar pago
+          </Button>
+        </div>
+      </CardContent>
+
+      <RecordPaymentDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        order={order}
+      />
     </Card>
   );
 }

@@ -4,6 +4,8 @@ export type OrderStatus = "pendiente" | "proceso" | "enviado" | "entregado" | "c
 
 export type PaymentMethod = "efectivo" | "tarjeta" | "mercadopago";
 
+export type PaymentStatus = "pendiente" | "pagado" | "rechazado";
+
 export type BudgetStatus = "pendiente" | "aprobado" | "vencido" | "convertido";
 
 export interface LineItem {
@@ -32,6 +34,8 @@ export interface SalesOrder {
   total: string;
   status: OrderStatus;
   payment: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  invoiceNumber?: string;
 }
 
 export interface Budget {

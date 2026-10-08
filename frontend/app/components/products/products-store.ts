@@ -81,6 +81,15 @@ export function getNextProductCode(): string {
   return `PRD-${String(max + 1).padStart(3, "0")}`;
 }
 
+export function adjustStock(id: string, delta: number): number {
+  const product = products.find((item) => item.id === id);
+  if (!product) return 0;
+  const stock = Math.max(0, product.stock + delta);
+  products = products.map((item) => (item.id === id ? { ...item, stock } : item));
+  emit();
+  return stock;
+}
+
 export function addProduct(product: Product) {
   products = [...products, product];
   emit();

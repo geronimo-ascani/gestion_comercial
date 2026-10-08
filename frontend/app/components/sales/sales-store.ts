@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { Budget, SalesOrder } from "./sales-types";
+import { formatDate } from "./sales-types";
 
 let orders: SalesOrder[] = [];
 let budgets: Budget[] = [];
@@ -66,4 +67,36 @@ export function updateBudget(number: string, patch: Partial<Budget>) {
 export function removeBudget(number: string) {
   budgets = budgets.filter((budget) => budget.number !== number);
   emit();
+}
+
+export function convertBudget(number: string): SalesOrder | null {
+  const budget = budgets.find((item) => item.number === number);
+  if (!budget) return null;
+
+  const orderNumber = `PV-${String(orders.length + 1).padStart(3, "0")}`;
+  const order: SalesOrder = {
+    number: orderNumber,
+    client: budget.client,
+    clientId: budget.clientId,
+    date: formatDate(new Date()),
+    deliveryAddress: {
+      province: "",
+      locality: "",
+      street: "",
+      number: "",
+      apartment: "",
+    },
+    items: budget.items.map((item) => ({ ...item })),
+    total: budget.total,
+    status: "pendiente",
+    payment: "tarjeta",
+    paymentStatus: "pendiente",
+  };
+
+  orders = [...orders, order];
+  budgets = budgets.map((item) =>
+    item.number === number ? { ...item, status: "convertido" } : item
+  );
+  emit();
+  return order;
 }

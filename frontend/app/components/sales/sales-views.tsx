@@ -14,6 +14,7 @@ import type {
   LineItem,
   OrderStatus,
   PaymentMethod,
+  PaymentStatus,
 } from "./sales-types";
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
@@ -44,6 +45,16 @@ export function BudgetStatusBadge({ status }: { status: BudgetStatus }) {
     aprobado: { label: "Aprobado", variant: "success" },
     vencido: { label: "Vencido", variant: "destructive" },
     convertido: { label: "Convertido", variant: "info" },
+  };
+  const { label, variant } = config[status];
+  return <Badge variant={variant}>{label}</Badge>;
+}
+
+export function OrderPaymentStatusBadge({ status }: { status: PaymentStatus }) {
+  const config: Record<PaymentStatus, { label: string; variant: "success" | "warning" | "destructive" }> = {
+    pendiente: { label: "Pendiente", variant: "warning" },
+    pagado: { label: "Pagado", variant: "success" },
+    rechazado: { label: "Rechazado", variant: "destructive" },
   };
   const { label, variant } = config[status];
   return <Badge variant={variant}>{label}</Badge>;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Combobox } from "~/components/ui/combobox";
@@ -142,10 +143,19 @@ export function LineItemsEditor({
             );
             const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
             const subtotal = qty * parseNumberInput(line.price);
+            const selectedProduct = products.find(
+              (product) => product.id === line.productId
+            );
+            const insufficient = selectedProduct
+              ? qty > selectedProduct.stock
+              : false;
             return (
               <div
                 key={index}
-                className="flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center"
+                className={cn(
+                  "flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center",
+                  insufficient && "border-destructive"
+                )}
               >
                 <Combobox
                   value={line.productId || ""}
@@ -195,6 +205,20 @@ export function LineItemsEditor({
                 >
                   <Trash2 />
                 </Button>
+                {selectedProduct && (
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      insufficient
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    Stock: {selectedProduct.stock}
+                    {insufficient &&
+                      ` · Cantidad excede el stock disponible`}
+                  </span>
+                )}
               </div>
             );
           })}
