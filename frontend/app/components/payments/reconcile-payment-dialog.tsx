@@ -10,19 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Label } from "~/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 
 import { formatMoney } from "~/lib/currency";
 import type { PaymentTransaction } from "./payments-types";
 import { paymentMethodLabels } from "./payments-types";
 import { reconcilePayment, useInvoices } from "./payments-store";
+import { InvoiceStatusBadge } from "./payments-views";
 
 interface ReconcilePaymentDialogProps {
   payment: PaymentTransaction | null;
@@ -36,33 +29,28 @@ export function ReconcilePaymentDialog({
   onOpenChange,
 }: ReconcilePaymentDialogProps) {
   const invoices = useInvoices();
-  const pendingInvoices = invoices.filter(
-    (invoice) => invoice.status === "emitida" || invoice.status === "aprobada"
-  );
-  const [orderNumber, setOrderNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const invoice = payment
+    ? invoices.find((item) => item.orderNumber === payment.orderNumber)
+    : undefined;
+  const canReconcile =
+    !!invoice &&
+    (invoice.status === "emitida" || invoice.status === "aprobada");
+
   useEffect(() => {
-    if (!open || !payment) return;
-    const best = pendingInvoices.find(
-      (invoice) =>
-        invoice.clientId === payment.clientId &&
-        invoice.amount === payment.amount
-    );
-    setOrderNumber(best?.orderNumber ?? pendingInvoices[0]?.orderNumber ?? "");
-    setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, payment]);
+    if (open) setError(null);
+  }, [open]);
 
   function handleConfirm() {
     if (!payment) return;
-    if (!orderNumber) {
-      setError("Seleccione una venta para conciliar el cobro.");
+    if (!canReconcile) {
+      setError("Esta venta no tiene un pago pendiente para conciliar.");
       return;
     }
-    const ok = reconcilePayment(payment.id, orderNumber);
+    const ok = reconcilePayment(payment.id, payment.orderNumber);
     if (!ok) {
-      setError("No se pudo conciliar el cobro con la venta seleccionada.");
+      setError("No se pudo conciliar el cobro con su venta.");
       return;
     }
     onOpenChange(false);
@@ -74,7 +62,9 @@ export function ReconcilePaymentDialog({
         <DialogHeader>
           <DialogTitle>Conciliar cobro</DialogTitle>
           <DialogDescription>
-            Empareje el cobro con su venta para marcarlo como conciliado.
+            {payment
+              ? `Concilia el cobro de la venta ${payment.orderNumber}.`
+              : "Seleccione un cobro."}
           </DialogDescription>
         </DialogHeader>
 
@@ -84,6 +74,10 @@ export function ReconcilePaymentDialog({
               <div>
                 <dt className="text-muted-foreground">Cobro</dt>
                 <dd className="font-mono text-xs">{payment.id}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Venta</dt>
+                <dd className="font-mono text-xs">{payment.orderNumber}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Cliente</dt>
@@ -98,7 +92,7 @@ export function ReconcilePaymentDialog({
                 <dd className="font-medium">{formatMoney(payment.amount)}</dd>
               </div>
               {payment.gatewayReference && (
-                <div className="col-span-2">
+                <div>
                   <dt className="text-muted-foreground">Referencia</dt>
                   <dd className="font-mono text-xs">
                     {payment.gatewayReference}
@@ -107,36 +101,20 @@ export function ReconcilePaymentDialog({
               )}
             </dl>
 
-            <div className="space-y-2">
-              <Label htmlFor="reconcile-order">Venta</Label>
-              {pendingInvoices.length === 0 ? (
-                <p className="rounded-lg border p-3 text-center text-sm text-muted-foreground">
-                  No hay ventas pendientes para conciliar.
-                </p>
+            <div className="flex items-center justify-between rounded-lg border p-3 text-sm">
+              <span className="text-muted-foreground">Estado de la venta</span>
+              {invoice ? (
+                <InvoiceStatusBadge status={invoice.status} />
               ) : (
-                <Select
-                  value={orderNumber}
-                  onValueChange={(value) => {
-                    if (value) setOrderNumber(value);
-                  }}
-                >
-                  <SelectTrigger id="reconcile-order" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pendingInvoices.map((invoice) => (
-                      <SelectItem
-                        key={invoice.number}
-                        value={invoice.orderNumber}
-                      >
-                        {invoice.orderNumber} · {invoice.client} ·{" "}
-                        {formatMoney(invoice.amount)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <span className="text-muted-foreground">Sin comprobante</span>
               )}
             </div>
+
+            {!canReconcile && (
+              <p className="text-sm text-destructive">
+                Esta venta no tiene un pago pendiente para conciliar.
+              </p>
+            )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
@@ -146,10 +124,7 @@ export function ReconcilePaymentDialog({
           <DialogClose render={<Button variant="outline" />}>
             Cancelar
           </DialogClose>
-          <Button
-            onClick={handleConfirm}
-            disabled={!payment || pendingInvoices.length === 0}
-          >
+          <Button onClick={handleConfirm} disabled={!payment || !canReconcile}>
             Conciliar
           </Button>
         </DialogFooter>

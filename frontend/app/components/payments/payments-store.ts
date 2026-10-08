@@ -47,6 +47,16 @@ function seed(day: string): { invoices: Invoice[]; payments: PaymentTransaction[
       status: "pagada",
       paidAt: `08/${day}/2026`,
     },
+    {
+      number: "F-005",
+      orderNumber: "PV-DEMO-05",
+      clientId: "C-005",
+      client: "Ana Martínez",
+      date: `07/${day}/2026`,
+      amount: 32000,
+      method: "mercadopago",
+      status: "emitida",
+    },
   ];
 
   const payments: PaymentTransaction[] = [
@@ -246,14 +256,13 @@ export function reconcilePayment(
   const payment = payments.find((item) => item.id === paymentId);
   if (!payment || payment.conciliationStatus === "conciliado") return false;
 
-  const invoice =
-    (orderNumber
-      ? invoices.find(
-          (item) =>
-            item.orderNumber === orderNumber &&
-            (item.status === "aprobada" || item.status === "emitida")
-        )
-      : undefined) ?? matchPendingInvoice(payment);
+  const invoice = orderNumber
+    ? invoices.find(
+        (item) =>
+          item.orderNumber === orderNumber &&
+          (item.status === "aprobada" || item.status === "emitida")
+      )
+    : matchPendingInvoice(payment);
   if (!invoice) return false;
 
   payments = payments.map((item) =>
