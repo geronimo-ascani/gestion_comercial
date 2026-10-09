@@ -51,6 +51,7 @@ import type {
 } from "./sales-types";
 import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
 import { restoreOrderStock } from "./sales-stock";
+import { usePayments } from "../payments/payments-store";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
@@ -147,6 +148,7 @@ export function SalesPage() {
   const loading = useInitialLoading();
   const orders = useOrders();
   const budgets = useBudgets();
+  const payments = usePayments();
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
@@ -182,6 +184,16 @@ export function SalesPage() {
   function handleRemoveOrder(order: SalesOrder) {
     if (order.status !== "cancelado") restoreOrderStock(order.items);
     removeOrder(order.number);
+  }
+
+  function hasRegisteredPayment(order: SalesOrder): boolean {
+    return (
+      order.paymentStatus === "pagado" ||
+      payments.some(
+        (payment) =>
+          payment.orderNumber === order.number && payment.status === "aprobado"
+      )
+    );
   }
 
   return (
@@ -354,7 +366,13 @@ export function SalesPage() {
                             <Button
                               variant="ghost"
                               size="icon-sm"
+                              disabled={hasRegisteredPayment(order)}
                               aria-label={`Editar pedido ${order.number}`}
+                              title={
+                                hasRegisteredPayment(order)
+                                  ? "El pedido tiene un pago registrado y no puede editarse"
+                                  : undefined
+                              }
                               onClick={() =>
                                 navigate(`/sales/new-order?edit=${order.number}`)
                               }

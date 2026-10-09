@@ -23,6 +23,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -83,16 +84,14 @@ export function OrderDetailPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-5">
-          <div className="space-y-6 lg:col-span-3">
-            <OrderItemsCard order={order} />
-            <OrderTimelineCard order={order} />
-          </div>
-          <div className="space-y-6 lg:col-span-2">
-            <CustomerDetailsCard order={order} />
+        <div className="mx-auto max-w-6xl space-y-6">
+          <CustomerDetailsCard order={order} />
+          <OrderItemsCard order={order} />
+          <div className="grid gap-6 lg:grid-cols-2">
             <OrderSummaryCard order={order} />
             <OrderPaymentCard order={order} />
           </div>
+          <OrderTimelineCard order={order} />
         </div>
       )}
     </div>
@@ -140,6 +139,18 @@ function OrderItemsCard({ order }: { order: SalesOrder }) {
               ))
             )}
           </TableBody>
+          {order.items.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={4} className="text-right font-semibold">
+                  Total a pagar
+                </TableCell>
+                <TableCell className="text-right text-base font-bold">
+                  {order.total}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </CardContent>
     </Card>
@@ -286,7 +297,7 @@ function CustomerDetailsCard({ order }: { order: SalesOrder }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <dl className="space-y-3">
+        <dl className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <DetailRow label="Nombre y apellido" value={displayName} />
           {customer && <DetailRow label="ID cliente" value={customer.id} />}
           {order.company && <DetailRow label="Razón social" value={order.company} />}
@@ -498,27 +509,23 @@ function DetailSkeletonCard({
 
 function OrderDetailSkeleton() {
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      <div className="space-y-6 lg:col-span-3">
-        <DetailSkeletonCard>
-          <Skeleton className="h-5 w-40" />
-          <TableSkeleton rows={5} columns={5} />
-        </DetailSkeletonCard>
-        <DetailSkeletonCard>
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-4 w-56 max-w-full" />
-          <Skeleton className="h-4 w-48 max-w-full" />
-          <Skeleton className="h-4 w-44 max-w-full" />
-          <Skeleton className="h-4 w-40 max-w-full" />
-        </DetailSkeletonCard>
-      </div>
-      <div className="space-y-6 lg:col-span-2">
-        <DetailSkeletonCard>
-          <Skeleton className="h-5 w-40" />
-          {Array.from({ length: 5 }, (_, index) => (
-            <Skeleton key={index} className="h-4 w-full" />
+    <div className="mx-auto max-w-6xl space-y-6">
+      <DetailSkeletonCard>
+        <Skeleton className="h-5 w-40" />
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="space-y-1.5">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-4 w-40 max-w-full" />
+            </div>
           ))}
-        </DetailSkeletonCard>
+        </div>
+      </DetailSkeletonCard>
+      <DetailSkeletonCard>
+        <Skeleton className="h-5 w-40" />
+        <TableSkeleton rows={5} columns={5} />
+      </DetailSkeletonCard>
+      <div className="grid gap-6 lg:grid-cols-2">
         <DetailSkeletonCard>
           <Skeleton className="h-5 w-36" />
           <Skeleton className="h-4 w-full" />
@@ -527,7 +534,19 @@ function OrderDetailSkeleton() {
             <Skeleton className="h-5 w-24" />
           </div>
         </DetailSkeletonCard>
+        <DetailSkeletonCard>
+          <Skeleton className="h-5 w-40" />
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} className="h-4 w-full" />
+          ))}
+        </DetailSkeletonCard>
       </div>
+      <DetailSkeletonCard>
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-4 w-56 max-w-full" />
+        <Skeleton className="h-4 w-48 max-w-full" />
+        <Skeleton className="h-4 w-44 max-w-full" />
+      </DetailSkeletonCard>
     </div>
   );
 }

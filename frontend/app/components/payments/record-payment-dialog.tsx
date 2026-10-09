@@ -94,6 +94,14 @@ export function RecordPaymentDialog({
     setProcessing(true);
     setMessage("Procesando pago con la pasarela…");
     const result = await simulateGatewayPayment(method);
+    setProcessing(false);
+
+    if (result.status === "rechazado") {
+      submittingRef.current = false;
+      setMessage("El pago fue rechazado. Puede intentar nuevamente.");
+      return;
+    }
+
     registerPayment({
       invoiceNumber,
       orderNumber: order.number,
@@ -104,17 +112,8 @@ export function RecordPaymentDialog({
       status: result.status,
       gatewayReference: result.reference,
     });
-    updateOrder(order.number, {
-      paymentStatus: result.status === "aprobado" ? "pagado" : "rechazado",
-    });
-    setProcessing(false);
-
-    if (result.status === "aprobado") {
-      onOpenChange(false);
-    } else {
-      submittingRef.current = false;
-      setMessage("El pago fue rechazado. Puede intentar nuevamente.");
-    }
+    updateOrder(order.number, { paymentStatus: "pagado" });
+    onOpenChange(false);
   }
 
   return (

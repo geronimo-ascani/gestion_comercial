@@ -24,7 +24,7 @@ import { LineItemsEditor } from "./line-items-editor";
 import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from "./sales-stock";
 import { useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
-import { createInvoiceFromOrder } from "../payments/payments-store";
+import { createInvoiceFromOrder, usePayments } from "../payments/payments-store";
 
 export function NewOrderPage() {
   const navigate = useNavigate();
@@ -33,6 +33,7 @@ export function NewOrderPage() {
   const budgets = useBudgets();
   const customers = useCustomers();
   const products = useProducts();
+  const payments = usePayments();
   const [searchParams] = useSearchParams();
 
   const editNumber = searchParams.get("edit");
@@ -192,6 +193,37 @@ export function NewOrderPage() {
       updateBudget(sourceBudget.number, { status: "convertido" });
     }
     navigate(`/sales/${nextOrderNumber}`);
+  }
+
+  if (
+    editing &&
+    (editing.paymentStatus === "pagado" ||
+      payments.some(
+        (payment) =>
+          payment.orderNumber === editing.number &&
+          payment.status === "aprobado"
+      ))
+  ) {
+    return (
+      <FormPage
+        backLabel="Volver a Ventas"
+        backTo={backTo}
+        title={`Pedido ${editing.number}`}
+        description="Este pedido ya tiene un pago registrado y no puede editarse."
+      >
+        <Card>
+          <CardContent className="flex h-40 flex-col items-center justify-center gap-3 text-center">
+            <p className="text-muted-foreground">
+              El pedido {editing.number} tiene un pago registrado, por lo que no
+              puede modificarse.
+            </p>
+            <Button variant="outline" onClick={() => navigate(backTo)}>
+              Volver a Ventas
+            </Button>
+          </CardContent>
+        </Card>
+      </FormPage>
+    );
   }
 
   return (
