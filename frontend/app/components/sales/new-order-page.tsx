@@ -77,10 +77,24 @@ export function NewOrderPage() {
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
 
+  function prefillAddressFromCustomer(customerId: string) {
+    const customer = customers.find((item) => item.id === customerId);
+    if (!customer) return;
+    setProvince(customer.address.province);
+    setLocality(customer.address.locality);
+    setStreet(customer.address.street);
+    setNumber(customer.address.number);
+    setApartment(customer.address.apartment);
+    setAddressErrors({});
+  }
+
   useEffect(() => {
     const preselected = (location.state as { clienteId?: string } | null)
       ?.clienteId;
-    if (preselected) setClient(preselected);
+    if (preselected) {
+      setClient(preselected);
+      prefillAddressFromCustomer(preselected);
+    }
   }, [location.state]);
 
   useEffect(() => {
@@ -96,6 +110,9 @@ export function NewOrderPage() {
     setAddressErrors({});
     setItemsError(null);
     setClientError(null);
+    if (sourceBudget && !editing) {
+      prefillAddressFromCustomer(sourceBudget.clientId ?? "");
+    }
   }, [editNumber, editing, fromBudgetNumber, sourceBudget]);
 
   function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
@@ -118,7 +135,7 @@ export function NewOrderPage() {
             : null,
       number: !number.trim()
         ? "La altura es obligatoria"
-        : !/^[0-9][0-9A-Za-z/-]*$/.test(number.trim())
+        : !/^\d+$/.test(number.trim())
           ? "Altura inválida"
           : null,
     };
@@ -206,6 +223,7 @@ export function NewOrderPage() {
                   onValueChange={(customerId) => {
                     setClient(customerId);
                     setClientError(null);
+                    prefillAddressFromCustomer(customerId);
                   }}
                   options={customers.map((customer) => ({
                     value: customer.id,
@@ -265,7 +283,7 @@ export function NewOrderPage() {
                     id="order-number"
                     value={number}
                     onChange={(event) => {
-                      setNumber(event.target.value);
+                      setNumber(event.target.value.replace(/\D/g, ""));
                       setAddressErrors((prev) => ({ ...prev, number: null }));
                     }}
                     placeholder="1234"

@@ -197,7 +197,11 @@ export function ProviderFormPage() {
                       id="provider-number"
                       value={number}
                       onChange={(event) =>
-                        setField("number", event.target.value, setNumber)
+                        setField(
+                          "number",
+                          event.target.value.replace(/\D/g, ""),
+                          setNumber
+                        )
                       }
                       placeholder="1234"
                       aria-invalid={!!errors.number}

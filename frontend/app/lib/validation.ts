@@ -85,7 +85,7 @@ export function validateAddress(
           : null,
     number: !number
       ? "La altura es obligatoria"
-      : !/^[0-9][0-9A-Za-z/-]*$/.test(number)
+      : !/^\d+$/.test(number)
         ? "Altura inválida"
         : null,
   };
