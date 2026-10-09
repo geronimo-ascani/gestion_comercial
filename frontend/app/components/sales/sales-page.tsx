@@ -49,9 +49,8 @@ import type {
   PaymentMethod,
   SalesOrder,
 } from "./sales-types";
-import { removeBudget, removeOrder, convertBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
-import { applyOrderStock, restoreOrderStock } from "./sales-stock";
-import { createInvoiceFromOrder } from "../payments/payments-store";
+import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
+import { restoreOrderStock } from "./sales-stock";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
@@ -177,12 +176,7 @@ export function SalesPage() {
   }
 
   function handleConvertBudget(budget: Budget) {
-    const order = convertBudget(budget.number);
-    if (!order) return;
-    applyOrderStock(order.items);
-    const invoiceNumber = createInvoiceFromOrder(order);
-    updateOrder(order.number, { invoiceNumber });
-    navigate(`/sales/${order.number}`);
+    navigate(`/sales/new-order?fromBudget=${budget.number}`);
   }
 
   function handleRemoveOrder(order: SalesOrder) {

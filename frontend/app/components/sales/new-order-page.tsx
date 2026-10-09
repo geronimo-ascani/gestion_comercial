@@ -19,7 +19,7 @@ import { Combobox } from "~/components/ui/combobox";
 
 import type { LineItem, PaymentMethod } from "./sales-types";
 import { formatDate } from "./sales-types";
-import { addOrder, updateOrder, useOrders } from "./sales-store";
+import { addOrder, updateBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
 import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from "./sales-stock";
 import { useCustomers } from "../customers/customers-store";
@@ -30,6 +30,7 @@ export function NewOrderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const orders = useOrders();
+  const budgets = useBudgets();
   const customers = useCustomers();
   const products = useProducts();
   const [searchParams] = useSearchParams();
@@ -38,11 +39,18 @@ export function NewOrderPage() {
   const editing = editNumber
     ? (orders.find((order) => order.number === editNumber) ?? null)
     : null;
+  const fromBudgetNumber = searchParams.get("fromBudget");
+  const sourceBudget =
+    !editing && fromBudgetNumber
+      ? (budgets.find((budget) => budget.number === fromBudgetNumber) ?? null)
+      : null;
 
   const nextOrderNumber = `PV-${String(orders.length + 1).padStart(3, "0")}`;
   const backTo = "/sales?tab=orders";
 
-  const [client, setClient] = useState(editing?.clientId ?? "");
+  const [client, setClient] = useState(
+    editing?.clientId ?? sourceBudget?.clientId ?? ""
+  );
   const [province, setProvince] = useState(
     editing?.deliveryAddress.province ?? ""
   );
@@ -57,8 +65,12 @@ export function NewOrderPage() {
   const [payment, setPayment] = useState<PaymentMethod>(
     editing?.payment ?? "tarjeta"
   );
-  const [items, setItems] = useState<LineItem[]>(editing?.items ?? []);
-  const [total, setTotal] = useState(editing?.total ?? "$0");
+  const [items, setItems] = useState<LineItem[]>(
+    editing?.items ?? sourceBudget?.items ?? []
+  );
+  const [total, setTotal] = useState(
+    editing?.total ?? sourceBudget?.total ?? "$0"
+  );
   const [addressErrors, setAddressErrors] = useState<
     Record<string, string | null>
   >({});
@@ -72,19 +84,19 @@ export function NewOrderPage() {
   }, [location.state]);
 
   useEffect(() => {
-    setClient(editing?.clientId ?? "");
+    setClient(editing?.clientId ?? sourceBudget?.clientId ?? "");
     setProvince(editing?.deliveryAddress.province ?? "");
     setLocality(editing?.deliveryAddress.locality ?? "");
     setStreet(editing?.deliveryAddress.street ?? "");
     setNumber(editing?.deliveryAddress.number ?? "");
     setApartment(editing?.deliveryAddress.apartment ?? "");
     setPayment(editing?.payment ?? "tarjeta");
-    setItems(editing?.items ?? []);
-    setTotal(editing?.total ?? "$0");
+    setItems(editing?.items ?? sourceBudget?.items ?? []);
+    setTotal(editing?.total ?? sourceBudget?.total ?? "$0");
     setAddressErrors({});
     setItemsError(null);
     setClientError(null);
-  }, [editNumber, editing]);
+  }, [editNumber, editing, fromBudgetNumber, sourceBudget]);
 
   function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
     setItems(nextItems);
@@ -159,6 +171,9 @@ export function NewOrderPage() {
     addOrder(newOrder);
     const invoiceNumber = createInvoiceFromOrder(newOrder);
     updateOrder(newOrder.number, { invoiceNumber });
+    if (sourceBudget && sourceBudget.status !== "convertido") {
+      updateBudget(sourceBudget.number, { status: "convertido" });
+    }
     navigate(`/sales/${nextOrderNumber}`);
   }
 
@@ -166,8 +181,18 @@ export function NewOrderPage() {
     <FormPage
       backLabel="Volver a Ventas"
       backTo={backTo}
-      title={editing ? `Editar pedido ${editing.number}` : "Nuevo pedido de venta"}
-      description="Cargue el cliente, los productos y el método de pago. Al crear el pedido, el comprobante se envía automáticamente por email al cliente."
+      title={
+        editing
+          ? `Editar pedido ${editing.number}`
+          : sourceBudget
+            ? `Nuevo pedido desde presupuesto ${sourceBudget.number}`
+            : "Nuevo pedido de venta"
+      }
+      description={
+        sourceBudget
+          ? `Cliente y productos precargados del presupuesto ${sourceBudget.number}. Complete los datos obligatorios del pedido (dirección de entrega y método de pago). Al crear el pedido, el comprobante se envía automáticamente por email al cliente.`
+          : "Cargue el cliente, los productos y el método de pago. Al crear el pedido, el comprobante se envía automáticamente por email al cliente."
+      }
     >
       <Card>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
@@ -293,10 +318,16 @@ export function NewOrderPage() {
 
             <div className="space-y-2">
               <LineItemsEditor
-                key={editing ? editing.number : "new"}
+                key={
+                  editing
+                    ? editing.number
+                    : sourceBudget
+                      ? `budget-${sourceBudget.number}`
+                      : "new"
+                }
                 products={products}
                 priceMode="sale"
-                initialItems={editing?.items}
+                initialItems={editing?.items ?? sourceBudget?.items}
                 onChange={handleItemsChange}
               />
               <FieldError message={itemsError} />

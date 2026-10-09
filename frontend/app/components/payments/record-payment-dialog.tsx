@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, Wallet } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
@@ -46,23 +46,29 @@ export function RecordPaymentDialog({
   const [amount, setAmount] = useState("");
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
-    if (order) {
-      setMethod(order.payment);
-      setAmount(String(parseNumberInput(order.total)));
-      setMessage(null);
-      setProcessing(false);
-    }
-  }, [order]);
+    if (!open || !order) return;
+    setMethod(order.payment);
+    setAmount(String(parseNumberInput(order.total)));
+    setMessage(null);
+    setProcessing(false);
+    submittingRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, order?.number]);
 
   async function handleConfirm() {
     if (!order) return;
+    if (submittingRef.current || order.paymentStatus === "pagado") return;
+
     const parsedAmount = parseNumberInput(amount);
     if (parsedAmount <= 0) {
       setMessage("Ingrese un monto válido.");
       return;
     }
+
+    submittingRef.current = true;
 
     let invoiceNumber = order.invoiceNumber;
     if (!invoiceNumber) {
@@ -102,10 +108,11 @@ export function RecordPaymentDialog({
       paymentStatus: result.status === "aprobado" ? "pagado" : "rechazado",
     });
     setProcessing(false);
+
     if (result.status === "aprobado") {
-      setMessage(`Pago aprobado · Ref ${result.reference}`);
-      setTimeout(() => onOpenChange(false), 800);
+      onOpenChange(false);
     } else {
+      submittingRef.current = false;
       setMessage("El pago fue rechazado. Puede intentar nuevamente.");
     }
   }
@@ -171,7 +178,10 @@ export function RecordPaymentDialog({
           <DialogClose render={<Button variant="outline" />}>
             Cancelar
           </DialogClose>
-          <Button onClick={handleConfirm} disabled={processing || !order}>
+          <Button
+            onClick={handleConfirm}
+            disabled={processing || !order || order.paymentStatus === "pagado"}
+          >
             {processing && <Loader2 className="size-4 animate-spin" />}
             {isGatewayMethod(method) ? "Pagar" : "Registrar cobro"}
           </Button>

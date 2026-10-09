@@ -453,9 +453,12 @@ function OrderPaymentCard({ order }: { order: SalesOrder }) {
               </Button>
             </div>
           )}
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button
+            onClick={() => setDialogOpen(true)}
+            disabled={order.paymentStatus === "pagado"}
+          >
             <User />
-            Registrar pago
+            {order.paymentStatus === "pagado" ? "Pago registrado" : "Registrar pago"}
           </Button>
         </div>
       </CardContent>
