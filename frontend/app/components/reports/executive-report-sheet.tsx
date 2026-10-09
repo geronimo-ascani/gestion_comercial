@@ -27,6 +27,7 @@ import {
   tendencies,
   topCustomers,
   topProducts,
+  type Period,
 } from "../analytics/analytics-data";
 import { ReportPage } from "./report-page";
 
@@ -45,21 +46,55 @@ const tableHeadCls =
   "border-b-2 border-slate-300 bg-slate-100 px-1 py-1 text-left font-semibold text-slate-600";
 const tableCellCls = "px-1 py-1 text-slate-600";
 
-export function ExecutiveReportSheet() {
-  const periodText = (() => {
-    const raw = new Date().toLocaleDateString("es-AR", {
-      month: "long",
-      year: "numeric",
-    });
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
-  })();
+function scale(value: number, factor: number): number {
+  return Math.round(value * factor);
+}
+
+const RADIAN = Math.PI / 180;
+
+function renderSlicePercentLabel(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+}) {
+  const {
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    innerRadius = 0,
+    outerRadius = 0,
+    percent = 0,
+  } = props;
+  const pct = Math.round(percent * 100);
+  if (pct <= 0) return null;
+  const radius = (innerRadius + outerRadius) / 2;
+  return (
+    <text
+      x={cx + radius * Math.cos(-midAngle * RADIAN)}
+      y={cy + radius * Math.sin(-midAngle * RADIAN)}
+      fill="#ffffff"
+      fontSize={10}
+      fontWeight={600}
+      textAnchor="middle"
+      dominantBaseline="central"
+    >
+      {pct}%
+    </text>
+  );
+}
+
+export function ExecutiveReportSheet({ period }: { period: Period }) {
+  const config = periodConfigs[period];
 
   const generatedAt = new Date().toLocaleString("es-AR", {
     dateStyle: "long",
     timeStyle: "short",
   });
 
-  const k = periodConfigs.mes.kpis;
+  const k = config.kpis;
   const kpis = [
     { label: "Ventas totales", value: formatAR(k.ventas), delta: k.deltaVentas },
     { label: "Gastos", value: formatAR(k.gastos), delta: k.deltaGastos },
@@ -67,8 +102,24 @@ export function ExecutiveReportSheet() {
     { label: "Margen de ganancia", value: formatPercent(k.margenPct), delta: null },
   ];
 
-  const paymentsTotal = basePayments.reduce((sum, p) => sum + p.amount, 0);
-  const heatmap = buildHeatmap(1);
+  const payments = basePayments.map((payment) => ({
+    ...payment,
+    amount: scale(payment.amount, config.factor),
+  }));
+
+  const products = topProducts.map((product) => ({
+    ...product,
+    qty: Math.max(1, scale(product.qty, Math.max(1, config.factor))),
+  }));
+
+  const customers = topCustomers.map((customer) => ({
+    ...customer,
+    orders: Math.max(1, scale(customer.orders, config.factor)),
+    amount: scale(customer.amount, config.factor),
+  }));
+
+  const paymentsTotal = payments.reduce((sum, p) => sum + p.amount, 0);
+  const heatmap = buildHeatmap(config.factor);
   const heatLevels = [2, 4, 6, 8, 10];
 
   return (
@@ -84,7 +135,7 @@ export function ExecutiveReportSheet() {
             </p>
           </div>
           <div className="text-right text-xs leading-tight text-slate-500">
-            <p className="font-semibold text-slate-700">Período: {periodText}</p>
+            <p className="font-semibold text-slate-700">Período: {config.label}</p>
             <p>Generado el {generatedAt}</p>
           </div>
         </header>
@@ -141,8 +192,32 @@ export function ExecutiveReportSheet() {
                   tickFormatter={(v: number) => `$${Math.round(v / 1000)}k`}
                 />
                 <Legend wrapperStyle={legendStyle} iconSize={10} />
-                <Bar dataKey="ventas" name="Ventas" fill="#2563eb" radius={[3, 3, 0, 0]} maxBarSize={34} />
-                <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[3, 3, 0, 0]} maxBarSize={34} />
+                <Bar
+                  dataKey="ventas"
+                  name="Ventas"
+                  fill="#2563eb"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={34}
+                  label={{
+                    position: "insideTop",
+                    fill: "#ffffff",
+                    fontSize: 9,
+                    formatter: () => "V",
+                  }}
+                />
+                <Bar
+                  dataKey="gastos"
+                  name="Gastos"
+                  fill="#f87171"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={34}
+                  label={{
+                    position: "insideTop",
+                    fill: "#ffffff",
+                    fontSize: 9,
+                    formatter: () => "G",
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -167,7 +242,7 @@ export function ExecutiveReportSheet() {
                   />
                   <Legend wrapperStyle={legendStyle} iconSize={10} />
                   <Area stackId="1" dataKey="recurrentes" name="Recurrentes" stroke="#2563eb" fill="#2563eb" fillOpacity={0.65} />
-                  <Area stackId="1" dataKey="nuevos" name="Nuevos" stroke="#10b981" fill="#10b981" fillOpacity={0.55} />
+                  <Area stackId="1" dataKey="nuevos" name="Nuevos" stroke="#10b981" strokeDasharray="6 3" fill="#10b981" fillOpacity={0.55} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -179,14 +254,15 @@ export function ExecutiveReportSheet() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={basePayments}
+                    data={payments}
                     dataKey="amount"
                     nameKey="method"
                     innerRadius={38}
                     outerRadius={72}
                     paddingAngle={3}
+                    label={renderSlicePercentLabel}
                   >
-                    {basePayments.map((entry) => (
+{payments.map((entry) => (
                       <Cell key={entry.method} fill={entry.color} />
                     ))}
                   </Pie>
@@ -194,7 +270,7 @@ export function ExecutiveReportSheet() {
               </ResponsiveContainer>
             </div>
             <div className="mt-2 space-y-1.5">
-              {basePayments.map((entry) => (
+              {payments.map((entry) => (
                 <div
                   key={entry.method}
                   className="flex items-center justify-between text-xs text-slate-600"
@@ -295,7 +371,7 @@ export function ExecutiveReportSheet() {
                 </tr>
               </thead>
               <tbody>
-                {topProducts.map((product) => (
+                {products.map((product) => (
                   <tr key={product.product} className="border-b border-slate-100">
                     <td className={`${tableCellCls} font-semibold text-slate-700`}>
                       {product.rank}
@@ -323,7 +399,7 @@ export function ExecutiveReportSheet() {
                 </tr>
               </thead>
               <tbody>
-                {topCustomers.map((customer) => (
+                {customers.map((customer) => (
                   <tr key={customer.client} className="border-b border-slate-100">
                     <td className={`${tableCellCls} font-semibold text-slate-700`}>
                       {customer.rank}

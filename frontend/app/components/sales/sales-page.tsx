@@ -298,7 +298,7 @@ export function SalesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Pedidos de venta</CardTitle>
+                <CardTitle>Pedidos de clientes</CardTitle>
               </div>
               <Badge variant="secondary">{orders.length} pedidos</Badge>
             </CardHeader>
@@ -363,37 +363,35 @@ export function SalesPage() {
                             >
                               <Eye />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={hasRegisteredPayment(order)}
-                              aria-label={`Editar pedido ${order.number}`}
-                              title={
-                                hasRegisteredPayment(order)
-                                  ? "El pedido tiene un pago registrado y no puede editarse"
-                                  : undefined
-                              }
-                              onClick={() =>
-                                navigate(`/sales/new-order?edit=${order.number}`)
-                              }
-                            >
-                              <Pencil />
-                            </Button>
-                            <ConfirmDeleteDialog
-                              title="¿Eliminar pedido?"
-                              description={`Esta acción no se puede deshacer. Se eliminará el pedido ${order.number} del cliente ${order.client}.`}
-                              onDelete={() => handleRemoveOrder(order)}
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="text-destructive hover:text-destructive"
-                                  aria-label={`Eliminar pedido ${order.number}`}
-                                >
-                                  <Trash2 />
-                                </Button>
-                              }
-                            />
+                            {!hasRegisteredPayment(order) && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Editar pedido ${order.number}`}
+                                onClick={() =>
+                                  navigate(`/sales/new-order?edit=${order.number}`)
+                                }
+                              >
+                                <Pencil />
+                              </Button>
+                            )}
+                            {!hasRegisteredPayment(order) && (
+                              <ConfirmDeleteDialog
+                                title="¿Eliminar pedido?"
+                                description={`Esta acción no se puede deshacer. Se eliminará el pedido ${order.number} del cliente ${order.client}.`}
+                                onDelete={() => handleRemoveOrder(order)}
+                                trigger={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-destructive hover:text-destructive"
+                                    aria-label={`Eliminar pedido ${order.number}`}
+                                  >
+                                    <Trash2 />
+                                  </Button>
+                                }
+                              />
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -404,7 +402,7 @@ export function SalesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              <span>Mostrando {filteredOrders.length} de {orders.length} pedidos</span>
+              
             </CardFooter>
           </Card>
         </section>

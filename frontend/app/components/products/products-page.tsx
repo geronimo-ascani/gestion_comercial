@@ -202,9 +202,7 @@ export function ProductsPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Listado de productos</CardTitle>
-            <CardDescription>
-              Los productos se cargan desde la base de datos.
-            </CardDescription>
+            
           </div>
           <Badge variant="secondary">{products.length} productos</Badge>
         </CardHeader>
@@ -301,7 +299,7 @@ export function ProductsPage() {
           )}
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground">
-          <span>Mostrando {filtered.length} productos</span>
+         
         </CardFooter>
       </Card>
     </div>

@@ -185,12 +185,7 @@ export function ProductFormPage() {
                   className="font-mono text-xs"
                   aria-describedby="product-code-help"
                 />
-                <p
-                  id="product-code-help"
-                  className="text-xs text-muted-foreground"
-                >
-                  Se genera automáticamente.
-                </p>
+                
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-name">Nombre</Label>
@@ -245,9 +240,7 @@ export function ProductFormPage() {
                   aria-invalid={!!errors.margin}
                   aria-describedby="product-margin-help"
                 />
-                <p id="product-margin-help" className="text-xs text-muted-foreground">
-                  El margen resultante se calcula como el precio de compra + este porcentaje.
-                </p>
+                
                 <FieldError message={errors.margin} />
               </div>
             </div>
@@ -263,9 +256,7 @@ export function ProductFormPage() {
                   className="font-medium bg-muted text-muted-foreground cursor-not-allowed"
                   aria-describedby="product-net-help"
                 />
-                <p id="product-net-help" className="text-xs text-muted-foreground">
-                  Precio de compra más el margen aplicado. Se calcula automáticamente.
-                </p>
+                
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-iva-condition">Condición de IVA</Label>
@@ -296,10 +287,7 @@ export function ProductFormPage() {
                     )}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Alícuotas estandarizadas por ARCA para facturación
-                  electrónica y Libro IVA Digital.
-                </p>
+                
               </div>
             </div>
 
@@ -337,10 +325,7 @@ export function ProductFormPage() {
                     )}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Obligatorio cuando la alícuota es 0,00 % (código 0003) o la
-                  operación posee un tratamiento especial.
-                </p>
+                
               </div>
             )}
 
@@ -354,9 +339,8 @@ export function ProductFormPage() {
                   className="font-medium bg-muted text-muted-foreground cursor-not-allowed"
                   aria-describedby="product-sale-price-help"
                 />
-              <p id="product-sale-price-help" className="text-xs text-muted-foreground">
-                Margen más el IVA según la condición seleccionada.
-              </p>
+             
+              
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">

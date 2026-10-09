@@ -149,10 +149,6 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Datos de demostración hasta conectar el backend.
-      </p>
-
       {loading ? (
         <AnalyticsSkeleton />
       ) : (
@@ -333,7 +329,7 @@ export function AnalyticsPage() {
         onOpenChange={setPreviewOpen}
         title="Previsualización de reporte"
       >
-        <ExecutiveReportSheet />
+        <ExecutiveReportSheet period={period} />
       </ReportPreviewDialog>
     </div>
   );

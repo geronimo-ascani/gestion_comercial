@@ -1,93 +1,113 @@
-import { useState } from "react";
-import { Link } from "react-router";
-import { UserPlus } from "lucide-react";
+import Autoplay from "embla-carousel-autoplay";
+import { Building2 } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "~/components/ui/carousel";
+
+const landingSlides = [
+  {
+    src: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1600&q=80",
+  },
+  {
+    src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1600&q=80",
+  },
+  {
+    src: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80",
+  },
+];
 
 export function RegisterPage() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <UserPlus className="h-5 w-5" />
+    <div className="flex w-full h-screen bg-background">
+      {/* Lado visual (landing) — solo en escritorio */}
+      <div className="relative hidden h-full overflow-hidden lg:flex lg:w-1/2">
+        <Carousel
+          opts={{ loop: true }}
+          plugins={[
+            Autoplay({ delay: 5000, stopOnInteraction: false }),
+          ]}
+          className="h-full w-full"
+        >
+          <CarouselContent className="h-full">
+            {landingSlides.map((slide, index) => (
+              <CarouselItem key={index} className="h-full pl-0">
+                <img
+                  src={slide.src}
+                  alt={`Gestiona tu negocio · Imagen ${index + 1}`}
+                  className="h-full w-full object-cover"
+                />
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+        </Carousel>
+
+        {/* Overlay oscuro para resaltar el texto */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent" />
+
+        {/* Propuesta de valor */}
+        <div className="absolute bottom-10 left-10 right-10 max-w-md">
+          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/70">
+            <span className="h-px w-8 bg-white/50" />
+            Gestión comercial
+          </p>
+          <h2 className="text-2xl font-bold leading-tight text-white">
+            Gestiona tu negocio como un profesional. Todo lo que necesitas en un
+            solo lugar.
+          </h2>
+        </div>
+      </div>
+
+      {/* Lado de registro — móvil y escritorio */}
+      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-1/2">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <span className="text-lg font-bold tracking-tight">
+              Gestión Comercial
+            </span>
           </div>
-          <CardTitle className="text-2xl">Registro</CardTitle>
-          <CardDescription>
-            Cree su cuenta para comenzar a usar el sistema
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+
+          {/* Encabezado */}
           <div className="space-y-2">
-            <Label htmlFor="fullName">Nombre completo</Label>
-            <Input
-              id="fullName"
-              placeholder="Nombre completo"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Correo electrónico</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="usuario@correo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
-              aria-describedby="password-hint"
-            />
-            <p id="password-hint" className="text-xs text-muted-foreground">
-              Mínimo 6 caracteres.
+            <h1 className="text-3xl font-bold tracking-tight">
+              Crea tu cuenta
+            </h1>
+            <p className="text-muted-foreground">
+              Comienza a gestionar tus ventas hoy mismo.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
+
+          {/* AQUÍ VA EL COMPONENTE DE REGISTRO DEL USUARIO */}
+          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-border p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              AQUÍ VA EL COMPONENTE DE REGISTRO DEL USUARIO
+            </p>
+            <Button className="w-full" size="lg">
+              Completar registro
+            </Button>
           </div>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <Button className="w-full" size="lg">
-            Registrarse
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            ¿Ya tiene una cuenta?{" "}
-            <Link to="/login" className="text-foreground hover:underline">
-              Iniciar sesión
-            </Link>
+
+          {/* Pie */}
+          <p className="text-center text-sm text-muted-foreground">
+            ¿Ya tienes una cuenta?{" "}
+            <a
+              href="#"
+              onClick={(event) => event.preventDefault()}
+              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              Inicia sesión
+            </a>
           </p>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
