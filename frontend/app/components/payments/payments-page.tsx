@@ -235,6 +235,7 @@ export function PaymentsPage() {
               <div className="space-y-2">
                 <Label htmlFor="payment-method-filter">Método</Label>
                 <Select
+                  items={{ all: "Todos" }}
                   value={methodFilter}
                   onValueChange={(value) =>
                     setMethodFilter(value as "all" | PaymentMethod)
@@ -244,7 +245,7 @@ export function PaymentsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los métodos</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     {methodOptions.map((method) => (
                       <SelectItem key={method} value={method}>
                         {paymentMethodLabels[method]}
@@ -256,6 +257,7 @@ export function PaymentsPage() {
               <div className="space-y-2">
                 <Label htmlFor="payment-conciliation-filter">Conciliación</Label>
                 <Select
+                  items={{ all: "Todos" }}
                   value={conciliationFilter}
                   onValueChange={(value) =>
                     setConciliationFilter(
@@ -270,7 +272,7 @@ export function PaymentsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="conciliado">Conciliado</SelectItem>
                     <SelectItem value="pendiente">Pendiente</SelectItem>
                   </SelectContent>

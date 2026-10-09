@@ -119,6 +119,7 @@ export function PurchasesPage() {
           <div className="space-y-2">
             <Label htmlFor="order-status-filter">Estado</Label>
             <Select
+              items={{ all: "Todos" }}
               value={orderStatus}
               onValueChange={(value) =>
                 setOrderStatus(value as "all" | PurchaseOrderStatus)
@@ -128,7 +129,7 @@ export function PurchasesPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="pendiente">Pendiente</SelectItem>
                 <SelectItem value="aprobada">Aprobada</SelectItem>
                 <SelectItem value="recibida">Recibida</SelectItem>

@@ -181,6 +181,7 @@ export function ProductsPage() {
             />
           </div>
           <Select
+            items={{ all: "Todos" }}
             value={status}
             onValueChange={(value) => setStatus(value as "all" | StockStatus)}
           >
@@ -188,7 +189,7 @@ export function ProductsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="in">En stock</SelectItem>
               <SelectItem value="critical">Stock crítico</SelectItem>
               <SelectItem value="out">Sin stock</SelectItem>

@@ -236,6 +236,7 @@ export function SalesPage() {
               <div className="space-y-2">
                 <Label htmlFor="order-status-filter">Estado</Label>
                 <Select
+                  items={{ all: "Todos" }}
                   value={orderStatus}
                   onValueChange={(value) =>
                     setOrderStatus(value as "all" | OrderStatus)
@@ -245,7 +246,7 @@ export function SalesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="pendiente">Pendiente</SelectItem>
                     <SelectItem value="proceso">En proceso</SelectItem>
                     <SelectItem value="enviado">Enviado</SelectItem>
@@ -257,6 +258,7 @@ export function SalesPage() {
               <div className="space-y-2">
                 <Label htmlFor="order-payment-filter">Pago</Label>
                 <Select
+                  items={{ all: "Todos" }}
                   value={orderPayment}
                   onValueChange={(value) =>
                     setOrderPayment(value as "all" | PaymentMethod)
@@ -266,7 +268,7 @@ export function SalesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los pagos</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="efectivo">Efectivo</SelectItem>
                     <SelectItem value="tarjeta">Tarjeta</SelectItem>
                     <SelectItem value="mercadopago">MercadoPago</SelectItem>
@@ -406,6 +408,7 @@ export function SalesPage() {
               <div className="space-y-2">
                 <Label htmlFor="budget-status-filter">Estado</Label>
                 <Select
+                  items={{ all: "Todos" }}
                   value={budgetStatus}
                   onValueChange={(value) =>
                     setBudgetStatus(value as "all" | BudgetStatus)
@@ -415,7 +418,7 @@ export function SalesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="pendiente">Pendiente</SelectItem>
                     <SelectItem value="aprobado">Aprobado</SelectItem>
                     <SelectItem value="vencido">Vencido</SelectItem>
