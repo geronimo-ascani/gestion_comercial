@@ -25,6 +25,17 @@ const demoEmployees: Employee[] = [
     role: "ventas",
     password: "123456",
   },
+  {
+    id: "EMP-003",
+    firstName: "Admin",
+    lastName: "Sistema",
+    cuil: "20-20123456-0",
+    phone: "+54 11 5555-0303",
+    email: "admin@empresa.com",
+    hireDate: "01/01/2022",
+    role: "administrador",
+    password: "admin123",
+  },
 ];
 
 let employees: Employee[] = [...demoEmployees];

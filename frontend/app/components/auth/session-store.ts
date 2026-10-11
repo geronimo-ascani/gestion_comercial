@@ -6,7 +6,28 @@ import {
   updateEmployee,
 } from "../employees/employees-store";
 
-let currentUserId: string | null = null;
+const SESSION_KEY = "gc-current-user-id";
+
+function readStoredUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function persistUserId(userId: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (userId) window.localStorage.setItem(SESSION_KEY, userId);
+    else window.localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Ignorar errores de almacenamiento (modo privado, cuota, etc.)
+  }
+}
+
+let currentUserId: string | null = readStoredUserId();
 
 const listeners = new Set<() => void>();
 
@@ -41,12 +62,14 @@ export function loginUser(email: string, password: string): string | null {
   if (!employee.password) return "El usuario no tiene contraseña configurada.";
   if (employee.password !== password) return "La contraseña es incorrecta.";
   currentUserId = employee.id;
+  persistUserId(currentUserId);
   emit();
   return null;
 }
 
 export function logoutUser() {
   currentUserId = null;
+  persistUserId(null);
   emit();
 }
 

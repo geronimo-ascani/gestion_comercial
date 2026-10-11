@@ -20,12 +20,18 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date));
 }
 
-export function formatDateTime(date: string | Date): string {
-  return new Intl.DateTimeFormat("es-AR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
+export function compareByDateDesc(a: string, b: string): number {
+  const parse = (value: string) => {
+    const parts = value.split("/");
+    if (parts.length === 3) {
+      const day = Number(parts[0]);
+      const month = Number(parts[1]);
+      const year = Number(parts[2]);
+      if (!Number.isNaN(day) && !Number.isNaN(month) && !Number.isNaN(year)) {
+        return year * 10000 + month * 100 + day;
+      }
+    }
+    return 0;
+  };
+  return parse(b) - parse(a);
 }

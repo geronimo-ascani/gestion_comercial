@@ -1,113 +1,209 @@
-import Autoplay from "embla-carousel-autoplay";
-import { Building2 } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, Navigate, useNavigate } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { FieldError } from "~/components/ui/field-error";
 import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-} from "~/components/ui/carousel";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 
-const landingSlides = [
-  {
-    src: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1600&q=80",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1600&q=80",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80",
-  },
-];
+import { requireText, validateEmail } from "~/lib/validation";
+import { formatDate } from "../sales/sales-types";
+import {
+  employeeRoleLabels,
+  type Employee,
+  type EmployeeRole,
+} from "../employees/employees-types";
+import { addEmployee, useEmployees } from "../employees/employees-store";
+import { loginUser, useCurrentUser } from "./session-store";
+import { AuthSplitLayout } from "./auth-split-layout";
 
 export function RegisterPage() {
+  const navigate = useNavigate();
+  const employees = useEmployees();
+  const currentUser = useCurrentUser();
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<EmployeeRole>("ventas");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+
+  if (currentUser) return <Navigate to="/dashboard" replace />;
+
+  function setField(
+    field: string,
+    value: string,
+    setter: (value: string) => void
+  ) {
+    setter(value);
+    setErrors((prev) => ({ ...prev, [field]: null }));
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const emailTaken = employees.some(
+      (employee) => employee.email.toLowerCase() === email.trim().toLowerCase()
+    );
+    const next: Record<string, string | null> = {
+      firstName: requireText(firstName, "Nombre"),
+      lastName: requireText(lastName, "Apellido"),
+      email: email.trim()
+        ? emailTaken
+          ? "Ya existe una cuenta con ese correo."
+          : validateEmail(email)
+        : requireText(email, "Correo electrónico"),
+      password: password.trim()
+        ? password.trim().length < 6
+          ? "Debe tener al menos 6 caracteres"
+          : null
+        : requireText(password, "Contraseña"),
+      confirmPassword: confirmPassword.trim()
+        ? confirmPassword.trim() !== password.trim()
+          ? "Las contraseñas no coinciden"
+          : null
+        : requireText(confirmPassword, "Confirmar contraseña"),
+    };
+    setErrors(next);
+    if (Object.values(next).some((error) => error)) return;
+
+    const employee: Employee = {
+      id: crypto.randomUUID(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      cuil: "20-00000000-0",
+      phone: "",
+      email: email.trim(),
+      hireDate: formatDate(new Date()),
+      role,
+      password: password.trim(),
+    };
+    addEmployee(employee);
+    loginUser(employee.email, employee.password ?? "");
+    navigate("/dashboard");
+  }
+
   return (
-    <div className="flex w-full h-screen bg-background">
-      {/* Lado visual (landing) — solo en escritorio */}
-      <div className="relative hidden h-full overflow-hidden lg:flex lg:w-1/2">
-        <Carousel
-          opts={{ loop: true }}
-          plugins={[
-            Autoplay({ delay: 5000, stopOnInteraction: false }),
-          ]}
-          className="h-full w-full"
-        >
-          <CarouselContent className="h-full">
-            {landingSlides.map((slide, index) => (
-              <CarouselItem key={index} className="h-full pl-0">
-                <img
-                  src={slide.src}
-                  alt={`Gestiona tu negocio · Imagen ${index + 1}`}
-                  className="h-full w-full object-cover"
-                />
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
-
-        {/* Overlay oscuro para resaltar el texto */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent" />
-
-        {/* Propuesta de valor */}
-        <div className="absolute bottom-10 left-10 right-10 max-w-md">
-          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/70">
-            <span className="h-px w-8 bg-white/50" />
-            Gestión comercial
-          </p>
-          <h2 className="text-2xl font-bold leading-tight text-white">
-            Gestiona tu negocio como un profesional. Todo lo que necesitas en un
-            solo lugar.
-          </h2>
-        </div>
-      </div>
-
-      {/* Lado de registro — móvil y escritorio */}
-      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-1/2">
-        <div className="w-full max-w-md space-y-8">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">
-              Gestión Comercial
-            </span>
-          </div>
-
-          {/* Encabezado */}
+    <AuthSplitLayout
+      title="Crea tu cuenta"
+      subtitle="Comienza a gestionar tus ventas hoy mismo."
+      footer={
+        <p className="text-center text-sm text-muted-foreground">
+          ¿Ya tenés una cuenta?{" "}
+          <Link
+            to="/login"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+          >
+            Inicia sesión
+          </Link>
+        </p>
+      }
+    >
+      <form className="space-y-4" noValidate onSubmit={handleSubmit}>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">
-              Crea tu cuenta
-            </h1>
-            <p className="text-muted-foreground">
-              Comienza a gestionar tus ventas hoy mismo.
-            </p>
+            <Label htmlFor="register-first-name">Nombre</Label>
+            <Input
+              id="register-first-name"
+              value={firstName}
+              onChange={(event) =>
+                setField("firstName", event.target.value, setFirstName)
+              }
+              placeholder="Ej. Lucía"
+              aria-invalid={!!errors.firstName}
+            />
+            <FieldError message={errors.firstName} />
           </div>
-
-          {/* AQUÍ VA EL COMPONENTE DE REGISTRO DEL USUARIO */}
-          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-border p-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              AQUÍ VA EL COMPONENTE DE REGISTRO DEL USUARIO
-            </p>
-            <Button className="w-full" size="lg">
-              Completar registro
-            </Button>
+          <div className="space-y-2">
+            <Label htmlFor="register-last-name">Apellido</Label>
+            <Input
+              id="register-last-name"
+              value={lastName}
+              onChange={(event) =>
+                setField("lastName", event.target.value, setLastName)
+              }
+              placeholder="Ej. Fernández"
+              aria-invalid={!!errors.lastName}
+            />
+            <FieldError message={errors.lastName} />
           </div>
-
-          {/* Pie */}
-          <p className="text-center text-sm text-muted-foreground">
-            ¿Ya tienes una cuenta?{" "}
-            <a
-              href="#"
-              onClick={(event) => event.preventDefault()}
-              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
-            >
-              Inicia sesión
-            </a>
-          </p>
         </div>
-      </div>
-    </div>
+        <div className="space-y-2">
+          <Label htmlFor="register-email">Correo electrónico</Label>
+          <Input
+            id="register-email"
+            type="email"
+            value={email}
+            onChange={(event) =>
+              setField("email", event.target.value, setEmail)
+            }
+            placeholder="usuario@correo.com"
+            aria-invalid={!!errors.email}
+          />
+          <FieldError message={errors.email} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="register-role">Rol</Label>
+          <Select
+            value={role}
+            onValueChange={(value) => setRole(value as EmployeeRole)}
+          >
+            <SelectTrigger id="register-role" className="w-full">
+              <SelectValue>
+                {(selected) =>
+                  employeeRoleLabels[(selected as EmployeeRole) ?? role] ?? role
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(employeeRoleLabels) as EmployeeRole[]).map((key) => (
+                <SelectItem key={key} value={key}>
+                  {employeeRoleLabels[key]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="register-password">Contraseña</Label>
+          <Input
+            id="register-password"
+            type="password"
+            value={password}
+            onChange={(event) =>
+              setField("password", event.target.value, setPassword)
+            }
+            placeholder="Mínimo 6 caracteres"
+            aria-invalid={!!errors.password}
+          />
+          <FieldError message={errors.password} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="register-confirm-password">Confirmar contraseña</Label>
+          <Input
+            id="register-confirm-password"
+            type="password"
+            value={confirmPassword}
+            onChange={(event) =>
+              setField("confirmPassword", event.target.value, setConfirmPassword)
+            }
+            placeholder="Repetir contraseña"
+            aria-invalid={!!errors.confirmPassword}
+          />
+          <FieldError message={errors.confirmPassword} />
+        </div>
+        <Button className="w-full" size="lg" type="submit">
+          Crear cuenta
+        </Button>
+      </form>
+    </AuthSplitLayout>
   );
 }

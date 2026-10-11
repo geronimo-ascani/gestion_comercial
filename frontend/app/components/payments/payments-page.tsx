@@ -33,6 +33,7 @@ import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney } from "~/lib/currency";
+import { compareByDateDesc } from "~/lib/utils";
 import { useCurrentUser } from "../auth/session-store";
 import type { PaymentMethod, PaymentTransaction } from "./payments-types";
 import { paymentMethodLabels } from "./payments-types";
@@ -133,9 +134,15 @@ export function PaymentsPage() {
     (payment) =>
       payment.conciliationStatus === "pendiente" && payment.status === "aprobado"
   );
-  const pendingInvoices = invoices.filter(
-    (invoice) => invoice.status === "emitida" || invoice.status === "aprobada"
-  );
+  const pendingInvoices = useMemo(() => {
+    return [...invoices]
+      .filter((invoice) => invoice.status === "emitida" || invoice.status === "aprobada")
+      .sort((a, b) => {
+        const dateDiff = compareByDateDesc(a.date, b.date);
+        if (dateDiff !== 0) return dateDiff;
+        return b.number.localeCompare(a.number);
+      });
+  }, [invoices]);
 
   function setTab(tab: PaymentTab) {
     setSearchParams({ tab }, { replace: true });
@@ -465,6 +472,14 @@ function PaymentsTable({
   onReconcile?: (payment: PaymentTransaction) => void;
   emptyText?: string;
 }) {
+  const ordered = useMemo(() => {
+    return [...payments].sort((a, b) => {
+      const dateDiff = compareByDateDesc(a.date, b.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.id.localeCompare(a.id);
+    });
+  }, [payments]);
+
   return (
     <Table>
       <TableHeader>
@@ -480,7 +495,7 @@ function PaymentsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {payments.length === 0 ? (
+        {ordered.length === 0 ? (
           <TableRow>
             <TableCell
               colSpan={onReconcile ? 8 : 7}
@@ -490,7 +505,7 @@ function PaymentsTable({
             </TableCell>
           </TableRow>
         ) : (
-          payments.map((payment) => (
+          ordered.map((payment) => (
             <TableRow key={payment.id}>
               <TableCell className="font-mono text-xs">{payment.id}</TableCell>
               <TableCell>{payment.date}</TableCell>

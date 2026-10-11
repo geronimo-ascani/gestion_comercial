@@ -52,6 +52,7 @@ import type {
 import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
 import { restoreOrderStock } from "./sales-stock";
 import { usePayments } from "../payments/payments-store";
+import { compareByDateDesc } from "~/lib/utils";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
@@ -164,6 +165,10 @@ export function SalesPage() {
     const matchesStatus = orderStatus === "all" || order.status === orderStatus;
     const matchesPayment = orderPayment === "all" || order.payment === orderPayment;
     return matchesQuery && matchesStatus && matchesPayment;
+  }).sort((a, b) => {
+    const dateDiff = compareByDateDesc(a.date, b.date);
+    if (dateDiff !== 0) return dateDiff;
+    return b.number.localeCompare(a.number);
   });
 
   const filteredBudgets = budgets.filter((budget) => {
