@@ -8,6 +8,7 @@ import {
   CarouselItem,
   type CarouselApi,
 } from "~/components/ui/carousel";
+import { cn } from "~/lib/utils";
 import {
   MiniScreen,
   type SystemVariant,
@@ -93,7 +94,7 @@ function useActiveSlide(setApi: (api: CarouselApi) => void) {
     };
   }, [api]);
 
-  return { setApi: register, activeIndex };
+  return { api, setApi: register, activeIndex };
 }
 
 function BottomMockup({ variant }: { variant: SystemVariant }) {
@@ -130,7 +131,7 @@ export function AuthSplitLayout({
   children,
   footer,
 }: AuthSplitLayoutProps) {
-  const { setApi, activeIndex } = useActiveSlide(() => undefined);
+  const { api, setApi, activeIndex } = useActiveSlide(() => undefined);
   const active = slides[activeIndex];
 
   return (
@@ -180,6 +181,25 @@ export function AuthSplitLayout({
           >
             {active.text}
           </h2>
+        </div>
+
+        {/* Indicadores de slides */}
+        <div className="absolute top-14 right-10 z-10 flex items-center gap-2">
+          {slides.map((slide, index) => (
+            <button
+              key={slide.id}
+              type="button"
+              onClick={() => api?.scrollTo(index)}
+              aria-label={`Ir al slide ${index + 1} de ${slides.length}`}
+              aria-current={activeIndex === index}
+              className={cn(
+                "h-2.5 rounded-full transition-all",
+                activeIndex === index
+                  ? "w-6 bg-white"
+                  : "w-2.5 bg-white/40 hover:bg-white/70"
+              )}
+            />
+          ))}
         </div>
       </div>
 

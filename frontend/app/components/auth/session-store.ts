@@ -58,9 +58,9 @@ export function loginUser(email: string, password: string): string | null {
   const employee = getEmployeesSnapshot().find(
     (item) => item.email.toLowerCase() === email.trim().toLowerCase()
   );
-  if (!employee) return "No existe un usuario con ese correo.";
-  if (!employee.password) return "El usuario no tiene contraseña configurada.";
-  if (employee.password !== password) return "La contraseña es incorrecta.";
+  if (!employee || !employee.password || employee.password !== password) {
+    return "Credenciales no válidas.";
+  }
   currentUserId = employee.id;
   persistUserId(currentUserId);
   emit();

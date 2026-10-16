@@ -5,21 +5,10 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 
 import { requireText, validateEmail } from "~/lib/validation";
 import { formatDate } from "../sales/sales-types";
-import {
-  employeeRoleLabels,
-  type Employee,
-  type EmployeeRole,
-} from "../employees/employees-types";
+import type { Employee } from "../employees/employees-types";
 import { addEmployee, useEmployees } from "../employees/employees-store";
 import { loginUser, useCurrentUser } from "./session-store";
 import { AuthSplitLayout } from "./auth-split-layout";
@@ -32,7 +21,6 @@ export function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<EmployeeRole>("ventas");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
@@ -83,7 +71,7 @@ export function RegisterPage() {
       phone: "",
       email: email.trim(),
       hireDate: formatDate(new Date()),
-      role,
+      role: "administrador",
       password: password.trim(),
     };
     addEmployee(employee);
@@ -149,28 +137,6 @@ export function RegisterPage() {
             aria-invalid={!!errors.email}
           />
           <FieldError message={errors.email} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="register-role">Rol</Label>
-          <Select
-            value={role}
-            onValueChange={(value) => setRole(value as EmployeeRole)}
-          >
-            <SelectTrigger id="register-role" className="w-full">
-              <SelectValue>
-                {(selected) =>
-                  employeeRoleLabels[(selected as EmployeeRole) ?? role] ?? role
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(employeeRoleLabels) as EmployeeRole[]).map((key) => (
-                <SelectItem key={key} value={key}>
-                  {employeeRoleLabels[key]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="register-password">Contraseña</Label>
