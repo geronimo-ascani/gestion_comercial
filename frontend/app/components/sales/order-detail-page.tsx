@@ -31,6 +31,12 @@ import {
 
 import { Skeleton, TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
+import {
+  computePercentageDiscount,
+  formatMoney,
+  parseNumberInput,
+  parsePercentInput,
+} from "~/lib/currency";
 import type { OrderStatus, SalesOrder } from "./sales-types";
 import { updateOrder, useOrders } from "./sales-store";
 import { applyOrderStock, restoreOrderStock } from "./sales-stock";
@@ -324,6 +330,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function OrderSummaryCard({ order }: { order: SalesOrder }) {
+  const subtotalValue = parseNumberInput(order.subtotal ?? order.total);
+  const discountPercent = order.discount
+    ? parsePercentInput(order.discount)
+    : 0;
+  const { amount: discountAmount } = computePercentageDiscount(
+    subtotalValue,
+    discountPercent
+  );
   return (
     <Card>
       <CardHeader>
@@ -334,7 +348,14 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
           <SummaryRow label="Subtotal" value={order.subtotal ?? order.total} />
           <SummaryRow label="Envío" value={order.shipping ?? "—"} />
           <SummaryRow label="Impuestos" value={order.tax ?? "—"} />
-          <SummaryRow label="Descuento" value={order.discount ?? "—"} />
+          <SummaryRow
+            label="Descuento"
+            value={
+              order.discount
+                ? `${order.discount} — ${formatMoney(discountAmount)}`
+                : "—"
+            }
+          />
         </dl>
 
         <div className="my-4 border-t border-border" />
@@ -345,7 +366,7 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-          <span className="text-sm text-muted-foreground">Estado de pago</span>
+          <span className="text-sm text-muted-foreground">Medio de pago</span>
           <PaymentBadge payment={order.payment} />
         </div>
       </CardContent>

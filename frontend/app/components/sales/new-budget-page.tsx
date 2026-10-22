@@ -10,6 +10,12 @@ import { FieldError } from "~/components/ui/field-error";
 import { FormPage } from "~/components/ui/form-page";
 import { Combobox } from "~/components/ui/combobox";
 
+import {
+  computePercentageDiscount,
+  formatMoney,
+  parseNumberInput,
+  parsePercentInput,
+} from "~/lib/currency";
 import type { LineItem } from "./sales-types";
 import { formatDateForInput, formatDate, formatInputDate } from "./sales-types";
 import { addBudget, updateBudget, useBudgets } from "./sales-store";
@@ -38,10 +44,24 @@ export function NewBudgetPage() {
     editing ? formatDateForInput(editing.expires) : ""
   );
   const [items, setItems] = useState<LineItem[]>(editing?.items ?? []);
-  const [total, setTotal] = useState(editing?.total ?? "$0");
+  const [subtotal, setSubtotal] = useState(
+    editing?.subtotal ?? editing?.total ?? "$0"
+  );
+  const [discount, setDiscount] = useState(
+    editing?.discount ? String(parsePercentInput(editing.discount)) : "0"
+  );
   const [expiresError, setExpiresError] = useState<string | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+
+  const discountPercent = parsePercentInput(discount);
+  const { amount: discountAmount, total: totalValue } =
+    computePercentageDiscount(
+      parseNumberInput(subtotal),
+      discountPercent
+    );
+  const total = formatMoney(totalValue);
 
   useEffect(() => {
     const preselected = (location.state as { clienteId?: string } | null)
@@ -53,15 +73,19 @@ export function NewBudgetPage() {
     setClient(editing?.clientId ?? "");
     setExpires(editing ? formatDateForInput(editing.expires) : "");
     setItems(editing?.items ?? []);
-    setTotal(editing?.total ?? "$0");
+    setSubtotal(editing?.subtotal ?? editing?.total ?? "$0");
+    setDiscount(
+      editing?.discount ? String(parsePercentInput(editing.discount)) : "0"
+    );
     setExpiresError(null);
     setItemsError(null);
     setClientError(null);
+    setDiscountError(null);
   }, [editNumber, editing]);
 
-  function handleItemsChange(nextItems: LineItem[], nextTotal: string) {
+  function handleItemsChange(nextItems: LineItem[], nextSubtotal: string) {
     setItems(nextItems);
-    setTotal(nextTotal);
+    setSubtotal(nextSubtotal);
     setItemsError(null);
   }
 
@@ -79,12 +103,18 @@ export function NewBudgetPage() {
       setItemsError("Agregue al menos un producto con cantidad.");
       return;
     }
+    if (discountPercent < 0 || discountPercent > 100) {
+      setDiscountError("El descuento debe estar entre 0 y 100%");
+      return;
+    }
     const customer = customers.find((item) => item.id === client);
     const budgetData = {
       client: customer ? `${customer.firstName} ${customer.lastName}` : "Sin definir",
       clientId: client,
       expires: formatInputDate(expires),
       items,
+      subtotal: formatMoney(parseNumberInput(subtotal)),
+      discount: discountPercent > 0 ? `${discountPercent}%` : undefined,
       total,
     };
     if (editing) {
@@ -176,8 +206,50 @@ export function NewBudgetPage() {
                 priceMode="sale"
                 initialItems={editing?.items}
                 onChange={handleItemsChange}
+                summaryLabel="Subtotal de productos"
               />
               <FieldError message={itemsError} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="budget-discount">Descuento (%)</Label>
+                <Input
+                  id="budget-discount"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={discount}
+                  onChange={(event) => {
+                    setDiscount(event.target.value);
+                    setDiscountError(null);
+                  }}
+                  placeholder="0"
+                  aria-invalid={!!discountError}
+                />
+                <FieldError message={discountError} />
+              </div>
+              <div className="flex items-end">
+                <div className="w-full space-y-1 rounded-lg border border-border p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="tabular-nums">{subtotal}</span>
+                  </div>
+                  {discountPercent > 0 && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Descuento ({discountPercent}%)</span>
+                      <span className="tabular-nums">
+                        − {formatMoney(discountAmount)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-border pt-1 font-semibold">
+                    <span>Total</span>
+                    <span className="tabular-nums">{total}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="justify-end gap-2">

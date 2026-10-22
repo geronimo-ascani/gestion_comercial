@@ -27,3 +27,12 @@ export function parsePercentInput(value: string): number {
   const parsed = parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+export function computePercentageDiscount(
+  subtotal: number,
+  percent: number
+): { amount: number; total: number } {
+  const safePercent = Math.min(Math.max(percent, 0), 100);
+  const amount = Math.round(subtotal * (safePercent / 100) * 100) / 100;
+  return { amount, total: Math.round((subtotal - amount) * 100) / 100 };
+}

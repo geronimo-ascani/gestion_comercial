@@ -25,6 +25,7 @@ interface LineItemsEditorProps {
   priceMode: PriceMode;
   onChange: (items: LineItem[], total: string) => void;
   initialItems?: LineItem[];
+  summaryLabel?: string;
 }
 
 export function LineItemsEditor({
@@ -32,6 +33,7 @@ export function LineItemsEditor({
   priceMode,
   onChange,
   initialItems = [],
+  summaryLabel = "Total",
 }: LineItemsEditorProps) {
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initialItems.map((item) => ({
@@ -226,7 +228,7 @@ export function LineItemsEditor({
       )}
 
       <div className="flex items-center justify-between border-t border-border pt-2">
-        <span className="text-sm text-muted-foreground">Total</span>
+        <span className="text-sm text-muted-foreground">{summaryLabel}</span>
         <span className="text-sm font-semibold tabular-nums">
           {formatMoney(total)}
         </span>

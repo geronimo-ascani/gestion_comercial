@@ -42,6 +42,12 @@ import {
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
+import {
+  computePercentageDiscount,
+  formatMoney,
+  parseNumberInput,
+  parsePercentInput,
+} from "~/lib/currency";
 import type {
   Budget,
   BudgetStatus,
@@ -105,6 +111,14 @@ function BudgetDetailDialog({
   trigger: ReactElement;
   onConvert: () => void;
 }) {
+  const discountPercent = budget.discount
+    ? parsePercentInput(budget.discount)
+    : 0;
+  const subtotalValue = parseNumberInput(budget.subtotal ?? budget.total);
+  const { amount: discountAmount } = computePercentageDiscount(
+    subtotalValue,
+    discountPercent
+  );
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
@@ -120,7 +134,16 @@ function BudgetDetailDialog({
         <div>
           <BudgetStatusBadge status={budget.status} />
         </div>
-        <OrderLineItemsTable items={budget.items} total={budget.total} />
+        <OrderLineItemsTable
+          items={budget.items}
+          total={budget.total}
+          subtotal={budget.discount ? (budget.subtotal ?? budget.total) : undefined}
+          discount={
+            budget.discount
+              ? `${budget.discount} — ${formatMoney(discountAmount)}`
+              : undefined
+          }
+        />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
             Cerrar

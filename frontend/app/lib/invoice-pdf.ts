@@ -1,6 +1,12 @@
 import type { SalesOrder } from "~/components/sales/sales-types";
 import { appConfig } from "~/config/app";
 import type { Invoice, InvoiceStatus } from "~/components/payments/payments-types";
+import {
+  computePercentageDiscount,
+  formatMoney,
+  parseNumberInput,
+  parsePercentInput,
+} from "~/lib/currency";
 
 const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   emitida: "Emitida",
@@ -85,6 +91,31 @@ export async function exportInvoiceAsPdf(order: SalesOrder, invoice: Invoice) {
   y += 6;
   pdf.line(margin, y, pageWidth - margin, y);
   y += 20;
+
+  const hasDiscount = Boolean(order.discount);
+  if (hasDiscount) {
+    const discountPercent = parsePercentInput(order.discount ?? "0");
+    const subtotalValue = parseNumberInput(order.subtotal ?? order.total);
+    const { amount: discountAmount } = computePercentageDiscount(
+      subtotalValue,
+      discountPercent
+    );
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    pdf.text("Subtotal", columns.qty, y, { align: "right" });
+    pdf.text(
+      order.subtotal ?? formatMoney(subtotalValue),
+      columns.subtotal,
+      y,
+      { align: "right" }
+    );
+    y += 14;
+    pdf.text(`Descuento (${order.discount})`, columns.qty, y, { align: "right" });
+    pdf.text(`− ${formatMoney(discountAmount)}`, columns.subtotal, y, {
+      align: "right",
+    });
+    y += 20;
+  }
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);

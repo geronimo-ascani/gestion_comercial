@@ -45,6 +45,8 @@ export interface Budget {
   date: string;
   expires: string;
   items: LineItem[];
+  subtotal?: string;
+  discount?: string;
   total: string;
   status: BudgetStatus;
 }

@@ -60,7 +60,17 @@ export function OrderPaymentStatusBadge({ status }: { status: PaymentStatus }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-export function OrderLineItemsTable({ items, total }: { items: LineItem[]; total: string }) {
+export function OrderLineItemsTable({
+  items,
+  total,
+  subtotal,
+  discount,
+}: {
+  items: LineItem[];
+  total: string;
+  subtotal?: string;
+  discount?: string;
+}) {
   return (
     <Table>
       <TableHeader>
@@ -92,6 +102,26 @@ export function OrderLineItemsTable({ items, total }: { items: LineItem[]; total
         )}
       </TableBody>
       <TableFooter>
+        {subtotal && (
+          <TableRow>
+            <TableCell colSpan={3} className="text-muted-foreground">
+              Subtotal
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground">
+              {subtotal}
+            </TableCell>
+          </TableRow>
+        )}
+        {discount && (
+          <TableRow>
+            <TableCell colSpan={3} className="text-muted-foreground">
+              Descuento
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground">
+              {discount}
+            </TableCell>
+          </TableRow>
+        )}
         <TableRow>
           <TableCell colSpan={3}>Total</TableCell>
           <TableCell className="text-right font-medium">{total}</TableCell>
