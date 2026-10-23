@@ -63,6 +63,8 @@ import { HeatmapPanel } from "./heatmap-panel";
 import { ImmobilizedInventory } from "./immobilized-inventory";
 import { NewVsRecurrent } from "./new-vs-recurrent-panel";
 import { RankingsPanel } from "./rankings-panel";
+import { ProviderDeliveryRankingPanel } from "./provider-delivery-ranking-panel";
+import { usePurchaseOrders } from "../purchases/purchases-store";
 
 function scale(value: number, factor: number): number {
   return Math.round(value * factor);
@@ -72,6 +74,7 @@ export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
   const [previewOpen, setPreviewOpen] = useState(false);
   const loading = useInitialLoading();
+  const purchaseOrders = usePurchaseOrders();
   const config = periodConfigs[period];
 
   const payments = basePayments.map((payment) => ({
@@ -321,6 +324,8 @@ export function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ProviderDeliveryRankingPanel orders={purchaseOrders} />
         </>
       )}
 

@@ -21,8 +21,10 @@ export interface Provider {
 
 export interface PurchaseOrder {
   number: string;
+  providerId: string;
   provider: string;
   date: string;
+  receivedDate?: string;
   items: LineItem[];
   total: string;
   status: PurchaseOrderStatus;

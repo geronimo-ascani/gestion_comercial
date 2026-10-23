@@ -57,6 +57,7 @@ export function NewPurchaseOrderPage() {
     const picked = providers.find((item) => item.id === provider);
     const purchaseOrder: PurchaseOrder = {
       number: nextOrderNumber,
+      providerId: provider,
       provider: picked ? picked.name : "Sin definir",
       date: formatDate(new Date()),
       items,

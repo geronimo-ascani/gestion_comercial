@@ -62,7 +62,9 @@ function PurchaseOrderDetailDialog({
           <DialogTitle>
             Orden de compra {order.number} — {order.provider}
           </DialogTitle>
-          <DialogDescription>{order.date}</DialogDescription>
+          <DialogDescription>
+            Pedido: {order.date} · Recepción: {order.receivedDate ?? "Pendiente"}
+          </DialogDescription>
         </DialogHeader>
         <div>
           <PurchaseOrderStatusBadge status={order.status} />
@@ -154,7 +156,7 @@ export function PurchasesPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={7} />
+            <TableSkeleton rows={6} columns={8} />
           ) : (
             <Table>
               <TableHeader>
@@ -162,6 +164,7 @@ export function PurchasesPage() {
                   <TableHead>N° Orden</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Fecha</TableHead>
+                  <TableHead>Recepción</TableHead>
                   <TableHead className="text-right">Productos</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
@@ -172,7 +175,7 @@ export function PurchasesPage() {
               {filteredOrders.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {orders.length === 0
@@ -190,6 +193,7 @@ export function PurchasesPage() {
                       {order.provider}
                     </TableCell>
                     <TableCell>{order.date}</TableCell>
+                    <TableCell>{order.receivedDate ?? "Pendiente"}</TableCell>
                     <TableCell className="text-right">
                       {order.items.length}
                     </TableCell>
