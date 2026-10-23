@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useState, type FormEvent, type ReactElement } from "react";
+import { Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -43,8 +43,18 @@ import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import { ivaConditionLabels, type Product } from "./products-types";
-import { removeProduct, useProducts } from "./products-store";
+import {
+  ivaConditionLabels,
+  type Product,
+  UNCATEGORIZED_CATEGORY,
+} from "./products-types";
+import {
+  addCategory,
+  removeCategory,
+  removeProduct,
+  useCategories,
+  useProducts,
+} from "./products-store";
 
 function formatPercent(value: number): string {
   return `${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`;
@@ -105,11 +115,141 @@ function ProductDeleteDialog({
   );
 }
 
+function CategoryManagementDialog({
+  categories,
+  products,
+  onCategoryDeleted,
+}: {
+  categories: string[];
+  products: Product[];
+  onCategoryDeleted: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  function handleAddCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!addCategory(name)) {
+      setError("Ingrese un nombre nuevo para la categoría.");
+      return;
+    }
+    setName("");
+    setError(null);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="outline">
+            <Tags />
+            Categorías
+          </Button>
+        }
+      />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Administrar categorías</DialogTitle>
+          <DialogDescription>
+            Al eliminar una categoría, sus productos quedan como “Sin categoría”.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="flex gap-2" onSubmit={handleAddCategory}>
+          <Input
+            aria-label="Nombre de la categoría"
+            placeholder="Nueva categoría"
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value);
+              setError(null);
+            }}
+          />
+          <Button type="submit" aria-label="Agregar categoría">
+            <Plus />
+          </Button>
+        </form>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="max-h-64 divide-y overflow-y-auto">
+          {categories.map((category) => {
+            const productCount = products.filter(
+              (product) => product.category === category
+            ).length;
+            const isReserved = category === UNCATEGORIZED_CATEGORY;
+
+            return (
+              <div
+                key={category}
+                className="flex min-h-12 items-center justify-between gap-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{category}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {productCount} productos
+                  </p>
+                </div>
+                {!isReserved && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 text-destructive hover:text-destructive"
+                    aria-label={`Eliminar categoría ${category}`}
+                    onClick={() => setDeleteTarget(category)}
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {deleteTarget && (
+          <div className="space-y-3 rounded-md border border-destructive/30 p-3">
+            <p className="text-sm">
+              ¿Eliminar “{deleteTarget}”? Los productos asociados pasarán a
+              “Sin categoría”.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  removeCategory(deleteTarget);
+                  setDeleteTarget(null);
+                  onCategoryDeleted();
+                }}
+              >
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cerrar</DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProductsPage() {
   const navigate = useNavigate();
   const loading = useInitialLoading();
   const products = useProducts();
+  const categories = useCategories();
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("all");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [status, setStatus] = useState<"all" | StockStatus>("all");
@@ -117,15 +257,16 @@ export function ProductsPage() {
 
   const filtered = products.filter((product) => {
     const haystack =
-      `${product.code} ${product.name} ${product.description}`.toLowerCase();
+      `${product.code} ${product.name} ${product.category} ${product.description}`.toLowerCase();
     const matchesQuery = haystack.includes(debouncedQuery.trim().toLowerCase());
+    const matchesCategory = category === "all" || product.category === category;
     const min = parseNumberInput(priceMin);
     const max = parseNumberInput(priceMax);
     const matchesPrice =
       (min === 0 || product.salePrice >= min) &&
       (max === 0 || product.salePrice <= max);
     const matchesStatus = status === "all" || stockStatus(product) === status;
-    return matchesQuery && matchesPrice && matchesStatus;
+    return matchesQuery && matchesCategory && matchesPrice && matchesStatus;
   });
 
   function openNewProduct() {
@@ -141,10 +282,17 @@ export function ProductsPage() {
             Catálogo de productos con stock y precios.
           </p>
         </div>
-        <Button onClick={openNewProduct}>
-          <Plus />
-          Nuevo producto
-        </Button>
+        <div className="flex gap-2">
+          <CategoryManagementDialog
+            categories={categories}
+            products={products}
+            onCategoryDeleted={() => setCategory("all")}
+          />
+          <Button onClick={openNewProduct}>
+            <Plus />
+            Nuevo producto
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -158,6 +306,26 @@ export function ProductsPage() {
           />
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-2">
+            <Label htmlFor="category-filter">Categoría</Label>
+            <Select
+              items={{ all: "Todas" }}
+              value={category}
+              onValueChange={(value) => setCategory(value ?? "all")}
+            >
+              <SelectTrigger id="category-filter" className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {categories.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {item}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="price-min">Precio mínimo</Label>
             <Input
@@ -208,13 +376,14 @@ export function ProductsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={8} />
+            <TableSkeleton rows={6} columns={9} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
                   <TableHead>Producto</TableHead>
+                  <TableHead>Categoría</TableHead>
                   <TableHead className="text-right">Margen</TableHead>
                   <TableHead className="text-right">Precio venta</TableHead>
                   <TableHead>Condición IVA</TableHead>
@@ -227,7 +396,7 @@ export function ProductsPage() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="h-24 text-center text-muted-foreground"
                     >
                       {products.length === 0
@@ -244,6 +413,7 @@ export function ProductsPage() {
                       <TableCell className="font-medium">
                         {product.name}
                       </TableCell>
+                      <TableCell>{product.category}</TableCell>
                       <TableCell className="text-right">
                         {product.margin != null
                           ? formatPercent(product.margin)

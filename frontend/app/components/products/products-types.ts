@@ -47,6 +47,8 @@ export const ivaArcaCodes: Record<IvaCondition, string> = {
 
 export type IvaOperationCode = "E" | "N" | "X" | "Z" | "C";
 
+export const UNCATEGORIZED_CATEGORY = "Sin categoría";
+
 export const ivaOperationCodeLabels: Record<IvaOperationCode, string> = {
   E: "Operaciones exentas",
   N: "No gravado",
@@ -66,6 +68,7 @@ export interface Product {
   id: string;
   code: string;
   name: string;
+  category: string;
   description: string;
   purchasePrice: number;
   margin: number;

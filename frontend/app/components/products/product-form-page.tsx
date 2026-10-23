@@ -31,12 +31,14 @@ import {
   type IvaCondition,
   type IvaOperationCode,
   type Product,
+  UNCATEGORIZED_CATEGORY,
 } from "./products-types";
 import { calculateMarginValue, calculateSalePrice } from "./products-calc";
 import {
   addProduct,
   getNextProductCode,
   updateProduct,
+  useCategories,
   useProducts,
 } from "./products-store";
 
@@ -55,6 +57,7 @@ export function ProductFormPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const products = useProducts();
+  const categories = useCategories();
   const editId = searchParams.get("edit");
   const editing = editId
     ? (products.find((product) => product.id === editId) ?? null)
@@ -63,6 +66,11 @@ export function ProductFormPage() {
   const backTo = "/products";
 
   const [name, setName] = useState(editing?.name ?? "");
+  const [category, setCategory] = useState(
+    editing?.category ??
+      categories.find((item) => item !== UNCATEGORIZED_CATEGORY) ??
+      UNCATEGORIZED_CATEGORY
+  );
   const [description, setDescription] = useState(editing?.description ?? "");
   const [purchasePrice, setPurchasePrice] = useState(
     editing ? String(editing.purchasePrice) : ""
@@ -119,6 +127,7 @@ export function ProductFormPage() {
     event.preventDefault();
     const next: Record<string, string | null> = {
       name: requireText(name, "Nombre"),
+      category: category.trim() ? null : "Seleccione una categoría",
       purchasePrice:
         purchasePrice.trim() === ""
           ? "El precio de compra es obligatorio"
@@ -147,6 +156,7 @@ export function ProductFormPage() {
       id: editing?.id ?? crypto.randomUUID(),
       code,
       name: name.trim(),
+      category,
       description: description.trim(),
       purchasePrice: purchaseAmount,
       margin: marginAmount,
@@ -200,6 +210,29 @@ export function ProductFormPage() {
                 />
                 <FieldError message={errors.name} />
               </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="product-category">Categoría</Label>
+              <Select
+                value={category}
+                onValueChange={(value) => {
+                  setCategory(value ?? "");
+                  setErrors((previous) => ({ ...previous, category: null }));
+                }}
+              >
+                <SelectTrigger id="product-category" className="w-full">
+                  <SelectValue placeholder="Seleccionar categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError message={errors.category} />
             </div>
 
             <div className="mt-4 space-y-2">

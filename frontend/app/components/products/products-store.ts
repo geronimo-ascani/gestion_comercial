@@ -6,6 +6,7 @@ import {
   type IvaCondition,
   type IvaOperationCode,
   type Product,
+  UNCATEGORIZED_CATEGORY,
 } from "./products-types";
 
 function seed(
@@ -18,13 +19,15 @@ function seed(
   stock: number,
   minStock: number,
   ivaCondition: IvaCondition,
-  ivaOperationCode?: IvaOperationCode
+  ivaOperationCode?: IvaOperationCode,
+  category = UNCATEGORIZED_CATEGORY
 ): Product {
   const salePrice = calculateSalePrice(purchasePrice, margin, ivaRates[ivaCondition]);
   return {
     id,
     code,
     name,
+    category,
     description,
     purchasePrice,
     margin,
@@ -37,15 +40,21 @@ function seed(
 }
 
 const demoProducts: Product[] = [
-  seed("prod-1", "PRD-001", 'Notebook Gamer 15"', "16 GB RAM · 512 GB SSD · RTX 4060", 850000, 30, 8, 3, "gravado21"),
-  seed("prod-2", "PRD-002", 'Monitor 24" Full HD', "Panel IPS · 75 Hz", 180000, 40, 0, 5, "gravado27"),
-  seed("prod-3", "PRD-003", "Teclado mecánico TKL", "Switches red · retroiluminado", 45000, 70, 25, 5, "gravado5"),
-  seed("prod-4", "PRD-004", "Mouse ergonómico", "Inalámbrico · 1600 DPI", 18000, 80, 40, 10, "gravado10_5"),
-  seed("prod-5", "PRD-005", "Auriculares Bluetooth", "Cancelación de ruido", 52000, 60, 4, 6, "exento", "E"),
-  seed("prod-6", "PRD-006", "Disco SSD 1TB NVMe", "Lectura 3500 MB/s", 96000, 45, 12, 4, "gravado21"),
+  seed("prod-1", "PRD-001", 'Notebook Gamer 15"', "16 GB RAM · 512 GB SSD · RTX 4060", 850000, 30, 8, 3, "gravado21", undefined, "Informática"),
+  seed("prod-2", "PRD-002", 'Monitor 24" Full HD', "Panel IPS · 75 Hz", 180000, 40, 0, 5, "gravado27", undefined, "Informática"),
+  seed("prod-3", "PRD-003", "Teclado mecánico TKL", "Switches red · retroiluminado", 45000, 70, 25, 5, "gravado5", undefined, "Periféricos"),
+  seed("prod-4", "PRD-004", "Mouse ergonómico", "Inalámbrico · 1600 DPI", 18000, 80, 40, 10, "gravado10_5", undefined, "Periféricos"),
+  seed("prod-5", "PRD-005", "Auriculares Bluetooth", "Cancelación de ruido", 52000, 60, 4, 6, "exento", "E", "Periféricos"),
+  seed("prod-6", "PRD-006", "Disco SSD 1TB NVMe", "Lectura 3500 MB/s", 96000, 45, 12, 4, "gravado21", undefined, "Almacenamiento"),
 ];
 
 let products: Product[] = [...demoProducts];
+let categories = [
+  "Informática",
+  "Periféricos",
+  "Almacenamiento",
+  UNCATEGORIZED_CATEGORY,
+];
 
 const listeners = new Set<() => void>();
 
@@ -70,6 +79,44 @@ export function getProductsSnapshot(): Product[] {
 
 export function useProducts(): Product[] {
   return useSyncExternalStore(subscribe, getProducts, getProducts);
+}
+
+function getCategories() {
+  return categories;
+}
+
+export function useCategories(): string[] {
+  return useSyncExternalStore(subscribe, getCategories, getCategories);
+}
+
+export function addCategory(name: string): boolean {
+  const normalizedName = name.trim();
+  if (
+    !normalizedName ||
+    categories.some(
+      (category) =>
+        category.toLocaleLowerCase("es") ===
+        normalizedName.toLocaleLowerCase("es")
+    )
+  ) {
+    return false;
+  }
+
+  categories = [...categories, normalizedName];
+  emit();
+  return true;
+}
+
+export function removeCategory(name: string) {
+  if (name === UNCATEGORIZED_CATEGORY || !categories.includes(name)) return;
+
+  categories = categories.filter((category) => category !== name);
+  products = products.map((product) =>
+    product.category === name
+      ? { ...product, category: UNCATEGORIZED_CATEGORY }
+      : product
+  );
+  emit();
 }
 
 export function getNextProductCode(): string {
