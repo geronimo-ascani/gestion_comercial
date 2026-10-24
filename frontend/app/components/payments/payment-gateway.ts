@@ -7,7 +7,8 @@ export async function simulateGatewayPayment(
 ): Promise<{ status: "aprobado" | "rechazado"; reference: string }> {
   await wait(700 + Math.random() * 400);
   const approved = Math.random() < 0.85;
-  const prefix = method === "mercadopago" ? "MP" : "TC";
+  const prefix =
+    method === "mercadopago" ? "MP" : method === "tarjeta" ? "TC" : "GW";
   return {
     status: approved ? "aprobado" : "rechazado",
     reference: `${prefix}-${new Date().getFullYear()}-${Math.floor(

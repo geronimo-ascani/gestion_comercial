@@ -16,6 +16,8 @@ import type {
   PaymentMethod,
   PaymentStatus,
 } from "./sales-types";
+import { formatMoney, parseNumberInput } from "~/lib/currency";
+import { getPaymentMethodLabel } from "../payments/payment-methods-store";
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const config: Record<OrderStatus, { label: string; variant: "success" | "warning" | "info" | "secondary" | "destructive" }> = {
@@ -30,13 +32,13 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
 }
 
 export function PaymentBadge({ payment }: { payment: PaymentMethod }) {
-  const config: Record<PaymentMethod, { label: string; variant: "secondary" | "outline" | "info" }> = {
-    efectivo: { label: "Efectivo", variant: "secondary" },
-    tarjeta: { label: "Tarjeta", variant: "outline" },
-    mercadopago: { label: "MercadoPago", variant: "info" },
-  };
-  const { label, variant } = config[payment];
-  return <Badge variant={variant}>{label}</Badge>;
+  const variant =
+    payment === "mercadopago"
+      ? "info"
+      : payment === "tarjeta"
+        ? "outline"
+        : "secondary";
+  return <Badge variant={variant}>{getPaymentMethodLabel(payment)}</Badge>;
 }
 
 export function BudgetStatusBadge({ status }: { status: BudgetStatus }) {
@@ -71,6 +73,20 @@ export function OrderLineItemsTable({
   subtotal?: string;
   discount?: string;
 }) {
+  const hasLineDiscounts = items.some((item) => item.discount);
+  const columnCount = hasLineDiscounts ? 5 : 4;
+  const lineDiscountTotal = items.reduce(
+    (sum, item) =>
+      sum + (item.discountAmount ? parseNumberInput(item.discountAmount) : 0),
+    0
+  );
+  const grossSubtotal = items.reduce(
+    (sum, item) => sum + item.qty * parseNumberInput(item.unitPrice),
+    0
+  );
+  const hasSubtotal = subtotal !== undefined || lineDiscountTotal > 0;
+  const subtotalDisplay =
+    lineDiscountTotal > 0 ? formatMoney(grossSubtotal) : subtotal;
   return (
     <Table>
       <TableHeader>
@@ -78,6 +94,9 @@ export function OrderLineItemsTable({
           <TableHead>Producto</TableHead>
           <TableHead className="text-right">Cantidad</TableHead>
           <TableHead className="text-right">P. unitario</TableHead>
+          {hasLineDiscounts && (
+            <TableHead className="text-right">Desc.</TableHead>
+          )}
           <TableHead className="text-right">Subtotal</TableHead>
         </TableRow>
       </TableHeader>
@@ -87,13 +106,18 @@ export function OrderLineItemsTable({
             <TableCell className="font-medium">{item.product}</TableCell>
             <TableCell className="text-right">{item.qty}</TableCell>
             <TableCell className="text-right">{item.unitPrice}</TableCell>
+            {hasLineDiscounts && (
+              <TableCell className="text-right text-muted-foreground">
+                {item.discount ?? "—"}
+              </TableCell>
+            )}
             <TableCell className="text-right">{item.subtotal}</TableCell>
           </TableRow>
         ))}
         {items.length === 0 && (
           <TableRow>
             <TableCell
-              colSpan={4}
+              colSpan={columnCount}
               className="h-16 text-center text-muted-foreground"
             >
               Sin productos cargados.
@@ -102,19 +126,29 @@ export function OrderLineItemsTable({
         )}
       </TableBody>
       <TableFooter>
-        {subtotal && (
+        {hasSubtotal && (
           <TableRow>
-            <TableCell colSpan={3} className="text-muted-foreground">
+            <TableCell colSpan={columnCount - 1} className="text-muted-foreground">
               Subtotal
             </TableCell>
             <TableCell className="text-right text-muted-foreground">
-              {subtotal}
+              {subtotalDisplay}
+            </TableCell>
+          </TableRow>
+        )}
+        {lineDiscountTotal > 0 && (
+          <TableRow>
+            <TableCell colSpan={columnCount - 1} className="text-muted-foreground">
+              Descuento por línea
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground">
+              − {formatMoney(lineDiscountTotal)}
             </TableCell>
           </TableRow>
         )}
         {discount && (
           <TableRow>
-            <TableCell colSpan={3} className="text-muted-foreground">
+            <TableCell colSpan={columnCount - 1} className="text-muted-foreground">
               Descuento
             </TableCell>
             <TableCell className="text-right text-muted-foreground">
@@ -123,7 +157,7 @@ export function OrderLineItemsTable({
           </TableRow>
         )}
         <TableRow>
-          <TableCell colSpan={3}>Total</TableCell>
+          <TableCell colSpan={columnCount - 1}>Total</TableCell>
           <TableCell className="text-right font-medium">{total}</TableCell>
         </TableRow>
       </TableFooter>

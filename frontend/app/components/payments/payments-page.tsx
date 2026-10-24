@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { CheckCheck, Download, Pencil, Search, Wallet } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { CheckCheck, Download, Pencil, Plus, Search, Wallet } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -36,7 +36,10 @@ import { formatMoney } from "~/lib/currency";
 import { compareByDateDesc } from "~/lib/utils";
 import { useCurrentUser } from "../auth/session-store";
 import type { PaymentMethod, PaymentTransaction } from "./payments-types";
-import { paymentMethodLabels } from "./payments-types";
+import {
+  getPaymentMethodLabel,
+  usePaymentMethods,
+} from "./payment-methods-store";
 import {
   reconcilePayments,
   useInvoices,
@@ -51,8 +54,6 @@ import {
 import { ReconcilePaymentDialog } from "./reconcile-payment-dialog";
 
 type PaymentTab = "cobros" | "conciliacion" | "reportes";
-
-const methodOptions: PaymentMethod[] = ["efectivo", "tarjeta", "mercadopago"];
 
 function downloadCsv(filename: string, rows: (string | number)[][]) {
   const csv = rows
@@ -74,6 +75,7 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 }
 
 export function PaymentsPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const user = useCurrentUser();
@@ -81,6 +83,7 @@ export function PaymentsPage() {
   const loading = useInitialLoading();
   const invoices = useInvoices();
   const payments = usePayments();
+  const paymentMethods = usePaymentMethods();
 
   const activeTab: PaymentTab =
     requestedTab === "conciliacion" && isAdmin
@@ -119,16 +122,17 @@ export function PaymentsPage() {
     const pending = invoices
       .filter((invoice) => invoice.status !== "pagada")
       .reduce((sum, invoice) => sum + invoice.amount, 0);
-    const byMethod = methodOptions.map((method) => ({
-      method,
+    const byMethod = paymentMethods.map((method) => ({
+      method: method.id,
       amount: payments
         .filter(
-          (payment) => payment.status === "aprobado" && payment.method === method
+          (payment) =>
+            payment.status === "aprobado" && payment.method === method.id
         )
         .reduce((sum, payment) => sum + payment.amount, 0),
     }));
     return { collected, pending, byMethod };
-  }, [payments, invoices]);
+  }, [payments, invoices, paymentMethods]);
 
   const pendingVirtual = payments.filter(
     (payment) =>
@@ -174,7 +178,7 @@ export function PaymentsPage() {
         payment.date,
         payment.client,
         payment.orderNumber,
-        paymentMethodLabels[payment.method],
+        getPaymentMethodLabel(payment.method),
         payment.amount,
         payment.conciliationStatus,
         payment.gatewayReference ?? "",
@@ -191,6 +195,10 @@ export function PaymentsPage() {
             Cobros, conciliación de facturas y reportes.
           </p>
         </div>
+        <Button onClick={() => navigate("/payments/new-method")}>
+          <Plus />
+          Nuevo medio de pago
+        </Button>
       </div>
 
       {isAdmin && (
@@ -253,9 +261,9 @@ export function PaymentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    {methodOptions.map((method) => (
-                      <SelectItem key={method} value={method}>
-                        {paymentMethodLabels[method]}
+                    {paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -433,7 +441,7 @@ export function PaymentsPage() {
               {totals.byMethod.map((entry) => (
                 <KpiCard
                   key={entry.method}
-                  label={paymentMethodLabels[entry.method]}
+                  label={getPaymentMethodLabel(entry.method)}
                   value={formatMoney(entry.amount)}
                 />
               ))}

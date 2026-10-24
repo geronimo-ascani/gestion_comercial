@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CreditCard, Loader2, Wallet } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -24,6 +24,7 @@ import {
 import { parseNumberInput } from "~/lib/currency";
 import type { PaymentMethod, SalesOrder } from "../sales/sales-types";
 import { updateOrder } from "../sales/sales-store";
+import { usePaymentMethods } from "./payment-methods-store";
 import { simulateGatewayPayment } from "./payment-gateway";
 import {
   createInvoiceFromOrder,
@@ -46,6 +47,7 @@ export function RecordPaymentDialog({
   const [amount, setAmount] = useState("");
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const paymentMethods = usePaymentMethods();
   const submittingRef = useRef(false);
 
   useEffect(() => {
@@ -140,15 +142,11 @@ export function RecordPaymentDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="efectivo">
-                    <Wallet className="size-4" /> Efectivo
-                  </SelectItem>
-                  <SelectItem value="tarjeta">
-                    <CreditCard className="size-4" /> Tarjeta de crédito/débito
-                  </SelectItem>
-                  <SelectItem value="mercadopago">
-                    <Wallet className="size-4" /> Billetera MercadoPago
-                  </SelectItem>
+                  {paymentMethods.map((paymentMethod) => (
+                    <SelectItem key={paymentMethod.id} value={paymentMethod.id}>
+                      {paymentMethod.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

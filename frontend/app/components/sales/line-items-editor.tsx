@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Combobox } from "~/components/ui/combobox";
 
-import { formatMoney, parseNumberInput } from "~/lib/currency";
+import { formatMoney, parseNumberInput, parsePercentInput } from "~/lib/currency";
 import type { Product } from "../products/products-types";
 import type { LineItem } from "./sales-types";
 
@@ -18,6 +18,21 @@ interface EditorLine {
   productName: string;
   qty: string;
   price: string;
+  discount: string;
+}
+
+function computeLine(line: EditorLine) {
+  const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
+  const price = parseNumberInput(line.price);
+  const gross = qty * price;
+  const discountPercent = Math.min(
+    Math.max(parsePercentInput(line.discount), 0),
+    100
+  );
+  const discountAmount =
+    Math.round(gross * (discountPercent / 100) * 100) / 100;
+  const net = Math.round((gross - discountAmount) * 100) / 100;
+  return { qty, price, gross, discountPercent, discountAmount, net };
 }
 
 interface LineItemsEditorProps {
@@ -26,6 +41,8 @@ interface LineItemsEditorProps {
   onChange: (items: LineItem[], total: string) => void;
   initialItems?: LineItem[];
   summaryLabel?: string;
+  /** Habilita el descuento porcentual por línea (ventas). */
+  allowLineDiscount?: boolean;
 }
 
 export function LineItemsEditor({
@@ -34,6 +51,7 @@ export function LineItemsEditor({
   onChange,
   initialItems = [],
   summaryLabel = "Total",
+  allowLineDiscount = false,
 }: LineItemsEditorProps) {
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initialItems.map((item) => ({
@@ -42,6 +60,7 @@ export function LineItemsEditor({
       productName: item.product,
       qty: String(item.qty),
       price: String(parseNumberInput(item.unitPrice)),
+      discount: item.discount ? String(parsePercentInput(item.discount)) : "0",
     }))
   );
 
@@ -53,36 +72,32 @@ export function LineItemsEditor({
       })
       .map((line) => {
         const product = products.find((item) => item.id === line.productId);
-        const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
-        const price = parseNumberInput(line.price);
-        const subtotal = qty * price;
+        const { qty, price, discountPercent, discountAmount, net } =
+          computeLine(line);
         return {
           sku: product?.code,
           product: line.productName,
           qty,
           unitPrice: formatMoney(price),
-          subtotal: formatMoney(subtotal),
+          discount: discountPercent > 0 ? `${discountPercent}%` : undefined,
+          discountAmount:
+            discountAmount > 0 ? formatMoney(discountAmount) : undefined,
+          subtotal: formatMoney(net),
         };
       });
-    const total = lines.reduce((sum, line) => {
-      const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
-      return sum + qty * parseNumberInput(line.price);
-    }, 0);
+    const total = lines.reduce((sum, line) => sum + computeLine(line).net, 0);
     onChange(items, formatMoney(total));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines]);
 
   const total = useMemo(() => {
-    return lines.reduce((sum, line) => {
-      const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
-      return sum + qty * parseNumberInput(line.price);
-    }, 0);
+    return lines.reduce((sum, line) => sum + computeLine(line).net, 0);
   }, [lines]);
 
   function addLine() {
     setLines((prev) => [
       ...prev,
-      { productId: "", productName: "", qty: "1", price: "" },
+      { productId: "", productName: "", qty: "1", price: "", discount: "0" },
     ]);
   }
 
@@ -135,6 +150,16 @@ export function LineItemsEditor({
         </p>
       ) : (
         <div className="space-y-2">
+          {allowLineDiscount && (
+            <div className="hidden items-center gap-2 px-2 text-xs font-medium text-muted-foreground sm:flex">
+              <span className="min-w-0 flex-1">Producto</span>
+              <span className="w-20 text-center">Cantidad</span>
+              <span className="w-28 text-center">P. unitario</span>
+              <span className="w-20 text-center">Desc. %</span>
+              <span className="w-28 text-right">Subtotal</span>
+              <span className="w-8" />
+            </div>
+          )}
           {lines.map((line, index) => {
             const usedIds = lines
               .filter((_, lineIndex) => lineIndex !== index)
@@ -143,8 +168,10 @@ export function LineItemsEditor({
             const available = products.filter(
               (product) => !usedIds.includes(product.id)
             );
-            const qty = Math.max(1, Math.floor(parseNumberInput(line.qty)));
-            const subtotal = qty * parseNumberInput(line.price);
+            const { qty, discountAmount, net } = computeLine(line);
+            const rawDiscount = parsePercentInput(line.discount);
+            const invalidDiscount =
+              allowLineDiscount && (rawDiscount < 0 || rawDiscount > 100);
             const selectedProduct = products.find(
               (product) => product.id === line.productId
             );
@@ -156,7 +183,7 @@ export function LineItemsEditor({
                 key={index}
                 className={cn(
                   "flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-center",
-                  insufficient && "border-destructive"
+                  (insufficient || invalidDiscount) && "border-destructive"
                 )}
               >
                 <Combobox
@@ -194,8 +221,24 @@ export function LineItemsEditor({
                   className="w-full sm:w-28"
                   aria-label="Precio unitario"
                 />
+                {allowLineDiscount && (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={line.discount}
+                    onChange={(event) =>
+                      updateLine(index, { discount: event.target.value })
+                    }
+                    placeholder="0"
+                    className="w-full sm:w-20"
+                    aria-label={`Descuento de ${line.productName || "producto"} (%)`}
+                    aria-invalid={invalidDiscount}
+                  />
+                )}
                 <span className="w-full text-right text-sm font-semibold tabular-nums sm:w-28">
-                  {formatMoney(subtotal)}
+                  {formatMoney(net)}
                 </span>
                 <Button
                   type="button"
@@ -207,18 +250,29 @@ export function LineItemsEditor({
                 >
                   <Trash2 />
                 </Button>
-                {selectedProduct && (
+                {(selectedProduct || discountAmount > 0 || invalidDiscount) && (
                   <span
                     className={cn(
                       "text-xs font-medium",
-                      insufficient
+                      insufficient || invalidDiscount
                         ? "text-destructive"
                         : "text-muted-foreground"
                     )}
                   >
-                    Stock: {selectedProduct.stock}
-                    {insufficient &&
-                      ` · Cantidad excede el stock disponible`}
+                    {selectedProduct && (
+                      <>
+                        Stock: {selectedProduct.stock}
+                        {insufficient &&
+                          ` · Cantidad excede el stock disponible`}
+                      </>
+                    )}
+                    {selectedProduct &&
+                      (discountAmount > 0 || invalidDiscount) &&
+                      " · "}
+                    {discountAmount > 0 &&
+                      `Descuento: − ${formatMoney(discountAmount)}`}
+                    {discountAmount > 0 && invalidDiscount && " · "}
+                    {invalidDiscount && "Descuento entre 0 y 100%"}
                   </span>
                 )}
               </div>

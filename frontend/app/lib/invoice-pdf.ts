@@ -81,7 +81,22 @@ export async function exportInvoiceAsPdf(order: SalesOrder, invoice: Invoice) {
     pdf.text(String(item.qty), columns.qty, y, { align: "right" });
     pdf.text(item.unitPrice, columns.unit, y, { align: "right" });
     pdf.text(item.subtotal, columns.subtotal, y, { align: "right" });
-    y += Math.max(wrapped.length * 13, 16);
+    let rowHeight = wrapped.length * 13;
+    if (item.discount) {
+      pdf.setFontSize(8);
+      pdf.setTextColor(110);
+      pdf.text(
+        `Descuento ${item.discount}${
+          item.discountAmount ? ` (− ${item.discountAmount})` : ""
+        }`,
+        columns.product,
+        y + rowHeight
+      );
+      pdf.setTextColor(0);
+      pdf.setFontSize(10);
+      rowHeight += 11;
+    }
+    y += Math.max(rowHeight, 16);
     if (y > pdf.internal.pageSize.getHeight() - 120) {
       pdf.addPage();
       y = margin;
@@ -92,7 +107,12 @@ export async function exportInvoiceAsPdf(order: SalesOrder, invoice: Invoice) {
   pdf.line(margin, y, pageWidth - margin, y);
   y += 20;
 
-  const hasDiscount = Boolean(order.discount);
+  const lineDiscountTotal = order.items.reduce(
+    (sum, item) =>
+      sum + (item.discountAmount ? parseNumberInput(item.discountAmount) : 0),
+    0
+  );
+  const hasDiscount = Boolean(order.discount) || lineDiscountTotal > 0;
   if (hasDiscount) {
     const discountPercent = parsePercentInput(order.discount ?? "0");
     const subtotalValue = parseNumberInput(order.subtotal ?? order.total);
@@ -104,16 +124,28 @@ export async function exportInvoiceAsPdf(order: SalesOrder, invoice: Invoice) {
     pdf.setFontSize(10);
     pdf.text("Subtotal", columns.qty, y, { align: "right" });
     pdf.text(
-      order.subtotal ?? formatMoney(subtotalValue),
+      formatMoney(subtotalValue + lineDiscountTotal),
       columns.subtotal,
       y,
       { align: "right" }
     );
     y += 14;
-    pdf.text(`Descuento (${order.discount})`, columns.qty, y, { align: "right" });
-    pdf.text(`− ${formatMoney(discountAmount)}`, columns.subtotal, y, {
-      align: "right",
-    });
+    if (lineDiscountTotal > 0) {
+      pdf.text("Descuento por línea", columns.qty, y, { align: "right" });
+      pdf.text(`− ${formatMoney(lineDiscountTotal)}`, columns.subtotal, y, {
+        align: "right",
+      });
+      y += 14;
+    }
+    if (order.discount) {
+      pdf.text(`Descuento (${order.discount})`, columns.qty, y, {
+        align: "right",
+      });
+      pdf.text(`− ${formatMoney(discountAmount)}`, columns.subtotal, y, {
+        align: "right",
+      });
+      y += 14;
+    }
     y += 20;
   }
 

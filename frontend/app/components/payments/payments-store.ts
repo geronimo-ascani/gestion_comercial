@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { parseNumberInput } from "~/lib/currency";
 import type { SalesOrder } from "../sales/sales-types";
 import { type Invoice, type InvoiceStatus, type PaymentMethod, type PaymentStatus, type PaymentTransaction } from "./payments-types";
+import { isGatewayPaymentMethod } from "./payment-methods-store";
 
 function seed(day: string): { invoices: Invoice[]; payments: PaymentTransaction[] } {
   const invoices: Invoice[] = [
@@ -329,5 +330,5 @@ export function reconcilePayments(): ReconciliationSummary {
 }
 
 export function isGatewayMethod(method: PaymentMethod): boolean {
-  return method === "tarjeta" || method === "mercadopago";
+  return isGatewayPaymentMethod(method);
 }

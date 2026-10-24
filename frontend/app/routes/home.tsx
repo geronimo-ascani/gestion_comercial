@@ -1,5 +1,9 @@
-import { Navigate } from "react-router";
+import { redirect } from "react-router";
+
+export function loader() {
+  return redirect("/dashboard");
+}
 
 export default function HomePage() {
-  return <Navigate to="/dashboard" replace />;
+  return null;
 }

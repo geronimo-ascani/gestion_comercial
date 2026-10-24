@@ -23,7 +23,7 @@ import {
   parseNumberInput,
   parsePercentInput,
 } from "~/lib/currency";
-import type { LineItem, PaymentMethod } from "./sales-types";
+import type { LineItem, OrderDraft, PaymentMethod } from "./sales-types";
 import { formatDate } from "./sales-types";
 import { addOrder, updateBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
@@ -31,6 +31,7 @@ import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from ".
 import { useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
 import { createInvoiceFromOrder, usePayments } from "../payments/payments-store";
+import { usePaymentMethods } from "../payments/payment-methods-store";
 
 export function NewOrderPage() {
   const navigate = useNavigate();
@@ -40,6 +41,7 @@ export function NewOrderPage() {
   const customers = useCustomers();
   const products = useProducts();
   const payments = usePayments();
+  const paymentMethods = usePaymentMethods();
   const [searchParams] = useSearchParams();
 
   const editNumber = searchParams.get("edit");
@@ -97,9 +99,21 @@ export function NewOrderPage() {
   const [discountError, setDiscountError] = useState<string | null>(null);
 
   const discountPercent = parsePercentInput(discount);
+  const subtotalValue = parseNumberInput(subtotal);
+  const lineDiscountTotal = Math.max(
+    0,
+    Math.round(
+      (items.reduce(
+        (sum, item) => sum + item.qty * parseNumberInput(item.unitPrice),
+        0
+      ) -
+        subtotalValue) *
+        100
+    ) / 100
+  );
   const { amount: discountAmount, total: totalValue } =
     computePercentageDiscount(
-      parseNumberInput(subtotal),
+      subtotalValue,
       discountPercent
     );
   const total = formatMoney(totalValue);
@@ -155,6 +169,55 @@ export function NewOrderPage() {
       prefillAddressFromCustomer(sourceBudget.clientId ?? "");
     }
   }, [editNumber, editing, fromBudgetNumber, sourceBudget]);
+
+  // Restaura el borrador cuando se vuelve del formulario de medios de pago.
+  useEffect(() => {
+    const navState = location.state as
+      | { draft?: OrderDraft; selectPaymentMethod?: string }
+      | null;
+    if (!navState?.draft && !navState?.selectPaymentMethod) return;
+    const draft = navState.draft;
+    if (draft) {
+      setClient(draft.client);
+      setProvince(draft.province);
+      setLocality(draft.locality);
+      setStreet(draft.street);
+      setNumber(draft.number);
+      setApartment(draft.apartment);
+      setItems(draft.items);
+      setSubtotal(draft.subtotal);
+      setDiscount(draft.discount);
+      setPayment(draft.payment);
+    }
+    if (navState.selectPaymentMethod) {
+      setPayment(navState.selectPaymentMethod);
+    }
+    setAddressErrors({});
+    setItemsError(null);
+    setClientError(null);
+    setDiscountError(null);
+  }, [location.state]);
+
+  function handleAddPaymentMethod() {
+    const draft: OrderDraft = {
+      client,
+      province,
+      locality,
+      street,
+      number,
+      apartment,
+      payment,
+      items,
+      subtotal,
+      discount,
+    };
+    navigate("/payments/new-method", {
+      state: {
+        backTo: `${location.pathname}${location.search}`,
+        draft,
+      },
+    });
+  }
 
   function handleItemsChange(nextItems: LineItem[], nextSubtotal: string) {
     setItems(nextItems);
@@ -426,6 +489,7 @@ export function NewOrderPage() {
                 initialItems={editing?.items ?? sourceBudget?.items}
                 onChange={handleItemsChange}
                 summaryLabel="Subtotal de productos"
+                allowLineDiscount
               />
               <FieldError message={itemsError} />
             </div>
@@ -453,8 +517,20 @@ export function NewOrderPage() {
                 <div className="w-full space-y-1 rounded-lg border border-border p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="tabular-nums">{subtotal}</span>
+                    <span className="tabular-nums">
+                      {lineDiscountTotal > 0
+                        ? formatMoney(subtotalValue + lineDiscountTotal)
+                        : subtotal}
+                    </span>
                   </div>
+                  {lineDiscountTotal > 0 && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Descuento por línea</span>
+                      <span className="tabular-nums">
+                        − {formatMoney(lineDiscountTotal)}
+                      </span>
+                    </div>
+                  )}
                   {discountPercent > 0 && (
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>Descuento ({discountPercent}%)</span>
@@ -473,21 +549,32 @@ export function NewOrderPage() {
 
             <div className="space-y-2">
               <Label htmlFor="order-payment">Método de pago</Label>
-              <Select
-                value={payment}
-                onValueChange={(value) => setPayment(value as PaymentMethod)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="efectivo">Efectivo</SelectItem>
-                  <SelectItem value="tarjeta">
-                    Tarjeta de crédito/débito
-                  </SelectItem>
-                  <SelectItem value="mercadopago">MercadoPago</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select
+                  value={payment}
+                  onValueChange={(value) => setPayment(value as PaymentMethod)}
+                >
+                  <SelectTrigger id="order-payment" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((paymentMethod) => (
+                      <SelectItem key={paymentMethod.id} value={paymentMethod.id}>
+                        {paymentMethod.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="icon"
+                  aria-label="Agregar medio de pago"
+                  title="Agregar medio de pago"
+                  onClick={handleAddPaymentMethod}
+                >
+                  <Plus />
+                </Button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="justify-end gap-2">

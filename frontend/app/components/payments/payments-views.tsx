@@ -1,12 +1,12 @@
 import { Badge } from "~/components/ui/badge";
 
 import {
-  paymentMethodLabels,
   type ConciliationStatus,
   type InvoiceStatus,
   type PaymentMethod,
   type PaymentStatus,
 } from "./payments-types";
+import { getPaymentMethodLabel } from "./payment-methods-store";
 
 type BadgeVariant =
   | "success"
@@ -55,5 +55,5 @@ export function ConciliationBadge({ status }: { status: ConciliationStatus }) {
 
 export function MethodBadge({ method }: { method: PaymentMethod }) {
   const variant: BadgeVariant = method === "mercadopago" ? "info" : "secondary";
-  return <Badge variant={variant}>{paymentMethodLabels[method]}</Badge>;
+  return <Badge variant={variant}>{getPaymentMethodLabel(method)}</Badge>;
 }

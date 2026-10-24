@@ -1,4 +1,6 @@
-export type PaymentMethod = "efectivo" | "tarjeta" | "mercadopago";
+import type { PaymentMethod } from "../sales/sales-types";
+
+export type { PaymentMethod };
 
 export type PaymentStatus = "aprobado" | "pendiente" | "rechazado";
 
@@ -6,11 +8,6 @@ export type InvoiceStatus = "emitida" | "aprobada" | "pagada" | "rechazada";
 
 export type ConciliationStatus = "conciliado" | "pendiente";
 
-export const paymentMethodLabels: Record<PaymentMethod, string> = {
-  efectivo: "Efectivo",
-  tarjeta: "Tarjeta",
-  mercadopago: "MercadoPago",
-};
 
 export interface Invoice {
   number: string;

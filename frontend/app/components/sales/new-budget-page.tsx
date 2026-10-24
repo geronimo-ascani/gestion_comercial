@@ -56,9 +56,21 @@ export function NewBudgetPage() {
   const [discountError, setDiscountError] = useState<string | null>(null);
 
   const discountPercent = parsePercentInput(discount);
+  const subtotalValue = parseNumberInput(subtotal);
+  const lineDiscountTotal = Math.max(
+    0,
+    Math.round(
+      (items.reduce(
+        (sum, item) => sum + item.qty * parseNumberInput(item.unitPrice),
+        0
+      ) -
+        subtotalValue) *
+        100
+    ) / 100
+  );
   const { amount: discountAmount, total: totalValue } =
     computePercentageDiscount(
-      parseNumberInput(subtotal),
+      subtotalValue,
       discountPercent
     );
   const total = formatMoney(totalValue);
@@ -207,6 +219,7 @@ export function NewBudgetPage() {
                 initialItems={editing?.items}
                 onChange={handleItemsChange}
                 summaryLabel="Subtotal de productos"
+                allowLineDiscount
               />
               <FieldError message={itemsError} />
             </div>
@@ -234,8 +247,20 @@ export function NewBudgetPage() {
                 <div className="w-full space-y-1 rounded-lg border border-border p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="tabular-nums">{subtotal}</span>
+                    <span className="tabular-nums">
+                      {lineDiscountTotal > 0
+                        ? formatMoney(subtotalValue + lineDiscountTotal)
+                        : subtotal}
+                    </span>
                   </div>
+                  {lineDiscountTotal > 0 && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Descuento por línea</span>
+                      <span className="tabular-nums">
+                        − {formatMoney(lineDiscountTotal)}
+                      </span>
+                    </div>
+                  )}
                   {discountPercent > 0 && (
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>Descuento ({discountPercent}%)</span>

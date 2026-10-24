@@ -13,7 +13,7 @@ import {
 
 import { formatMoney } from "~/lib/currency";
 import type { PaymentTransaction } from "./payments-types";
-import { paymentMethodLabels } from "./payments-types";
+import { getPaymentMethodLabel } from "./payment-methods-store";
 import { reconcilePayment, useInvoices } from "./payments-store";
 import { InvoiceStatusBadge } from "./payments-views";
 
@@ -85,7 +85,7 @@ export function ReconcilePaymentDialog({
               </div>
               <div>
                 <dt className="text-muted-foreground">Método</dt>
-                <dd>{paymentMethodLabels[payment.method]}</dd>
+                <dd>{getPaymentMethodLabel(payment.method)}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Monto</dt>

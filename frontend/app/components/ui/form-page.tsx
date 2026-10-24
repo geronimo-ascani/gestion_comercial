@@ -5,12 +5,14 @@ import { Link } from "react-router";
 export function FormPage({
   backLabel,
   backTo,
+  backState,
   title,
   description,
   children,
 }: {
   backLabel: string;
   backTo: string;
+  backState?: unknown;
   title: string;
   description?: string;
   children: ReactNode;
@@ -20,6 +22,7 @@ export function FormPage({
       <div>
         <Link
           to={backTo}
+          state={backState}
           className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />

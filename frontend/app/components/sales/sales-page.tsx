@@ -58,6 +58,7 @@ import type {
 import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
 import { restoreOrderStock } from "./sales-stock";
 import { usePayments } from "../payments/payments-store";
+import { usePaymentMethods } from "../payments/payment-methods-store";
 import { compareByDateDesc } from "~/lib/utils";
 import {
   BudgetStatusBadge,
@@ -137,7 +138,11 @@ function BudgetDetailDialog({
         <OrderLineItemsTable
           items={budget.items}
           total={budget.total}
-          subtotal={budget.discount ? (budget.subtotal ?? budget.total) : undefined}
+          subtotal={
+            budget.discount || budget.items.some((item) => item.discount)
+              ? (budget.subtotal ?? budget.total)
+              : undefined
+          }
           discount={
             budget.discount
               ? `${budget.discount} — ${formatMoney(discountAmount)}`
@@ -173,6 +178,7 @@ export function SalesPage() {
   const orders = useOrders();
   const budgets = useBudgets();
   const payments = usePayments();
+  const paymentMethods = usePaymentMethods();
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
@@ -309,9 +315,11 @@ export function SalesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                    <SelectItem value="mercadopago">MercadoPago</SelectItem>
+                    {paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

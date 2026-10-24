@@ -105,6 +105,8 @@ export function OrderDetailPage() {
 }
 
 function OrderItemsCard({ order }: { order: SalesOrder }) {
+  const hasLineDiscounts = order.items.some((item) => item.discount);
+  const columnCount = hasLineDiscounts ? 6 : 5;
   return (
     <Card>
       <CardHeader>
@@ -118,6 +120,9 @@ function OrderItemsCard({ order }: { order: SalesOrder }) {
               <TableHead>Descripción</TableHead>
               <TableHead className="text-right">Cant.</TableHead>
               <TableHead className="text-right">P. unitario</TableHead>
+              {hasLineDiscounts && (
+                <TableHead className="text-right">Desc.</TableHead>
+              )}
               <TableHead className="text-right">Total</TableHead>
             </TableRow>
           </TableHeader>
@@ -125,7 +130,7 @@ function OrderItemsCard({ order }: { order: SalesOrder }) {
             {order.items.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={columnCount}
                   className="h-16 text-center text-muted-foreground"
                 >
                   Sin productos cargados.
@@ -140,6 +145,11 @@ function OrderItemsCard({ order }: { order: SalesOrder }) {
                   <TableCell className="font-medium">{item.product}</TableCell>
                   <TableCell className="text-right">{item.qty}</TableCell>
                   <TableCell className="text-right">{item.unitPrice}</TableCell>
+                  {hasLineDiscounts && (
+                    <TableCell className="text-right text-muted-foreground">
+                      {item.discount ?? "—"}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right">{item.subtotal}</TableCell>
                 </TableRow>
               ))
@@ -148,7 +158,10 @@ function OrderItemsCard({ order }: { order: SalesOrder }) {
           {order.items.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={4} className="text-right font-semibold">
+                <TableCell
+                  colSpan={columnCount - 1}
+                  className="text-right font-semibold"
+                >
                   Total a pagar
                 </TableCell>
                 <TableCell className="text-right text-base font-bold">
@@ -338,6 +351,13 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
     subtotalValue,
     discountPercent
   );
+  const grossTotal = order.items.reduce(
+    (sum, item) => sum + item.qty * parseNumberInput(item.unitPrice),
+    0
+  );
+  const lineDiscountTotal = order.subtotal
+    ? Math.max(0, Math.round((grossTotal - subtotalValue) * 100) / 100)
+    : 0;
   return (
     <Card>
       <CardHeader>
@@ -345,7 +365,20 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
       </CardHeader>
       <CardContent>
         <dl className="space-y-2.5">
-          <SummaryRow label="Subtotal" value={order.subtotal ?? order.total} />
+          <SummaryRow
+            label="Subtotal"
+            value={
+              lineDiscountTotal > 0
+                ? formatMoney(subtotalValue + lineDiscountTotal)
+                : (order.subtotal ?? order.total)
+            }
+          />
+          {lineDiscountTotal > 0 && (
+            <SummaryRow
+              label="Descuento por línea"
+              value={`− ${formatMoney(lineDiscountTotal)}`}
+            />
+          )}
           <SummaryRow label="Envío" value={order.shipping ?? "—"} />
           <SummaryRow label="Impuestos" value={order.tax ?? "—"} />
           <SummaryRow
@@ -505,7 +538,7 @@ function OrderPaymentCard({ order }: { order: SalesOrder }) {
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
-  const isNegative = value.startsWith("-");
+  const isNegative = value.startsWith("-") || value.startsWith("−");
   return (
     <div className="flex items-center justify-between">
       <dt className="text-sm text-muted-foreground">{label}</dt>

@@ -2,7 +2,7 @@ import type { Address } from "~/lib/address";
 
 export type OrderStatus = "pendiente" | "proceso" | "enviado" | "entregado" | "cancelado";
 
-export type PaymentMethod = "efectivo" | "tarjeta" | "mercadopago";
+export type PaymentMethod = string;
 
 export type PaymentStatus = "pendiente" | "pagado" | "rechazado";
 
@@ -13,6 +13,11 @@ export interface LineItem {
   product: string;
   qty: number;
   unitPrice: string;
+  /** Descuento porcentual aplicado a la línea (ej. "10%"). */
+  discount?: string;
+  /** Importe descontado en la línea, sólo si hay descuento. */
+  discountAmount?: string;
+  /** Total neto de la línea: cantidad × precio unitario − descuento. */
   subtotal: string;
 }
 
@@ -38,8 +43,21 @@ export interface SalesOrder {
   invoiceNumber?: string;
 }
 
-export interface Budget {
+/** Borrador del formulario de pedido para no perder datos al navegar a otro formulario. */
+export interface OrderDraft {
+  client: string;
+  province: string;
+  locality: string;
+  street: string;
   number: string;
+  apartment: string;
+  payment: PaymentMethod;
+  items: LineItem[];
+  subtotal: string;
+  discount: string;
+}
+
+export interface Budget {  number: string;
   client: string;
   clientId?: string;
   date: string;
@@ -68,9 +86,3 @@ export function formatDateForInput(value: string): string {
   const [day, month, year] = value.split("/");
   return `${year}-${month}-${day}`;
 }
-
-export const paymentLabels: Record<PaymentMethod, string> = {
-  efectivo: "Efectivo",
-  tarjeta: "Tarjeta",
-  mercadopago: "MercadoPago",
-};

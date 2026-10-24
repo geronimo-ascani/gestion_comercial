@@ -20,6 +20,7 @@ export default [
     route("customers", "routes/customers.tsx"),
     route("customers/new", "routes/customers-new.tsx"),
     route("payments", "routes/payments.tsx"),
+    route("payments/new-method", "routes/payments-new-method.tsx"),
     route("purchases/new-order", "routes/purchases-new-order.tsx"),
     route("purchases/new-provider", "routes/purchases-new-provider.tsx"),
     route("providers", "routes/providers.tsx"),
