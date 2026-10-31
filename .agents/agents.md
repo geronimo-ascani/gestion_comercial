@@ -23,7 +23,7 @@ Este archivo es el **reglamento estricto** que todo agente de IA debe respetar a
 | **Frontend** | React + TypeScript + Tailwind CSS + shadcn/ui + React Router v7 | Ver `frontend/package.json` |
 | **Testing Frontend** | **Vitest** | **PROHIBIDO Jest**. Ver `frontend/vitest.config.ts` |
 | **Backend** | Python + FastAPI | JWT para auth, AES-256 para datos sensibles |
-| **Base de Datos** | PostgreSQL | Ver `backend/` |
+| **Base de Datos** | PostgreSQL | Ver `backend/` | no se usa ORM
 | **Infraestructura** | Integración MercadoPago (oficial) para pagos/tarjetas/billeteras | Según SRS |
 
 ## 4. Estructura del Repositorio
