@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from pydantic import Field
+
 from .base import SchemaBase, UpdateSchema
 
 
@@ -22,7 +24,7 @@ class CondicionIVAUpdate(UpdateSchema):
 
 
 class CategoriaFields(SchemaBase):
-    nombre: str
+    nombre: str = Field(min_length=1, max_length=120)
 
 
 class CategoriaCreate(CategoriaFields):
@@ -34,7 +36,7 @@ class CategoriaRead(CategoriaFields):
 
 
 class CategoriaUpdate(UpdateSchema):
-    nombre: str | None = None
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class UnidadFields(SchemaBase):
