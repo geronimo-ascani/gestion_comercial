@@ -1,60 +1,13 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
-import { calculateSalePrice } from "./products-calc";
-import {
-  ivaRates,
-  type IvaCondition,
-  type IvaOperationCode,
-  type Product,
-  UNCATEGORIZED_CATEGORY,
-} from "./products-types";
+import { listarProductos } from "./products-api";
+import type { Product } from "./products-types";
 
-function seed(
-  id: string,
-  code: string,
-  name: string,
-  description: string,
-  purchasePrice: number,
-  margin: number,
-  stock: number,
-  minStock: number,
-  ivaCondition: IvaCondition,
-  ivaOperationCode?: IvaOperationCode,
-  category = UNCATEGORIZED_CATEGORY
-): Product {
-  const salePrice = calculateSalePrice(purchasePrice, margin, ivaRates[ivaCondition]);
-  return {
-    id,
-    code,
-    name,
-    category,
-    description,
-    purchasePrice,
-    margin,
-    salePrice,
-    stock,
-    minStock,
-    ivaCondition,
-    ivaOperationCode,
-  };
-}
+const EMPTY_PRODUCTS: Product[] = [];
 
-const demoProducts: Product[] = [
-  seed("prod-1", "PRD-001", 'Notebook Gamer 15"', "16 GB RAM · 512 GB SSD · RTX 4060", 850000, 30, 8, 3, "gravado21", undefined, "Informática"),
-  seed("prod-2", "PRD-002", 'Monitor 24" Full HD', "Panel IPS · 75 Hz", 180000, 40, 0, 5, "gravado27", undefined, "Informática"),
-  seed("prod-3", "PRD-003", "Teclado mecánico TKL", "Switches red · retroiluminado", 45000, 70, 25, 5, "gravado5", undefined, "Periféricos"),
-  seed("prod-4", "PRD-004", "Mouse ergonómico", "Inalámbrico · 1600 DPI", 18000, 80, 40, 10, "gravado10_5", undefined, "Periféricos"),
-  seed("prod-5", "PRD-005", "Auriculares Bluetooth", "Cancelación de ruido", 52000, 60, 4, 6, "exento", "E", "Periféricos"),
-  seed("prod-6", "PRD-006", "Disco SSD 1TB NVMe", "Lectura 3500 MB/s", 96000, 45, 12, 4, "gravado21", undefined, "Almacenamiento"),
-];
-
-let products: Product[] = [...demoProducts];
-let categories = [
-  "Informática",
-  "Periféricos",
-  "Almacenamiento",
-  UNCATEGORIZED_CATEGORY,
-];
+let products: Product[] = EMPTY_PRODUCTS;
+let loaded = false;
+let loadPromise: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -73,61 +26,55 @@ function getProducts() {
   return products;
 }
 
+function getServerProducts() {
+  return EMPTY_PRODUCTS;
+}
+
 export function getProductsSnapshot(): Product[] {
   return products;
 }
 
-export function useProducts(): Product[] {
-  return useSyncExternalStore(subscribe, getProducts, getProducts);
+async function fetchProducts(): Promise<void> {
+  const data = await listarProductos({ estado: true, limit: 200 });
+  products = data.items;
+  loaded = true;
+  emit();
 }
 
-function getCategories() {
-  return categories;
+export function loadProducts(force = false): Promise<void> {
+  if (loaded && !force) return Promise.resolve();
+  if (loadPromise) return loadPromise;
+
+  loadPromise = fetchProducts().finally(() => {
+    loadPromise = null;
+  });
+  return loadPromise;
 }
 
-export function useCategories(): string[] {
-  return useSyncExternalStore(subscribe, getCategories, getCategories);
-}
-
-export function addCategory(name: string): boolean {
-  const normalizedName = name.trim();
-  if (
-    !normalizedName ||
-    categories.some(
-      (category) =>
-        category.toLocaleLowerCase("es") ===
-        normalizedName.toLocaleLowerCase("es")
-    )
-  ) {
-    return false;
+export async function refreshProducts(): Promise<void> {
+  if (loadPromise) {
+    try {
+      await loadPromise;
+    } catch {
+      // Si la carga anterior falló, se reintenta con la consulta forzada.
+    }
   }
-
-  categories = [...categories, normalizedName];
-  emit();
-  return true;
+  loaded = false;
+  return loadProducts(true);
 }
 
-export function removeCategory(name: string) {
-  if (name === UNCATEGORIZED_CATEGORY || !categories.includes(name)) return;
+export function useProducts(): Product[] {
+  useEffect(() => {
+    void loadProducts();
+  }, []);
 
-  categories = categories.filter((category) => category !== name);
-  products = products.map((product) =>
-    product.category === name
-      ? { ...product, category: UNCATEGORIZED_CATEGORY }
-      : product
-  );
-  emit();
+  return useSyncExternalStore(subscribe, getProducts, getServerProducts);
 }
 
-export function getNextProductCode(): string {
-  const max = products.reduce((highest, product) => {
-    const match = /(\d+)$/.exec(product.code);
-    const sequence = match ? Number(match[1]) : 0;
-    return sequence > highest ? sequence : highest;
-  }, 0);
-  return `PRD-${String(max + 1).padStart(3, "0")}`;
-}
-
+/**
+ * Ajuste local del stock para los borradores de ventas/compras.
+ * La persistencia real se hace contra la API cuando se confirme la operación.
+ */
 export function adjustStock(id: string, delta: number): number {
   const product = products.find((item) => item.id === id);
   if (!product) return 0;
@@ -135,21 +82,4 @@ export function adjustStock(id: string, delta: number): number {
   products = products.map((item) => (item.id === id ? { ...item, stock } : item));
   emit();
   return stock;
-}
-
-export function addProduct(product: Product) {
-  products = [...products, product];
-  emit();
-}
-
-export function updateProduct(id: string, patch: Partial<Product>) {
-  products = products.map((product) =>
-    product.id === id ? { ...product, ...patch } : product
-  );
-  emit();
-}
-
-export function removeProduct(id: string) {
-  products = products.filter((product) => product.id !== id);
-  emit();
 }

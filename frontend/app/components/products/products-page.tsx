@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -7,7 +7,6 @@ import { Button } from "~/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -40,24 +39,28 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { TableSkeleton } from "~/components/ui/skeleton";
-import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
 import {
-  ivaConditionLabels,
-  type Product,
-  UNCATEGORIZED_CATEGORY,
-} from "./products-types";
-import {
-  addCategory,
-  removeCategory,
-  removeProduct,
-  useCategories,
-  useProducts,
-} from "./products-store";
+  crearCategoria,
+  eliminarCategoria,
+  eliminarProducto,
+  listarCategorias,
+  listarProductos,
+  type Categoria,
+  type StockEstado,
+} from "./products-api";
+import { refreshProducts } from "./products-store";
+import type { Product } from "./products-types";
 
 function formatPercent(value: number): string {
   return `${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "No se pudo completar la operación.";
 }
 
 type StockStatus = "ok" | "critical" | "out";
@@ -96,8 +99,8 @@ function ProductDeleteDialog({
         <DialogHeader>
           <DialogTitle>¿Eliminar producto?</DialogTitle>
           <DialogDescription>
-            Esta acción no se puede deshacer. Se eliminará {product.name} (
-            {product.code}).
+            El producto {product.name} ({product.code}) quedará dado de baja y
+            no aparecerá en el listado.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -117,26 +120,50 @@ function ProductDeleteDialog({
 
 function CategoryManagementDialog({
   categories,
-  products,
-  onCategoryDeleted,
+  onChanged,
 }: {
-  categories: string[];
-  products: Product[];
-  onCategoryDeleted: () => void;
+  categories: Categoria[];
+  onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Categoria | null>(null);
 
-  function handleAddCategory(event: FormEvent<HTMLFormElement>) {
+  async function handleAddCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!addCategory(name)) {
-      setError("Ingrese un nombre nuevo para la categoría.");
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError("Ingrese un nombre para la categoría.");
       return;
     }
-    setName("");
+
+    setBusy(true);
     setError(null);
+    try {
+      await crearCategoria(normalizedName);
+      setName("");
+      onChanged();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteCategory(category: Categoria) {
+    setBusy(true);
+    setError(null);
+    try {
+      await eliminarCategoria(category.id_categoria);
+      setDeleteTarget(null);
+      onChanged();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -153,7 +180,8 @@ function CategoryManagementDialog({
         <DialogHeader>
           <DialogTitle>Administrar categorías</DialogTitle>
           <DialogDescription>
-            Al eliminar una categoría, sus productos quedan como “Sin categoría”.
+            Solo se pueden eliminar categorías que no tengan productos
+            asociados.
           </DialogDescription>
         </DialogHeader>
         <form className="flex gap-2" onSubmit={handleAddCategory}>
@@ -166,56 +194,53 @@ function CategoryManagementDialog({
               setError(null);
             }}
           />
-          <Button type="submit" aria-label="Agregar categoría">
+          <Button
+            type="submit"
+            aria-label="Agregar categoría"
+            disabled={busy}
+          >
             <Plus />
           </Button>
         </form>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="max-h-64 divide-y overflow-y-auto">
-          {categories.map((category) => {
-            const productCount = products.filter(
-              (product) => product.category === category
-            ).length;
-            const isReserved = category === UNCATEGORIZED_CATEGORY;
-
-            return (
-              <div
-                key={category}
-                className="flex min-h-12 items-center justify-between gap-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{category}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {productCount} productos
-                  </p>
-                </div>
-                {!isReserved && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="shrink-0 text-destructive hover:text-destructive"
-                    aria-label={`Eliminar categoría ${category}`}
-                    onClick={() => setDeleteTarget(category)}
-                  >
-                    <Trash2 />
-                  </Button>
-                )}
+          {categories.map((category) => (
+            <div
+              key={category.id_categoria}
+              className="flex min-h-12 items-center justify-between gap-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium">{category.nombre}</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {category.id_categoria}
+                </p>
               </div>
-            );
-          })}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-destructive hover:text-destructive"
+                aria-label={`Eliminar categoría ${category.nombre}`}
+                disabled={busy}
+                onClick={() => setDeleteTarget(category)}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          ))}
         </div>
         {deleteTarget && (
           <div className="space-y-3 rounded-md border border-destructive/30 p-3">
             <p className="text-sm">
-              ¿Eliminar “{deleteTarget}”? Los productos asociados pasarán a
-              “Sin categoría”.
+              ¿Eliminar “{deleteTarget.nombre}”? Esta acción no se puede
+              deshacer.
             </p>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={busy}
                 onClick={() => setDeleteTarget(null)}
               >
                 Cancelar
@@ -224,11 +249,8 @@ function CategoryManagementDialog({
                 type="button"
                 variant="destructive"
                 size="sm"
-                onClick={() => {
-                  removeCategory(deleteTarget);
-                  setDeleteTarget(null);
-                  onCategoryDeleted();
-                }}
+                disabled={busy}
+                onClick={() => handleDeleteCategory(deleteTarget)}
               >
                 Eliminar
               </Button>
@@ -243,34 +265,118 @@ function CategoryManagementDialog({
   );
 }
 
+function statusToFiltro(status: "all" | StockStatus): StockEstado {
+  if (status === "ok") return "en_stock";
+  if (status === "critical") return "critico";
+  if (status === "out") return "sin_stock";
+  return "todos";
+}
+
 export function ProductsPage() {
   const navigate = useNavigate();
-  const loading = useInitialLoading();
-  const products = useProducts();
-  const categories = useCategories();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [categories, setCategories] = useState<Categoria[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [categoryId, setCategoryId] = useState("all");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [status, setStatus] = useState<"all" | StockStatus>("all");
   const debouncedQuery = useDebouncedValue(query);
+  const debouncedPriceMin = useDebouncedValue(priceMin);
+  const debouncedPriceMax = useDebouncedValue(priceMax);
+  const hasFilters =
+    query.trim() !== "" ||
+    categoryId !== "all" ||
+    priceMin.trim() !== "" ||
+    priceMax.trim() !== "" ||
+    status !== "all";
 
-  const filtered = products.filter((product) => {
-    const haystack =
-      `${product.code} ${product.name} ${product.category} ${product.description}`.toLowerCase();
-    const matchesQuery = haystack.includes(debouncedQuery.trim().toLowerCase());
-    const matchesCategory = category === "all" || product.category === category;
-    const min = parseNumberInput(priceMin);
-    const max = parseNumberInput(priceMax);
-    const matchesPrice =
-      (min === 0 || product.salePrice >= min) &&
-      (max === 0 || product.salePrice <= max);
-    const matchesStatus = status === "all" || stockStatus(product) === status;
-    return matchesQuery && matchesCategory && matchesPrice && matchesStatus;
-  });
+  useEffect(() => {
+    let cancelled = false;
+
+    listarCategorias()
+      .then((data) => {
+        if (!cancelled) setCategories(data);
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setError(errorMessage(caught));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const min = parseNumberInput(debouncedPriceMin);
+    const max = parseNumberInput(debouncedPriceMax);
+
+    listarProductos({
+      q: debouncedQuery,
+      idCategoria: categoryId === "all" ? undefined : categoryId,
+      precioMin: min > 0 ? min : undefined,
+      precioMax: max > 0 ? max : undefined,
+      stockEstado: statusToFiltro(status),
+      estado: true,
+      limit: 200,
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setProducts(data.items);
+        setTotal(data.total);
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setProducts([]);
+        setTotal(0);
+        setError(errorMessage(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    debouncedQuery,
+    categoryId,
+    debouncedPriceMin,
+    debouncedPriceMax,
+    status,
+    reloadKey,
+  ]);
 
   function openNewProduct() {
     navigate("/products/new");
+  }
+
+  function reload() {
+    setReloadKey((value) => value + 1);
+  }
+
+  function handleCategoriesChanged() {
+    setCategoryId("all");
+    reload();
+  }
+
+  async function handleDeleteProduct(product: Product) {
+    setError(null);
+    try {
+      await eliminarProducto(product.id);
+      await refreshProducts();
+      reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
   }
 
   return (
@@ -285,8 +391,7 @@ export function ProductsPage() {
         <div className="flex gap-2">
           <CategoryManagementDialog
             categories={categories}
-            products={products}
-            onCategoryDeleted={() => setCategory("all")}
+            onChanged={handleCategoriesChanged}
           />
           <Button onClick={openNewProduct}>
             <Plus />
@@ -309,9 +414,8 @@ export function ProductsPage() {
           <div className="space-y-2">
             <Label htmlFor="category-filter">Categoría</Label>
             <Select
-              items={{ all: "Todas" }}
-              value={category}
-              onValueChange={(value) => setCategory(value ?? "all")}
+              value={categoryId}
+              onValueChange={(value) => setCategoryId(value ?? "all")}
             >
               <SelectTrigger id="category-filter" className="w-44">
                 <SelectValue />
@@ -319,8 +423,8 @@ export function ProductsPage() {
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
                 {categories.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
+                  <SelectItem key={item.id_categoria} value={item.id_categoria}>
+                    {item.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -349,7 +453,6 @@ export function ProductsPage() {
             />
           </div>
           <Select
-            items={{ all: "Todos" }}
             value={status}
             onValueChange={(value) => setStatus(value as "all" | StockStatus)}
           >
@@ -358,7 +461,7 @@ export function ProductsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="in">En stock</SelectItem>
+              <SelectItem value="ok">En stock</SelectItem>
               <SelectItem value="critical">Stock crítico</SelectItem>
               <SelectItem value="out">Sin stock</SelectItem>
             </SelectContent>
@@ -366,13 +469,18 @@ export function ProductsPage() {
         </div>
       </div>
 
+      {error && (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Listado de productos</CardTitle>
-            
           </div>
-          <Badge variant="secondary">{products.length} productos</Badge>
+          <Badge variant="secondary">{total} productos</Badge>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -386,26 +494,26 @@ export function ProductsPage() {
                   <TableHead>Categoría</TableHead>
                   <TableHead className="text-right">Margen</TableHead>
                   <TableHead className="text-right">Precio venta</TableHead>
-                  <TableHead>Condición IVA</TableHead>
+                  <TableHead>Alícuota IVA</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
+                {products.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={9}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      {products.length === 0
-                        ? "No hay productos registrados."
-                        : "No se encontraron resultados."}
+                      {hasFilters
+                        ? "No se encontraron resultados."
+                        : "No hay productos registrados."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((product) => (
+                  products.map((product) => (
                     <TableRow key={product.id}>
                       <TableCell className="font-mono text-xs">
                         {product.code || "—"}
@@ -422,11 +530,7 @@ export function ProductsPage() {
                       <TableCell className="text-right">
                         {formatMoney(product.salePrice)}
                       </TableCell>
-                      <TableCell>
-                        {product.ivaCondition
-                          ? ivaConditionLabels[product.ivaCondition]
-                          : "—"}
-                      </TableCell>
+                      <TableCell>{product.alicuotaDescripcion}</TableCell>
                       <TableCell className="text-right">
                         {product.stock}
                       </TableCell>
@@ -447,7 +551,7 @@ export function ProductsPage() {
                           </Button>
                           <ProductDeleteDialog
                             product={product}
-                            onConfirm={() => removeProduct(product.id)}
+                            onConfirm={() => handleDeleteProduct(product)}
                             trigger={
                               <Button
                                 variant="ghost"
@@ -468,9 +572,7 @@ export function ProductsPage() {
             </Table>
           )}
         </CardContent>
-        <CardFooter className="justify-between text-sm text-muted-foreground">
-         
-        </CardFooter>
+        <CardFooter className="justify-between text-sm text-muted-foreground" />
       </Card>
     </div>
   );
