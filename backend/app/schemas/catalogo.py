@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field
 
@@ -60,7 +61,7 @@ class UnidadUpdate(UpdateSchema):
 class AlicuotaIVAFields(SchemaBase):
     codigo_afip: str
     descripcion: str
-    porcentaje: float
+    porcentaje: Decimal
     tipo_iva: str
 
 
@@ -75,43 +76,72 @@ class AlicuotaIVARead(AlicuotaIVAFields):
 class AlicuotaIVAUpdate(UpdateSchema):
     codigo_afip: str | None = None
     descripcion: str | None = None
-    porcentaje: float | None = None
+    porcentaje: Decimal | None = None
     tipo_iva: str | None = None
 
 
 class ProductoFields(SchemaBase):
+    nombre: str = Field(min_length=1, max_length=160)
+    descripcion: str = Field(default="", max_length=255)
+    estado: bool = True
+    imagen: bool = False
+    margen: Decimal = Field(ge=0)
+    precio_compra: Decimal = Field(gt=0)
+    stock_actual: Decimal = Field(default=Decimal("0"), ge=0)
+    stock_minimo: Decimal = Field(default=Decimal("0"), ge=0)
+    id_alicuota_iva: str = Field(min_length=1, max_length=20)
+    id_categoria: str = Field(min_length=1, max_length=20)
+
+
+class ProductoCreate(ProductoFields):
+    id_unidad: str | None = Field(default=None, min_length=1, max_length=20)
+
+
+class ProductoRead(SchemaBase):
+    id_producto: str
+    nombre: str
     descripcion: str
     estado: bool
     imagen: bool
-    margen: float
-    nombre: str
-    precio_compra: float
-    precio_venta: float
+    margen: Decimal
+    precio_compra: Decimal
+    precio_venta: Decimal
     stock_actual: Decimal
     stock_minimo: Decimal
     id_alicuota_iva: str
     id_categoria: str
     id_unidad: str
-
-
-class ProductoCreate(ProductoFields):
-    pass
-
-
-class ProductoRead(ProductoFields):
-    id_producto: str
+    categoria_nombre: str
+    alicuota_descripcion: str
+    alicuota_porcentaje: Decimal
+    alicuota_codigo_afip: str
+    alicuota_tipo_iva: str
+    unidad_descripcion: str
+    unidad_venta: str
+    stock_bajo: bool
 
 
 class ProductoUpdate(UpdateSchema):
-    descripcion: str | None = None
+    nombre: str | None = Field(default=None, min_length=1, max_length=160)
+    descripcion: str | None = Field(default=None, max_length=255)
     estado: bool | None = None
     imagen: bool | None = None
-    margen: float | None = None
-    nombre: str | None = None
-    precio_compra: float | None = None
-    precio_venta: float | None = None
-    stock_actual: Decimal | None = None
-    stock_minimo: Decimal | None = None
-    id_alicuota_iva: str | None = None
-    id_categoria: str | None = None
-    id_unidad: str | None = None
+    margen: Decimal | None = Field(default=None, ge=0)
+    precio_compra: Decimal | None = Field(default=None, gt=0)
+    stock_actual: Decimal | None = Field(default=None, ge=0)
+    stock_minimo: Decimal | None = Field(default=None, ge=0)
+    id_alicuota_iva: str | None = Field(default=None, min_length=1, max_length=20)
+    id_categoria: str | None = Field(default=None, min_length=1, max_length=20)
+    id_unidad: str | None = Field(default=None, min_length=1, max_length=20)
+
+
+class ProductoAjusteStock(SchemaBase):
+    tipo: Literal["entrada", "salida"]
+    cantidad: Decimal = Field(gt=0)
+
+
+class ProductoListResponse(SchemaBase):
+    items: list[ProductoRead]
+    total: int
+    limit: int
+    offset: int
