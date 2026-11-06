@@ -87,6 +87,7 @@ export interface ProductoFiltros {
 }
 
 export interface ProductoCreatePayload {
+  id_producto: string;
   nombre: string;
   descripcion: string;
   margen: number;
@@ -100,7 +101,9 @@ export interface ProductoCreatePayload {
   imagen?: boolean;
 }
 
-export type ProductoUpdatePayload = Partial<ProductoCreatePayload>;
+export type ProductoUpdatePayload = Partial<
+  Omit<ProductoCreatePayload, "id_producto">
+>;
 
 export interface MovimientoFiltros {
   desde?: string;
@@ -181,6 +184,13 @@ export async function crearProducto(
     body: JSON.stringify(datos),
   });
   return mapProducto(data);
+}
+
+export async function reservarCodigoProducto(): Promise<string> {
+  const data = await apiRequest<{ id_producto: string }>("/productos/codigos", {
+    method: "POST",
+  });
+  return data.id_producto;
 }
 
 export async function actualizarProducto(

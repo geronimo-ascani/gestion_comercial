@@ -418,10 +418,15 @@ export function ProductsPage() {
               onValueChange={(value) => setCategoryId(value ?? "all")}
             >
               <SelectTrigger id="category-filter" className="w-44">
-                <SelectValue />
+                <SelectValue>
+                  {(value) =>
+                    categories.find((item) => item.id_categoria === value)
+                      ?.nombre ?? "Todos"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {categories.map((item) => (
                   <SelectItem key={item.id_categoria} value={item.id_categoria}>
                     {item.nombre}
@@ -452,20 +457,23 @@ export function ProductsPage() {
               onChange={(event) => setPriceMax(event.target.value)}
             />
           </div>
-          <Select
-            value={status}
-            onValueChange={(value) => setStatus(value as "all" | StockStatus)}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="ok">En stock</SelectItem>
-              <SelectItem value="critical">Stock crítico</SelectItem>
-              <SelectItem value="out">Sin stock</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="space-y-2">
+            <Label htmlFor="stock-status-filter">Estado de stock</Label>
+            <Select
+              value={status}
+              onValueChange={(value) => setStatus(value as "all" | StockStatus)}
+            >
+              <SelectTrigger id="stock-status-filter" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="ok">En stock</SelectItem>
+                <SelectItem value="critical">Stock crítico</SelectItem>
+                <SelectItem value="out">Sin stock</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

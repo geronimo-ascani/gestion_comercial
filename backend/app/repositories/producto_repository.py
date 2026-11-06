@@ -113,22 +113,41 @@ class ProductoRepository:
     def crear(self, datos: dict[str, Any], precio_venta: Decimal) -> ProductoRow:
         parametros = {**datos, "precio_venta": precio_venta}
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO producto (
-                    nombre, descripcion, estado, imagen, margen,
-                    precio_compra, precio_venta, stock_actual, stock_minimo,
-                    id_alicuota_iva, id_categoria, id_unidad
+            if datos.get("id_producto") is None:
+                cur.execute(
+                    """
+                    INSERT INTO producto (
+                        nombre, descripcion, estado, imagen, margen,
+                        precio_compra, precio_venta, stock_actual, stock_minimo,
+                        id_alicuota_iva, id_categoria, id_unidad
+                    )
+                    VALUES (
+                        %(nombre)s, %(descripcion)s, %(estado)s, %(imagen)s, %(margen)s,
+                        %(precio_compra)s, %(precio_venta)s, %(stock_actual)s, %(stock_minimo)s,
+                        %(id_alicuota_iva)s, %(id_categoria)s, %(id_unidad)s
+                    )
+                    RETURNING id_producto
+                    """,
+                    parametros,
                 )
-                VALUES (
-                    %(nombre)s, %(descripcion)s, %(estado)s, %(imagen)s, %(margen)s,
-                    %(precio_compra)s, %(precio_venta)s, %(stock_actual)s, %(stock_minimo)s,
-                    %(id_alicuota_iva)s, %(id_categoria)s, %(id_unidad)s
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO producto (
+                        id_producto, nombre, descripcion, estado, imagen, margen,
+                        precio_compra, precio_venta, stock_actual, stock_minimo,
+                        id_alicuota_iva, id_categoria, id_unidad
+                    )
+                    VALUES (
+                        %(id_producto)s, %(nombre)s, %(descripcion)s, %(estado)s,
+                        %(imagen)s, %(margen)s, %(precio_compra)s, %(precio_venta)s,
+                        %(stock_actual)s, %(stock_minimo)s, %(id_alicuota_iva)s,
+                        %(id_categoria)s, %(id_unidad)s
+                    )
+                    RETURNING id_producto
+                    """,
+                    parametros,
                 )
-                RETURNING id_producto
-                """,
-                parametros,
-            )
             fila = cur.fetchone()
             assert fila is not None
             id_producto = fila["id_producto"]
@@ -136,6 +155,18 @@ class ProductoRepository:
         producto = self.obtener(id_producto)
         assert producto is not None
         return producto
+
+    def reservar_codigo(self) -> str:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 'PRD-' || LPAD(nextval('producto_id_seq')::text, 4, '0')
+                    AS id_producto
+                """
+            )
+            fila = cur.fetchone()
+            assert fila is not None
+            return str(fila["id_producto"])
 
     def actualizar(
         self, id_producto: str, campos: dict[str, Any]

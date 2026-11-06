@@ -28,6 +28,7 @@ import {
   listarAlicuotas,
   listarCategorias,
   obtenerProducto,
+  reservarCodigoProducto,
   type AlicuotaIva,
   type Categoria,
 } from "./products-api";
@@ -83,8 +84,9 @@ export function ProductFormPage() {
       listarCategorias(),
       listarAlicuotas(),
       editId ? obtenerProducto(editId) : Promise.resolve(null),
+      editId ? Promise.resolve(null) : reservarCodigoProducto(),
     ])
-      .then(([categorias, alicuotasData, producto]) => {
+      .then(([categorias, alicuotasData, producto, codigoReservado]) => {
         if (cancelled) return;
 
         setCategories(categorias);
@@ -101,7 +103,7 @@ export function ProductFormPage() {
           setStock(String(producto.stock));
           setMinStock(String(producto.minStock));
         } else {
-          setCode("");
+          setCode(codigoReservado ?? "");
           setCategoryId(categorias[0]?.id_categoria ?? "");
           setAlicuotaId(
             defaultAlicuota(alicuotasData)?.id_alicuota_iva ?? ""
@@ -194,7 +196,7 @@ export function ProductFormPage() {
       if (editId) {
         await actualizarProducto(editId, payload);
       } else {
-        await crearProducto(payload);
+        await crearProducto({ ...payload, id_producto: code });
       }
       await refreshProducts();
       navigate(backTo);
@@ -286,7 +288,12 @@ export function ProductFormPage() {
                 }}
               >
                 <SelectTrigger id="product-category" className="w-full">
-                  <SelectValue placeholder="Seleccionar categoría" />
+                  <SelectValue>
+                    {(value) =>
+                      categories.find((item) => item.id_categoria === value)
+                        ?.nombre ?? "Seleccionar categoría"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((item) => (

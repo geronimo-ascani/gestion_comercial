@@ -168,6 +168,9 @@ class ProductoService:
             raise ProductoNoEncontrado(id_producto)
         return producto
 
+    def reservar_codigo(self) -> str:
+        return self._repo.reservar_codigo()
+
     def crear(self, datos: ProductoCreate) -> ProductoRow:
         alicuota = self._obtener_alicuota(datos.id_alicuota_iva)
         self._validar_categoria(datos.id_categoria)
@@ -199,6 +202,8 @@ class ProductoService:
             "id_categoria": datos.id_categoria,
             "id_unidad": id_unidad,
         }
+        if datos.id_producto is not None:
+            campos["id_producto"] = datos.id_producto
 
         try:
             with self._repo.transaction():

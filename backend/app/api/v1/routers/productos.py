@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, st
 from app.api.deps import get_producto_service
 from app.schemas.catalogo import (
     ProductoAjusteStock,
+    ProductoCodigoRead,
     ProductoCreate,
     ProductoListResponse,
     ProductoRead,
@@ -115,6 +116,11 @@ def listar_alertas_stock(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/codigos", response_model=ProductoCodigoRead)
+def reservar_codigo_producto(service: ServiceDep) -> ProductoCodigoRead:
+    return ProductoCodigoRead(id_producto=service.reservar_codigo())
 
 
 @router.get("/{id_producto}", response_model=ProductoRead)

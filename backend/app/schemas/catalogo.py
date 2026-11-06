@@ -94,7 +94,17 @@ class ProductoFields(SchemaBase):
 
 
 class ProductoCreate(ProductoFields):
+    id_producto: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=20,
+        pattern=r"^PRD-\d{4,}$",
+    )
     id_unidad: str | None = Field(default=None, min_length=1, max_length=20)
+
+
+class ProductoCodigoRead(SchemaBase):
+    id_producto: str
 
 
 class ProductoRead(SchemaBase):
