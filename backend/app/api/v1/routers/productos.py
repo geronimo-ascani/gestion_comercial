@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
 from app.api.deps import get_producto_service
+from app.api.v1.routers.auth import get_current_user, require_roles
 from app.schemas.catalogo import (
     ProductoAjusteStock,
     ProductoCodigoRead,
@@ -24,7 +25,11 @@ from app.services.producto_service import (
     ProductoStockInsuficiente,
 )
 
-router = APIRouter(prefix="/productos", tags=["Productos"])
+router = APIRouter(
+    prefix="/productos",
+    tags=["Productos"],
+    dependencies=[Depends(get_current_user)],
+)
 
 ServiceDep = Annotated[ProductoService, Depends(get_producto_service)]
 ProductoId = Annotated[str, Path(min_length=1, max_length=20)]
@@ -106,6 +111,7 @@ def listar_productos(
 @router.get("/alertas-stock", response_model=ProductoListResponse)
 def listar_alertas_stock(
     service: ServiceDep,
+    _: Annotated[dict, Depends(require_roles("administrador", "abastecimiento"))],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ProductoListResponse:
@@ -119,7 +125,10 @@ def listar_alertas_stock(
 
 
 @router.post("/codigos", response_model=ProductoCodigoRead)
-def reservar_codigo_producto(service: ServiceDep) -> ProductoCodigoRead:
+def reservar_codigo_producto(
+    service: ServiceDep,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
+) -> ProductoCodigoRead:
     return ProductoCodigoRead(id_producto=service.reservar_codigo())
 
 
@@ -133,7 +142,11 @@ def obtener_producto(service: ServiceDep, id_producto: ProductoId) -> ProductoRe
 
 
 @router.post("", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
-def crear_producto(datos: ProductoCreate, service: ServiceDep) -> ProductoRead:
+def crear_producto(
+    datos: ProductoCreate,
+    service: ServiceDep,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
+) -> ProductoRead:
     try:
         producto = service.crear(datos)
     except ProductoError as exc:
@@ -146,6 +159,7 @@ def actualizar_producto(
     datos: ProductoUpdate,
     service: ServiceDep,
     id_producto: ProductoId,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
 ) -> ProductoRead:
     try:
         producto = service.actualizar(id_producto, datos)
@@ -158,6 +172,7 @@ def actualizar_producto(
 def eliminar_producto(
     service: ServiceDep,
     id_producto: ProductoId,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
     definitivo: Annotated[bool, Query()] = False,
 ) -> Response:
     try:
@@ -174,6 +189,7 @@ def eliminar_producto(
 def listar_movimientos(
     service: ServiceDep,
     id_producto: ProductoId,
+    _: Annotated[dict, Depends(require_roles("administrador", "abastecimiento"))],
     desde: Annotated[datetime | None, Query()] = None,
     hasta: Annotated[datetime | None, Query()] = None,
     tipo: Annotated[Literal["entrada", "salida"] | None, Query()] = None,
@@ -211,6 +227,7 @@ def ajustar_stock(
     datos: ProductoAjusteStock,
     service: ServiceDep,
     id_producto: ProductoId,
+    _: Annotated[dict, Depends(require_roles("administrador", "abastecimiento"))],
 ) -> MovimientoInventarioRead:
     try:
         movimiento = service.ajustar_stock(id_producto, datos)

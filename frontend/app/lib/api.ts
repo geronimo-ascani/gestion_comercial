@@ -1,3 +1,5 @@
+import { getAccessToken } from "./auth-token";
+
 const DEFAULT_API_URL = "http://localhost:8000/api/v1";
 
 export const API_URL = (
@@ -39,6 +41,10 @@ export async function apiRequest<T>(
   init: RequestInit = {}
 ): Promise<T> {
   const headers = new Headers(init.headers);
+  const token = getAccessToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   if (init.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }

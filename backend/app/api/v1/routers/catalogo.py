@@ -3,10 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_catalogo_service
+from app.api.v1.routers.auth import get_current_user
 from app.schemas.catalogo import AlicuotaIVARead, UnidadRead
 from app.services.catalogo_service import CatalogoService
 
-router = APIRouter(tags=["Catálogo"])
+router = APIRouter(tags=["Catálogo"], dependencies=[Depends(get_current_user)])
 
 ServiceDep = Annotated[CatalogoService, Depends(get_catalogo_service)]
 

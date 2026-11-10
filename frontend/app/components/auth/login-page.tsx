@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -7,19 +7,35 @@ import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
 
 import { requireText, validateEmail } from "~/lib/validation";
-import { loginUser, useCurrentUser } from "./session-store";
+import {
+  initializeSession,
+  loginUser,
+  useCurrentUser,
+  useSessionInitialized,
+} from "./session-store";
 import { AuthSplitLayout } from "./auth-split-layout";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
+  const sessionInitialized = useSessionInitialized();
+
+  useEffect(() => {
+    void initializeSession().catch((error: unknown) => {
+      setSessionError(
+        error instanceof Error ? error.message : "No se pudo validar la sesión."
+      );
+    });
+  }, []);
 
   if (currentUser) return <Navigate to="/dashboard" replace />;
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const clientErrors: Record<string, string | null> = {
       email: email.trim()
@@ -30,12 +46,20 @@ export function LoginPage() {
     setErrors(clientErrors);
     if (Object.values(clientErrors).some((error) => error)) return;
 
-    const result = loginUser(email, password);
-    if (result) {
-      setErrors({ password: result });
-      return;
+    setSubmitting(true);
+    try {
+      await loginUser(email, password);
+      navigate("/dashboard");
+    } catch (error) {
+      setErrors({
+        password:
+          error instanceof Error
+            ? error.message
+            : "No se pudo iniciar sesión.",
+      });
+    } finally {
+      setSubmitting(false);
     }
-    navigate("/dashboard");
   }
 
   return (
@@ -55,6 +79,11 @@ export function LoginPage() {
       }
     >
       <form className="space-y-4" noValidate onSubmit={handleSubmit}>
+        {sessionError && (
+          <p role="status" className="text-sm text-destructive">
+            {sessionError}
+          </p>
+        )}
         <div className="space-y-2">
           <Label htmlFor="email">Correo electrónico</Label>
           <Input
@@ -92,8 +121,13 @@ export function LoginPage() {
           />
           <FieldError message={errors.password} />
         </div>
-        <Button className="w-full" size="lg" type="submit">
-          Iniciar sesión
+        <Button
+          className="w-full"
+          size="lg"
+          type="submit"
+          disabled={submitting || !sessionInitialized}
+        >
+          {submitting ? "Ingresando…" : "Iniciar sesión"}
         </Button>
       </form>
     </AuthSplitLayout>

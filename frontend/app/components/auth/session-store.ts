@@ -1,34 +1,13 @@
 import { useSyncExternalStore } from "react";
 
+import { getAccessToken, setAccessToken } from "~/lib/auth-token";
+import { ApiError } from "~/lib/api";
 import type { Employee } from "../employees/employees-types";
-import {
-  getEmployeesSnapshot,
-  updateEmployee,
-} from "../employees/employees-store";
+import { iniciarSesion, obtenerUsuarioActual } from "./auth-api";
 
-const SESSION_KEY = "gc-current-user-id";
-
-function readStoredUserId(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function persistUserId(userId: string | null) {
-  if (typeof window === "undefined") return;
-  try {
-    if (userId) window.localStorage.setItem(SESSION_KEY, userId);
-    else window.localStorage.removeItem(SESSION_KEY);
-  } catch {
-    // Ignorar errores de almacenamiento (modo privado, cuota, etc.)
-  }
-}
-
-let currentUserId: string | null = readStoredUserId();
-
+let currentUser: Employee | null = null;
+let initialized = false;
+let initialization: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -37,54 +16,86 @@ function emit() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return () => listeners.delete(listener);
 }
 
-function getCurrentUser(): Employee | null {
-  if (!currentUserId) return null;
-  return (
-    getEmployeesSnapshot().find((employee) => employee.id === currentUserId) ??
-    null
-  );
+function getCurrentUser() {
+  return currentUser;
+}
+
+function getInitialized() {
+  return initialized;
 }
 
 export function useCurrentUser(): Employee | null {
-  return useSyncExternalStore(subscribe, getCurrentUser, getCurrentUser);
+  return useSyncExternalStore(subscribe, getCurrentUser, () => null);
 }
 
-export function loginUser(email: string, password: string): string | null {
-  const employee = getEmployeesSnapshot().find(
-    (item) => item.email.toLowerCase() === email.trim().toLowerCase()
-  );
-  if (!employee || !employee.password || employee.password !== password) {
-    return "Credenciales no válidas.";
+export function useSessionInitialized(): boolean {
+  return useSyncExternalStore(subscribe, getInitialized, () => false);
+}
+
+export async function initializeSession(): Promise<void> {
+  if (initialized) return;
+  if (initialization) return initialization;
+
+  initialization = (async () => {
+    const token = getAccessToken();
+    if (!token) {
+      currentUser = null;
+      initialized = true;
+      emit();
+      return;
+    }
+
+    try {
+      currentUser = await obtenerUsuarioActual();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setAccessToken(null);
+        currentUser = null;
+      } else {
+        throw error;
+      }
+    } finally {
+      initialized = true;
+      initialization = null;
+      emit();
+    }
+  })();
+
+  return initialization;
+}
+
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<void> {
+  const data = await iniciarSesion(email, password);
+  setAccessToken(data.access_token);
+  try {
+    currentUser = await obtenerUsuarioActual();
+  } catch (error) {
+    setAccessToken(null);
+    throw error;
   }
-  currentUserId = employee.id;
-  persistUserId(currentUserId);
-  emit();
-  return null;
-}
-
-export function logoutUser() {
-  currentUserId = null;
-  persistUserId(null);
+  initialized = true;
   emit();
 }
 
-export function changePassword(
-  currentPassword: string,
-  newPassword: string
-): string | null {
-  const employee = getCurrentUser();
-  if (!employee) return "No hay un usuario en sesión.";
-  if (!employee.password) return "El usuario no tiene contraseña configurada.";
-  if (employee.password !== currentPassword)
-    return "La contraseña actual es incorrecta.";
-  if (newPassword.length < 6)
-    return "La nueva contraseña debe tener al menos 6 caracteres.";
-  updateEmployee(employee.id, { password: newPassword });
+export function acceptRegisteredSession(
+  token: string,
+  user: Employee
+): void {
+  setAccessToken(token);
+  currentUser = user;
+  initialized = true;
   emit();
-  return null;
+}
+
+export function logoutUser(): void {
+  setAccessToken(null);
+  currentUser = null;
+  initialized = true;
+  emit();
 }

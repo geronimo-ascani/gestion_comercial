@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
 from app.api.deps import get_categoria_service
+from app.api.v1.routers.auth import get_current_user, require_roles
 from app.schemas.catalogo import CategoriaCreate, CategoriaRead, CategoriaUpdate
 from app.services.categoria_service import (
     CategoriaDuplicada,
@@ -13,7 +14,11 @@ from app.services.categoria_service import (
     CategoriaSinCambios,
 )
 
-router = APIRouter(prefix="/categorias", tags=["Categorías"])
+router = APIRouter(
+    prefix="/categorias",
+    tags=["Categorías"],
+    dependencies=[Depends(get_current_user)],
+)
 
 ServiceDep = Annotated[CategoriaService, Depends(get_categoria_service)]
 CategoriaId = Annotated[str, Path(min_length=1, max_length=20)]
@@ -69,7 +74,11 @@ def obtener_categoria(service: ServiceDep, id_categoria: CategoriaId) -> Categor
 
 
 @router.post("", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
-def crear_categoria(datos: CategoriaCreate, service: ServiceDep) -> CategoriaRead:
+def crear_categoria(
+    datos: CategoriaCreate,
+    service: ServiceDep,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
+) -> CategoriaRead:
     try:
         categoria = service.crear(datos.nombre)
     except CategoriaError as exc:
@@ -79,7 +88,10 @@ def crear_categoria(datos: CategoriaCreate, service: ServiceDep) -> CategoriaRea
 
 @router.patch("/{id_categoria}", response_model=CategoriaRead)
 def actualizar_categoria(
-    datos: CategoriaUpdate, service: ServiceDep, id_categoria: CategoriaId
+    datos: CategoriaUpdate,
+    service: ServiceDep,
+    id_categoria: CategoriaId,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
 ) -> CategoriaRead:
     try:
         categoria = service.actualizar(id_categoria, datos.nombre)
@@ -89,7 +101,11 @@ def actualizar_categoria(
 
 
 @router.delete("/{id_categoria}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_categoria(service: ServiceDep, id_categoria: CategoriaId) -> Response:
+def eliminar_categoria(
+    service: ServiceDep,
+    id_categoria: CategoriaId,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
+) -> Response:
     try:
         service.eliminar(id_categoria)
     except CategoriaError as exc:

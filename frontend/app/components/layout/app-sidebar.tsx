@@ -59,7 +59,13 @@ export function AppSidebar({ collapsed }: { collapsed: boolean }) {
       <nav
         className={cn("flex-1 space-y-1", collapsed ? "p-2" : "p-3")}
       >
-        {navItems.map((item) => (
+        {navItems
+          .filter(
+            (item) =>
+              item.to !== "/employees" ||
+              currentUser?.role === "administrador"
+          )
+          .map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

@@ -197,6 +197,25 @@ class ProductoRepository:
             return None
         return self.obtener(id_producto)
 
+    def aplicar_delta_stock(
+        self, id_producto: str, delta: Decimal
+    ) -> ProductoRow | None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                UPDATE producto
+                SET stock_actual = stock_actual + %(delta)s
+                WHERE id_producto = %(id_producto)s
+                  AND stock_actual + %(delta)s >= 0
+                RETURNING id_producto
+                """,
+                {"id_producto": id_producto, "delta": delta},
+            )
+            fila = cur.fetchone()
+        if fila is None:
+            return None
+        return self.obtener(id_producto)
+
     def eliminar(self, id_producto: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(

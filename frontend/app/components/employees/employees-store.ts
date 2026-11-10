@@ -1,45 +1,11 @@
 import { useSyncExternalStore } from "react";
 
+import { listarEmpleados } from "../auth/auth-api";
 import type { Employee } from "./employees-types";
 
-const demoEmployees: Employee[] = [
-  {
-    id: "EMP-001",
-    firstName: "María",
-    lastName: "González",
-    cuil: "20-30223344-7",
-    phone: "+54 11 5555-0101",
-    email: "maria@empresa.com",
-    hireDate: "01/03/2023",
-    role: "administrador",
-    password: "123456",
-  },
-  {
-    id: "EMP-002",
-    firstName: "Juan",
-    lastName: "Pérez",
-    cuil: "20-25123456-7",
-    phone: "+54 11 5555-0202",
-    email: "juan@empresa.com",
-    hireDate: "15/06/2024",
-    role: "ventas",
-    password: "123456",
-  },
-  {
-    id: "EMP-003",
-    firstName: "Admin",
-    lastName: "Sistema",
-    cuil: "20-20123456-0",
-    phone: "+54 11 5555-0303",
-    email: "admin@empresa.com",
-    hireDate: "01/01/2022",
-    role: "administrador",
-    password: "admin123",
-  },
-];
-
-let employees: Employee[] = [...demoEmployees];
-
+let employees: Employee[] = [];
+let loaded = false;
+let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -48,36 +14,34 @@ function emit() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return () => listeners.delete(listener);
 }
 
 function getEmployees() {
   return employees;
 }
 
-export function getEmployeesSnapshot(): Employee[] {
-  return employees;
-}
-
 export function useEmployees(): Employee[] {
-  return useSyncExternalStore(subscribe, getEmployees, getEmployees);
+  return useSyncExternalStore(subscribe, getEmployees, () => []);
 }
 
-export function addEmployee(employee: Employee) {
-  employees = [...employees, employee];
-  emit();
+export function loadEmployees(): Promise<void> {
+  if (loaded) return Promise.resolve();
+  if (loading) return loading;
+  loading = listarEmpleados()
+    .then((data) => {
+      employees = data;
+      loaded = true;
+      emit();
+    })
+    .finally(() => {
+      loading = null;
+    });
+  return loading;
 }
 
-export function updateEmployee(id: string, patch: Partial<Employee>) {
-  employees = employees.map((employee) =>
-    employee.id === id ? { ...employee, ...patch } : employee
-  );
-  emit();
-}
-
-export function removeEmployee(id: string) {
-  employees = employees.filter((employee) => employee.id !== id);
-  emit();
+export async function refreshEmployees(): Promise<void> {
+  if (loading) await loading;
+  loaded = false;
+  return loadEmployees();
 }

@@ -260,8 +260,6 @@ class ProductoService:
                 )
         if "margen" in cambios:
             cambios["margen"] = _normalizar_dinero(cambios["margen"])
-        if "stock_actual" in cambios:
-            cambios["stock_actual"] = _normalizar_cantidad(cambios["stock_actual"])
         if "stock_minimo" in cambios:
             cambios["stock_minimo"] = _normalizar_cantidad(cambios["stock_minimo"])
 
@@ -274,22 +272,11 @@ class ProductoService:
                 alicuota_porcentaje,
             )
 
-        stock_anterior = actual["stock_actual"]
-        stock_nuevo = cambios.get("stock_actual", stock_anterior)
-        delta = stock_nuevo - stock_anterior
-
         try:
             with self._repo.transaction():
                 producto = self._repo.actualizar(id_producto, cambios)
                 if producto is None:
                     raise ProductoNoEncontrado(id_producto)
-                if delta != 0:
-                    tipo = "entrada" if delta > 0 else "salida"
-                    self._movimientos.crear_ajuste(
-                        id_producto,
-                        tipo,
-                        abs(delta),
-                    )
         except errors.ForeignKeyViolation as exc:
             raise ProductoDatosInvalidos(
                 "La categoría, alícuota o unidad no existe"
@@ -368,26 +355,22 @@ class ProductoService:
     def ajustar_stock(
         self, id_producto: str, datos: ProductoAjusteStock
     ) -> MovimientoRow:
-        actual = self.obtener(id_producto)
+        self.obtener(id_producto)
         cantidad = _normalizar_cantidad(datos.cantidad)
         if cantidad <= 0:
             raise ProductoDatosInvalidos(
                 "La cantidad del ajuste debe ser mayor que cero"
             )
 
-        if datos.tipo == "salida" and actual["stock_actual"] < cantidad:
-            raise ProductoStockInsuficiente(id_producto)
-
         delta = cantidad if datos.tipo == "entrada" else -cantidad
-        nuevo_stock = actual["stock_actual"] + delta
 
         try:
             with self._repo.transaction():
-                producto = self._repo.actualizar(
-                    id_producto, {"stock_actual": nuevo_stock}
-                )
+                producto = self._repo.aplicar_delta_stock(id_producto, delta)
                 if producto is None:
-                    raise ProductoNoEncontrado(id_producto)
+                    if self._repo.obtener(id_producto) is None:
+                        raise ProductoNoEncontrado(id_producto)
+                    raise ProductoStockInsuficiente(id_producto)
                 movimiento = self._movimientos.crear_ajuste(
                     id_producto,
                     datos.tipo,

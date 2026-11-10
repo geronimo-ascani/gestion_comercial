@@ -102,7 +102,7 @@ export interface ProductoCreatePayload {
 }
 
 export type ProductoUpdatePayload = Partial<
-  Omit<ProductoCreatePayload, "id_producto">
+  Omit<ProductoCreatePayload, "id_producto" | "stock_actual">
 >;
 
 export interface MovimientoFiltros {

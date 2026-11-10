@@ -1,6 +1,6 @@
-import { useState, type ReactElement } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { Plus, Search } from "lucide-react";
+import { Navigate, useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -11,16 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import {
   Table,
@@ -35,49 +25,30 @@ import { employeeRoleLabels } from "./employees-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
-import { removeEmployee, useEmployees } from "./employees-store";
-
-function ConfirmDeleteDialog({
-  title,
-  description,
-  trigger,
-  onConfirm,
-}: {
-  title: string;
-  description: string;
-  trigger: ReactElement;
-  onConfirm: () => void;
-}) {
-  return (
-    <Dialog>
-      <DialogTrigger render={trigger} />
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancelar
-          </DialogClose>
-          <DialogClose
-            render={<Button variant="destructive" onClick={onConfirm} />}
-          >
-            Eliminar
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { loadEmployees, useEmployees } from "./employees-store";
+import { useCurrentUser } from "../auth/session-store";
 
 export function EmployeesPage() {
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
   const [query, setQuery] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query);
 
   const employees = useEmployees();
   const loading = useInitialLoading();
+
+  useEffect(() => {
+    void loadEmployees().catch((error: unknown) => {
+      setLoadError(
+        error instanceof Error ? error.message : "No se pudieron cargar los empleados."
+      );
+    });
+  }, []);
+
+  if (currentUser?.role !== "administrador") {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const filtered = employees.filter((employee) => {
     const haystack =
@@ -88,7 +59,7 @@ export function EmployeesPage() {
   });
 
   function openNewEmployee() {
-    navigate("/employees/new");
+    navigate("/register");
   }
 
   return (
@@ -97,7 +68,7 @@ export function EmployeesPage() {
         <div>
           <h1 className="text-3xl font-bold">Empleados</h1>
           <p className="text-muted-foreground">
-            Perfiles de empleados de la organización.
+            Usuarios y roles de acceso de la organización.
           </p>
         </div>
         <Button onClick={openNewEmployee}>
@@ -105,6 +76,12 @@ export function EmployeesPage() {
           Nuevo empleado
         </Button>
       </div>
+
+      {loadError && (
+        <p role="alert" className="text-sm text-destructive">
+          {loadError}
+        </p>
+      )}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative w-full max-w-sm">
@@ -132,7 +109,7 @@ export function EmployeesPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <TableSkeleton rows={6} columns={7} />
+            <TableSkeleton rows={6} columns={6} />
           ) : (
             <Table>
               <TableHeader>
@@ -143,14 +120,13 @@ export function EmployeesPage() {
                   <TableHead>Correo electrónico</TableHead>
                   <TableHead>Fecha de ingreso</TableHead>
                   <TableHead>Rol</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {employees.length === 0
@@ -174,35 +150,6 @@ export function EmployeesPage() {
                       {employee.role
                         ? employeeRoleLabels[employee.role]
                         : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Editar empleado ${employee.firstName} ${employee.lastName}`}
-                          onClick={() =>
-                            navigate(`/employees/new?edit=${employee.id}`)
-                          }
-                        >
-                          <Pencil />
-                        </Button>
-                        <ConfirmDeleteDialog
-                          title="¿Eliminar empleado?"
-                          description={`Se eliminará ${employee.firstName} ${employee.lastName}. Esta acción no se puede deshacer.`}
-                          onConfirm={() => removeEmployee(employee.id)}
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-destructive hover:text-destructive"
-                              aria-label={`Eliminar empleado ${employee.firstName} ${employee.lastName}`}
-                            >
-                              <Trash2 />
-                            </Button>
-                          }
-                        />
-                      </div>
                     </TableCell>
                   </TableRow>
                 ))

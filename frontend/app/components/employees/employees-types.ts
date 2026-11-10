@@ -15,5 +15,4 @@ export interface Employee {
   email: string;
   hireDate: string;
   role: EmployeeRole;
-  password?: string;
 }

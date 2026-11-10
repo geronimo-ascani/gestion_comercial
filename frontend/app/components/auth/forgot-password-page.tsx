@@ -8,21 +8,37 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 
 import { requireText, validateEmail } from "~/lib/validation";
+import { solicitarRecuperacion } from "./auth-api";
 import { AuthSplitLayout } from "./auth-split-layout";
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [sent, setSent] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const emailError = email.trim()
       ? validateEmail(email)
       : requireText(email, "Correo electrónico");
     setErrors({ email: emailError });
     if (emailError) return;
-    setSent(true);
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await solicitarRecuperacion(email.trim());
+      setSent(true);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar el correo de recuperación."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -66,8 +82,18 @@ export function ForgotPasswordPage() {
             />
             <FieldError message={errors.email} />
           </div>
-          <Button className="w-full" size="lg" type="submit">
-            Enviar enlace
+          {submitError && (
+            <p role="alert" className="text-sm text-destructive">
+              {submitError}
+            </p>
+          )}
+          <Button
+            className="w-full"
+            size="lg"
+            type="submit"
+            disabled={submitting}
+          >
+            {submitting ? "Enviando…" : "Enviar enlace"}
           </Button>
         </form>
       )}

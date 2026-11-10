@@ -138,7 +138,6 @@ class ProductoUpdate(UpdateSchema):
     imagen: bool | None = None
     margen: Decimal | None = Field(default=None, ge=0)
     precio_compra: Decimal | None = Field(default=None, gt=0)
-    stock_actual: Decimal | None = Field(default=None, ge=0)
     stock_minimo: Decimal | None = Field(default=None, ge=0)
     id_alicuota_iva: str | None = Field(default=None, min_length=1, max_length=20)
     id_categoria: str | None = Field(default=None, min_length=1, max_length=20)

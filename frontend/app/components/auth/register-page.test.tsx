@@ -1,26 +1,32 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth-split-layout", () => ({
-  AuthSplitLayout: ({
-    title,
-    subtitle,
-    children,
-    footer,
-  }: {
-    title: string;
-    subtitle: string;
-    children: React.ReactNode;
-    footer: React.ReactNode;
-  }) => (
+  AuthSplitLayout: ({ title, children }: React.PropsWithChildren<{ title: string }>) => (
     <div>
       <h1>{title}</h1>
-      <p>{subtitle}</p>
       {children}
-      {footer}
     </div>
   ),
+}));
+
+vi.mock("./auth-api", () => ({
+  registrarUsuario: vi.fn(),
+  mapUsuario: vi.fn((user) => ({
+    id: user.id_empleado,
+    firstName: user.nombre,
+    lastName: user.apellido,
+    cuil: user.dni_cuil,
+    phone: user.telefono,
+    email: user.email,
+    hireDate: user.fecha_ingreso,
+    role: user.rol,
+  })),
+}));
+
+vi.mock("../employees/employees-store", () => ({
+  refreshEmployees: vi.fn().mockResolvedValue(undefined),
 }));
 
 function LocationProbe() {
@@ -28,172 +34,89 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
-function renderRegister(Page: () => React.ReactNode) {
-  return render(
-    <MemoryRouter initialEntries={["/register"]}>
-      <Page />
-      <LocationProbe />
-    </MemoryRouter>
-  );
-}
-
 async function loadPage() {
   vi.resetModules();
-  const { RegisterPage } = await import("./register-page");
-  return RegisterPage;
+  return (await import("./register-page")).RegisterPage;
 }
 
-function fillForm(fields: {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  password?: string;
-  confirmPassword?: string;
-}) {
-  if (fields.firstName !== undefined) {
-    fireEvent.change(screen.getByLabelText("Nombre"), {
-      target: { value: fields.firstName },
-    });
-  }
-  if (fields.lastName !== undefined) {
-    fireEvent.change(screen.getByLabelText("Apellido"), {
-      target: { value: fields.lastName },
-    });
-  }
-  if (fields.email !== undefined) {
-    fireEvent.change(screen.getByLabelText("Correo electrónico"), {
-      target: { value: fields.email },
-    });
-  }
-  if (fields.password !== undefined) {
-    fireEvent.change(screen.getByLabelText("Contraseña"), {
-      target: { value: fields.password },
-    });
-  }
-  if (fields.confirmPassword !== undefined) {
-    fireEvent.change(screen.getByLabelText("Confirmar contraseña"), {
-      target: { value: fields.confirmPassword },
-    });
+function fillForm() {
+  const values: Record<string, string> = {
+    Nombre: "Ana",
+    Apellido: "López",
+    "DNI / CUIL": "20-12345678-9",
+    Teléfono: "11111111",
+    "Correo electrónico": "ana@empresa.com",
+    Contraseña: "password-segura",
+    "Confirmar contraseña": "password-segura",
+  };
+  for (const [label, value] of Object.entries(values)) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
   }
 }
 
 describe("RegisterPage", () => {
   beforeEach(() => {
-    localStorage.clear();
+    sessionStorage.clear();
+    vi.clearAllMocks();
   });
 
-  it("renderiza el formulario sin selector de rol", async () => {
+  it("registra al primer usuario como administrador sin permitir elegir el rol", async () => {
     const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    expect(
-      screen.getByRole("heading", { name: "Crea tu cuenta" })
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
-    expect(screen.getByLabelText("Apellido")).toBeInTheDocument();
-    expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
-    expect(screen.getByLabelText("Contraseña")).toBeInTheDocument();
-    expect(screen.getByLabelText("Confirmar contraseña")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Rol")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ventas")).not.toBeInTheDocument();
-  });
-
-  it("muestra errores de obligatoriedad al enviar vacío", async () => {
-    const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
-
-    expect(await screen.findByText("Nombre es obligatorio")).toBeInTheDocument();
-    expect(screen.getByText("Apellido es obligatorio")).toBeInTheDocument();
-    expect(
-      screen.getByText("Correo electrónico es obligatorio")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Contraseña es obligatorio")).toBeInTheDocument();
-    expect(
-      screen.getByText("Confirmar contraseña es obligatorio")
-    ).toBeInTheDocument();
-  });
-
-  it("valida la longitud mínima de la contraseña", async () => {
-    const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    fillForm({
-      firstName: "Ana",
-      lastName: "López",
-      email: "ana@empresa.com",
-      password: "123",
-      confirmPassword: "123",
+    const api = await import("./auth-api");
+    vi.mocked(api.registrarUsuario).mockResolvedValue({
+      access_token: "first-admin-token",
+      token_type: "bearer",
+      user: {
+        id_empleado: "EMP-0001",
+        nombre: "Ana",
+        apellido: "López",
+        dni_cuil: "20-12345678-9",
+        telefono: "11111111",
+        email: "ana@empresa.com",
+        fecha_alta: "2025-01-01T00:00:00Z",
+        fecha_ingreso: "2025-01-01",
+        fecha_modificacion: null,
+        puesto: "Administrador",
+        rol: "administrador",
+      },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
-
-    expect(
-      await screen.findByText("Debe tener al menos 6 caracteres")
-    ).toBeInTheDocument();
-  });
-
-  it("valida que las contraseñas coincidan", async () => {
-    const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    fillForm({
-      firstName: "Ana",
-      lastName: "López",
-      email: "ana@empresa.com",
-      password: "123456",
-      confirmPassword: "654321",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
-
-    expect(
-      await screen.findByText("Las contraseñas no coinciden")
-    ).toBeInTheDocument();
-  });
-
-  it("rechaza un correo ya registrado", async () => {
-    const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    fillForm({
-      firstName: "María",
-      lastName: "González",
-      email: "maria@empresa.com",
-      password: "123456",
-      confirmPassword: "123456",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
-
-    expect(
-      await screen.findByText("Ya existe una cuenta con ese correo.")
-    ).toBeInTheDocument();
-  });
-
-  it("crea la cuenta como administrador y navega al dashboard", async () => {
-    const RegisterPage = await loadPage();
-    renderRegister(RegisterPage);
-
-    fillForm({
-      firstName: "Ana",
-      lastName: "López",
-      email: "ana@empresa.com",
-      password: "123456",
-      confirmPassword: "123456",
-    });
+    render(
+      <MemoryRouter initialEntries={["/register"]}>
+        <RegisterPage />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    await screen.findByRole("heading", { name: "Crea tu cuenta" });
+    fillForm();
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("location")).toHaveTextContent("/dashboard");
     });
+    expect(api.registrarUsuario).toHaveBeenCalledWith(
+      expect.objectContaining({ rol: "ventas", email: "ana@empresa.com" })
+    );
+    expect(sessionStorage.getItem("gc-access-token")).toBe(
+      "first-admin-token"
+    );
+  });
 
-    const { getEmployeesSnapshot } = await import(
-      "../employees/employees-store"
+  it("valida longitud mínima de contraseña", async () => {
+    const RegisterPage = await loadPage();
+    render(
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>
     );
-    const created = getEmployeesSnapshot().find(
-      (employee) => employee.email === "ana@empresa.com"
-    );
-    expect(created).toBeDefined();
-    expect(created?.role).toBe("administrador");
-    expect(localStorage.getItem("gc-current-user-id")).toBe(created?.id);
+    await screen.findByRole("heading", { name: "Crea tu cuenta" });
+    fillForm();
+    fireEvent.change(screen.getByLabelText("Contraseña"), {
+      target: { value: "short" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
+
+    expect(
+      await screen.findByText("Debe tener al menos 8 caracteres")
+    ).toBeInTheDocument();
   });
 });

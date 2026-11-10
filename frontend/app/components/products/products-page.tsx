@@ -1,5 +1,14 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
-import { Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
+import {
+  BellRing,
+  History,
+  PackagePlus,
+  Pencil,
+  Plus,
+  Search,
+  Tags,
+  Trash2,
+} from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -42,16 +51,21 @@ import { TableSkeleton } from "~/components/ui/skeleton";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
 import {
+  ajustarStock,
   crearCategoria,
   eliminarCategoria,
   eliminarProducto,
+  listarAlertasStock,
   listarCategorias,
+  listarMovimientos,
   listarProductos,
   type Categoria,
+  type MovimientoInventario,
   type StockEstado,
 } from "./products-api";
 import { refreshProducts } from "./products-store";
 import type { Product } from "./products-types";
+import { useCurrentUser } from "../auth/session-store";
 
 function formatPercent(value: number): string {
   return `${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`;
@@ -274,6 +288,11 @@ function statusToFiltro(status: "all" | StockStatus): StockEstado {
 
 export function ProductsPage() {
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
+  const canManageProducts = currentUser?.role === "administrador";
+  const canManageStock =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "abastecimiento";
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<Categoria[]>([]);
@@ -285,6 +304,20 @@ export function ProductsPage() {
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [status, setStatus] = useState<"all" | StockStatus>("all");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustType, setAdjustType] = useState<"entrada" | "salida">("entrada");
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [movements, setMovements] = useState<MovimientoInventario[]>([]);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [movementError, setMovementError] = useState<string | null>(null);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertProducts, setAlertProducts] = useState<Product[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query);
   const debouncedPriceMin = useDebouncedValue(priceMin);
   const debouncedPriceMax = useDebouncedValue(priceMax);
@@ -355,8 +388,82 @@ export function ProductsPage() {
     reloadKey,
   ]);
 
+  useEffect(() => {
+    if (!historyOpen || !selectedProduct) return;
+    let cancelled = false;
+    setMovementLoading(true);
+    setMovementError(null);
+    listarMovimientos(selectedProduct.id, { limit: 100 })
+      .then((data) => {
+        if (!cancelled) setMovements(data);
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setMovementError(errorMessage(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setMovementLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyOpen, selectedProduct]);
+
   function openNewProduct() {
     navigate("/products/new");
+  }
+
+  function openAdjustment(product: Product) {
+    setSelectedProduct(product);
+    setAdjustType("entrada");
+    setAdjustAmount("");
+    setAdjustError(null);
+    setAdjustOpen(true);
+  }
+
+  function openHistory(product: Product) {
+    setSelectedProduct(product);
+    setMovementError(null);
+    setHistoryOpen(true);
+  }
+
+  async function handleStockAdjustment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amount = parseNumberInput(adjustAmount);
+    if (!selectedProduct || !Number.isFinite(amount) || amount <= 0) {
+      setAdjustError("Ingresá una cantidad mayor que cero.");
+      return;
+    }
+
+    setAdjusting(true);
+    setAdjustError(null);
+    try {
+      await ajustarStock(selectedProduct.id, {
+        tipo: adjustType,
+        cantidad: amount,
+      });
+      await refreshProducts();
+      reload();
+      setAdjustOpen(false);
+    } catch (caught) {
+      setAdjustError(errorMessage(caught));
+    } finally {
+      setAdjusting(false);
+    }
+  }
+
+  async function openStockAlerts() {
+    setAlertsOpen(true);
+    setAlertsLoading(true);
+    setAlertsError(null);
+    try {
+      const result = await listarAlertasStock(200);
+      setAlertProducts(result.items);
+    } catch (caught) {
+      setAlertsError(errorMessage(caught));
+      setAlertProducts([]);
+    } finally {
+      setAlertsLoading(false);
+    }
   }
 
   function reload() {
@@ -389,14 +496,24 @@ export function ProductsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <CategoryManagementDialog
-            categories={categories}
-            onChanged={handleCategoriesChanged}
-          />
-          <Button onClick={openNewProduct}>
-            <Plus />
-            Nuevo producto
-          </Button>
+          {canManageStock && (
+            <Button variant="outline" onClick={openStockAlerts}>
+              <BellRing />
+              Alertas de stock
+            </Button>
+          )}
+          {canManageProducts && (
+            <>
+              <CategoryManagementDialog
+                categories={categories}
+                onChanged={handleCategoriesChanged}
+              />
+              <Button onClick={openNewProduct}>
+                <Plus />
+                Nuevo producto
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -547,30 +664,54 @@ export function ProductsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Editar producto ${product.name}`}
-                            onClick={() =>
-                              navigate(`/products/new?edit=${product.id}`)
-                            }
-                          >
-                            <Pencil />
-                          </Button>
-                          <ProductDeleteDialog
-                            product={product}
-                            onConfirm={() => handleDeleteProduct(product)}
-                            trigger={
+                          {canManageStock && (
+                            <>
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                className="text-destructive hover:text-destructive"
-                                aria-label={`Eliminar producto ${product.name}`}
+                                aria-label={`Ajustar stock de ${product.name}`}
+                                onClick={() => openAdjustment(product)}
                               >
-                                <Trash2 />
+                                <PackagePlus />
                               </Button>
-                            }
-                          />
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Ver movimientos de ${product.name}`}
+                                onClick={() => openHistory(product)}
+                              >
+                                <History />
+                              </Button>
+                            </>
+                          )}
+                          {canManageProducts && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Editar producto ${product.name}`}
+                                onClick={() =>
+                                  navigate(`/products/new?edit=${product.id}`)
+                                }
+                              >
+                                <Pencil />
+                              </Button>
+                              <ProductDeleteDialog
+                                product={product}
+                                onConfirm={() => handleDeleteProduct(product)}
+                                trigger={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-destructive hover:text-destructive"
+                                    aria-label={`Eliminar producto ${product.name}`}
+                                  >
+                                    <Trash2 />
+                                  </Button>
+                                }
+                              />
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -582,6 +723,155 @@ export function ProductsPage() {
         </CardContent>
         <CardFooter className="justify-between text-sm text-muted-foreground" />
       </Card>
+
+      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Ajustar stock</DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.name} · Stock actual: {selectedProduct?.stock}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleStockAdjustment}>
+            <div className="space-y-2">
+              <Label htmlFor="stock-adjustment-type">Movimiento</Label>
+              <Select
+                value={adjustType}
+                onValueChange={(value) =>
+                  value && setAdjustType(value as "entrada" | "salida")
+                }
+              >
+                <SelectTrigger id="stock-adjustment-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="entrada">Entrada</SelectItem>
+                  <SelectItem value="salida">Salida</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stock-adjustment-amount">Cantidad</Label>
+              <Input
+                id="stock-adjustment-amount"
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={adjustAmount}
+                onChange={(event) => {
+                  setAdjustAmount(event.target.value);
+                  setAdjustError(null);
+                }}
+              />
+            </div>
+            {adjustError && (
+              <p role="alert" className="text-sm text-destructive">
+                {adjustError}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAdjustOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={adjusting}>
+                {adjusting ? "Guardando…" : "Registrar movimiento"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Historial de inventario</DialogTitle>
+            <DialogDescription>{selectedProduct?.name}</DialogDescription>
+          </DialogHeader>
+          {movementLoading ? (
+            <p role="status" className="py-6 text-center text-sm text-muted-foreground">
+              Cargando movimientos…
+            </p>
+          ) : movementError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {movementError}
+            </p>
+          ) : movements.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Todavía no hay movimientos registrados.
+            </p>
+          ) : (
+            <div className="divide-y">
+              {movements.map((movement) => (
+                <div
+                  key={movement.id_movimiento}
+                  className="flex items-center justify-between gap-4 py-3 text-sm"
+                >
+                  <div>
+                    <p className="font-medium capitalize">
+                      {movement.tipo} · {movement.motivo}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {new Date(movement.fecha_movimiento).toLocaleString("es-AR")}
+                    </p>
+                  </div>
+                  <span className="font-mono">
+                    {movement.tipo === "entrada" ? "+" : "−"}
+                    {movement.cantidad}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={alertsOpen} onOpenChange={setAlertsOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Alertas de stock</DialogTitle>
+            <DialogDescription>
+              Productos con stock actual igual o inferior al mínimo configurado.
+            </DialogDescription>
+          </DialogHeader>
+          {alertsError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {alertsError}
+            </p>
+          ) : alertsLoading ? (
+            <p role="status" className="py-6 text-center text-sm text-muted-foreground">
+              Cargando alertas…
+            </p>
+          ) : alertProducts.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No hay productos con stock bajo.
+            </p>
+          ) : (
+            <div className="divide-y">
+              {alertProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center justify-between gap-4 py-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{product.name}</p>
+                    <p className="text-muted-foreground">{product.code}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p>Stock: {product.stock}</p>
+                    <p className="text-muted-foreground">
+                      Mínimo: {product.minStock}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

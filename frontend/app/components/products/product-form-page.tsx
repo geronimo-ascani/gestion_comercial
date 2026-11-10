@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter } from "~/components/ui/card";
@@ -34,6 +34,7 @@ import {
 } from "./products-api";
 import { calculateMarginValue, calculateSalePrice } from "./products-calc";
 import { refreshProducts } from "./products-store";
+import { useCurrentUser } from "../auth/session-store";
 
 function defaultAlicuota(alicuotas: AlicuotaIva[]): AlicuotaIva | undefined {
   return (
@@ -52,6 +53,8 @@ function errorMessage(error: unknown): string {
 
 export function ProductFormPage() {
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
+  const canManageProducts = currentUser?.role === "administrador";
   const [searchParams] = useSearchParams();
   const editId = searchParams.get("edit");
   const editing = Boolean(editId);
@@ -76,6 +79,7 @@ export function ProductFormPage() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
+    if (!canManageProducts) return;
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
@@ -120,7 +124,7 @@ export function ProductFormPage() {
     return () => {
       cancelled = true;
     };
-  }, [editId]);
+  }, [canManageProducts, editId]);
 
   const purchaseAmount = parseNumberInput(purchasePrice);
   const marginAmount = margin.trim() === "" ? 0 : parsePercentInput(margin);
@@ -185,7 +189,6 @@ export function ProductFormPage() {
       descripcion: description.trim(),
       margen: marginAmount,
       precio_compra: purchaseAmount,
-      stock_actual: Math.floor(parseNumberInput(stock)),
       stock_minimo: Math.floor(parseNumberInput(minStock)),
       id_alicuota_iva: alicuotaId,
       id_categoria: categoryId,
@@ -196,7 +199,11 @@ export function ProductFormPage() {
       if (editId) {
         await actualizarProducto(editId, payload);
       } else {
-        await crearProducto({ ...payload, id_producto: code });
+        await crearProducto({
+          ...payload,
+          stock_actual: Math.floor(parseNumberInput(stock)),
+          id_producto: code,
+        });
       }
       await refreshProducts();
       navigate(backTo);
@@ -206,6 +213,8 @@ export function ProductFormPage() {
       setSaving(false);
     }
   }
+
+  if (!canManageProducts) return <Navigate to="/products" replace />;
 
   if (loading) {
     return (
@@ -257,7 +266,7 @@ export function ProductFormPage() {
                 <Label htmlFor="product-code">Código</Label>
                 <Input
                   id="product-code"
-                  value={editing ? code : "Se genera automáticamente"}
+                  value={code}
                   disabled
                   className="font-mono text-xs"
                   aria-describedby="product-code-help"
@@ -414,12 +423,19 @@ export function ProductFormPage() {
                   type="number"
                   min={0}
                   value={stock}
+                  readOnly={editing}
                   onChange={(event) =>
                     setField("stock", event.target.value, setStock)
                   }
+                  className={editing ? "bg-muted text-muted-foreground" : undefined}
                   placeholder="0"
                   aria-invalid={!!errors.stock}
                 />
+                {editing && (
+                  <p className="text-xs text-muted-foreground">
+                    Modificá el saldo desde Ajustar stock en el listado.
+                  </p>
+                )}
                 <FieldError message={errors.stock} />
               </div>
               <div className="space-y-2">

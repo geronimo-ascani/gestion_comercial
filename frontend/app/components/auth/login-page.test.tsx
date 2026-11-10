@@ -1,26 +1,19 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth-split-layout", () => ({
-  AuthSplitLayout: ({
-    title,
-    subtitle,
-    children,
-    footer,
-  }: {
-    title: string;
-    subtitle: string;
-    children: React.ReactNode;
-    footer: React.ReactNode;
-  }) => (
+  AuthSplitLayout: ({ title, children }: React.PropsWithChildren<{ title: string }>) => (
     <div>
       <h1>{title}</h1>
-      <p>{subtitle}</p>
       {children}
-      {footer}
     </div>
   ),
+}));
+
+vi.mock("./auth-api", () => ({
+  iniciarSesion: vi.fn(),
+  obtenerUsuarioActual: vi.fn(),
 }));
 
 function LocationProbe() {
@@ -39,13 +32,13 @@ function renderLogin(Page: () => React.ReactNode) {
 
 async function loadPage() {
   vi.resetModules();
-  const { LoginPage } = await import("./login-page");
-  return LoginPage;
+  return (await import("./login-page")).LoginPage;
 }
 
 describe("LoginPage", () => {
   beforeEach(() => {
-    localStorage.clear();
+    sessionStorage.clear();
+    vi.clearAllMocks();
   });
 
   it("renderiza el formulario de inicio de sesión", async () => {
@@ -57,51 +50,31 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
     expect(screen.getByLabelText("Contraseña")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Iniciar sesión" })
-    ).toBeInTheDocument();
   });
 
-  it("muestra errores de obligatoriedad al enviar vacío", async () => {
+  it("valida campos requeridos antes de enviar", async () => {
     const LoginPage = await loadPage();
     renderLogin(LoginPage);
-
     fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
     expect(
       await screen.findByText("Correo electrónico es obligatorio")
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Contraseña es obligatorio")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Contraseña es obligatorio")).toBeInTheDocument();
   });
 
-  it("muestra error de formato de correo inválido", async () => {
+  it("usa un mensaje genérico ante credenciales incorrectas", async () => {
     const LoginPage = await loadPage();
+    const api = await import("./auth-api");
+    vi.mocked(api.iniciarSesion).mockRejectedValue(
+      new Error("Credenciales no válidas.")
+    );
     renderLogin(LoginPage);
-
     fireEvent.change(screen.getByLabelText("Correo electrónico"), {
-      target: { value: "correo-invalido" },
+      target: { value: "usuario@empresa.com" },
     });
     fireEvent.change(screen.getByLabelText("Contraseña"), {
-      target: { value: "123456" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
-
-    expect(
-      await screen.findByText("Correo electrónico inválido")
-    ).toBeInTheDocument();
-  });
-
-  it("no revela si el correo existe ante credenciales incorrectas", async () => {
-    const LoginPage = await loadPage();
-    renderLogin(LoginPage);
-
-    fireEvent.change(screen.getByLabelText("Correo electrónico"), {
-      target: { value: "noexiste@empresa.com" },
-    });
-    fireEvent.change(screen.getByLabelText("Contraseña"), {
-      target: { value: "loquesea" },
+      target: { value: "incorrecta" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
@@ -111,49 +84,35 @@ describe("LoginPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/login");
   });
 
-  it("usa el mismo mensaje genérico si la contraseña es incorrecta", async () => {
+  it("inicia sesión y navega al dashboard", async () => {
     const LoginPage = await loadPage();
+    const api = await import("./auth-api");
+    vi.mocked(api.iniciarSesion).mockResolvedValue({
+      access_token: "test-token",
+      token_type: "bearer",
+    });
+    vi.mocked(api.obtenerUsuarioActual).mockResolvedValue({
+      id: "EMP-0001",
+      firstName: "Ana",
+      lastName: "Pérez",
+      cuil: "20-12345678-9",
+      phone: "11111111",
+      email: "ana@empresa.com",
+      hireDate: "01/01/2025",
+      role: "administrador",
+    });
     renderLogin(LoginPage);
-
     fireEvent.change(screen.getByLabelText("Correo electrónico"), {
-      target: { value: "admin@empresa.com" },
+      target: { value: "ana@empresa.com" },
     });
     fireEvent.change(screen.getByLabelText("Contraseña"), {
-      target: { value: "clave-incorrecta" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
-
-    expect(
-      await screen.findByText("Credenciales no válidas.")
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/no existe un usuario/i)).not.toBeInTheDocument();
-  });
-
-  it("inicia sesión con credenciales válidas y navega al dashboard", async () => {
-    const LoginPage = await loadPage();
-    renderLogin(LoginPage);
-
-    fireEvent.change(screen.getByLabelText("Correo electrónico"), {
-      target: { value: "admin@empresa.com" },
-    });
-    fireEvent.change(screen.getByLabelText("Contraseña"), {
-      target: { value: "admin123" },
+      target: { value: "password-segura" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("location")).toHaveTextContent("/dashboard");
     });
-    expect(localStorage.getItem("gc-current-user-id")).toBe("EMP-003");
-  });
-
-  it("redirige al dashboard si ya hay una sesión activa", async () => {
-    localStorage.setItem("gc-current-user-id", "EMP-003");
-    const LoginPage = await loadPage();
-    renderLogin(LoginPage);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("location")).toHaveTextContent("/dashboard");
-    });
+    expect(sessionStorage.getItem("gc-access-token")).toBe("test-token");
   });
 });

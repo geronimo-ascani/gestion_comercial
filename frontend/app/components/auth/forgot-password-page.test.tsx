@@ -23,6 +23,10 @@ vi.mock("./auth-split-layout", () => ({
   ),
 }));
 
+vi.mock("./auth-api", () => ({
+  solicitarRecuperacion: vi.fn().mockResolvedValue(undefined),
+}));
+
 function renderPage(Page: () => React.ReactNode) {
   return render(
     <MemoryRouter initialEntries={["/forgot-password"]}>
@@ -39,7 +43,7 @@ async function loadPage() {
 
 describe("ForgotPasswordPage", () => {
   beforeEach(() => {
-    localStorage.clear();
+    vi.clearAllMocks();
   });
 
   it("renderiza el formulario de recuperación", async () => {
@@ -80,7 +84,7 @@ describe("ForgotPasswordPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("confirma el envío con un correo válido y oculta el formulario", async () => {
+  it("confirma la solicitud con un correo válido y oculta el formulario", async () => {
     const ForgotPasswordPage = await loadPage();
     renderPage(ForgotPasswordPage);
 
