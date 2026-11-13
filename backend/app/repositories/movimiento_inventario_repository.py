@@ -90,6 +90,68 @@ class MovimientoInventarioRepository:
             assert movimiento is not None
             return movimiento
 
+    def crear_venta(
+        self,
+        id_pedido_cliente: str,
+        id_producto: str,
+        cantidad: Decimal,
+    ) -> MovimientoRow:
+        return self._crear_movimiento_pedido_venta(
+            id_pedido_cliente, id_producto, cantidad, "salida", "venta"
+        )
+
+    def crear_devolucion(
+        self,
+        id_pedido_cliente: str,
+        id_producto: str,
+        cantidad: Decimal,
+    ) -> MovimientoRow:
+        return self._crear_movimiento_pedido_venta(
+            id_pedido_cliente, id_producto, cantidad, "entrada", "devolucion"
+        )
+
+    def _crear_movimiento_pedido_venta(
+        self,
+        id_pedido_cliente: str,
+        id_producto: str,
+        cantidad: Decimal,
+        tipo: str,
+        motivo: str,
+    ) -> MovimientoRow:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                WITH movimiento AS (
+                    INSERT INTO movimiento_inventario (
+                        cantidad, fecha_movimiento, motivo, tipo,
+                        id_pedido_cliente, id_pedido_proveedor, id_producto
+                    )
+                    VALUES (
+                        %(cantidad)s, now(), %(motivo)s::motivo_movimiento,
+                        %(tipo)s::tipo_movimiento, %(id_pedido_cliente)s,
+                        NULL, %(id_producto)s
+                    )
+                    RETURNING id_movimiento, cantidad, fecha_movimiento, motivo, tipo,
+                              id_pedido_cliente, id_pedido_proveedor, id_producto
+                )
+                SELECT m.id_movimiento, m.cantidad, m.fecha_movimiento, m.motivo,
+                       m.tipo, m.id_pedido_cliente, m.id_pedido_proveedor,
+                       m.id_producto, p.nombre AS producto_nombre
+                FROM movimiento m
+                JOIN producto p ON p.id_producto = m.id_producto
+                """,
+                {
+                    "cantidad": cantidad,
+                    "motivo": motivo,
+                    "tipo": tipo,
+                    "id_pedido_cliente": id_pedido_cliente,
+                    "id_producto": id_producto,
+                },
+            )
+            movimiento = cur.fetchone()
+            assert movimiento is not None
+            return movimiento
+
     def listar_por_producto(
         self,
         id_producto: str,

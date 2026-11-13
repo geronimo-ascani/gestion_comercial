@@ -6,6 +6,7 @@ from app.api.v1.routers import (
     categorias,
     clientes,
     pedidos_compra,
+    pedidos_venta,
     productos,
     proveedores,
 )
@@ -18,3 +19,4 @@ api_router.include_router(catalogo.router)
 api_router.include_router(clientes.router)
 api_router.include_router(proveedores.router)
 api_router.include_router(pedidos_compra.router)
+api_router.include_router(pedidos_venta.router)

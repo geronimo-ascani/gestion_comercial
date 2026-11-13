@@ -128,6 +128,21 @@ class ProductoRepository:
             )
             return cur.fetchone()
 
+    def bloquear_para_pedido_venta(
+        self, id_producto: str, incluir_dados_de_baja: bool = False
+    ) -> ProductoRow | None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                {_SELECT_PRODUCTO}
+                WHERE p.id_producto = %s
+                  AND (%s OR p.estado = TRUE)
+                FOR UPDATE OF p
+                """,
+                (id_producto, incluir_dados_de_baja),
+            )
+            return cur.fetchone()
+
     def crear(self, datos: dict[str, Any], precio_venta: Decimal) -> ProductoRow:
         parametros = {**datos, "precio_venta": precio_venta}
         with self._conn.cursor(row_factory=dict_row) as cur:

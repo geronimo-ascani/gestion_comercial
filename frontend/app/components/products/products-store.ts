@@ -30,10 +30,6 @@ function getServerProducts() {
   return EMPTY_PRODUCTS;
 }
 
-export function getProductsSnapshot(): Product[] {
-  return products;
-}
-
 async function fetchProducts(): Promise<void> {
   const data = await listarProductos({ estado: true, limit: 200 });
   products = data.items;
@@ -63,23 +59,14 @@ export async function refreshProducts(): Promise<void> {
   return loadProducts(true);
 }
 
+export function invalidateProducts(): void {
+  loaded = false;
+}
+
 export function useProducts(): Product[] {
   useEffect(() => {
     void loadProducts();
   }, []);
 
   return useSyncExternalStore(subscribe, getProducts, getServerProducts);
-}
-
-/**
- * Ajuste local del stock para los borradores de ventas/compras.
- * La persistencia real se hace contra la API cuando se confirme la operación.
- */
-export function adjustStock(id: string, delta: number): number {
-  const product = products.find((item) => item.id === id);
-  if (!product) return 0;
-  const stock = Math.max(0, product.stock + delta);
-  products = products.map((item) => (item.id === id ? { ...item, stock } : item));
-  emit();
-  return stock;
 }

@@ -1,164 +1,20 @@
 import { useSyncExternalStore } from "react";
 
 import type { Budget, SalesOrder } from "./sales-types";
+import {
+  advanceSalesOrder as advanceSalesOrderApi,
+  cancelSalesOrder as cancelSalesOrderApi,
+  createSalesOrder as createSalesOrderApi,
+  getSalesOrder as getSalesOrderApi,
+  listSalesOrders,
+  updateSalesOrder as updateSalesOrderApi,
+  type SalesOrderPayload,
+} from "./sales-api";
 
-const demoOrders: SalesOrder[] = [
-  {
-    number: "PV-DEMO-01",
-    client: "María González",
-    clientId: "C-001",
-    email: "maria.gonzalez@gmail.com",
-    phone: "+54 11 5458-1024",
-    date: "04/10/2026",
-    deliveryAddress: {
-      province: "Buenos Aires",
-      locality: "CABA",
-      street: "Av. Corrientes",
-      number: "1234",
-      apartment: "3°B",
-    },
-    items: [
-      {
-        sku: "PRD-005",
-        product: "Auriculares Bluetooth",
-        qty: 2,
-        unitPrice: "$ 45.000",
-        subtotal: "$ 90.000",
-      },
-      {
-        sku: "PRD-004",
-        product: "Mouse ergonómico",
-        qty: 1,
-        unitPrice: "$ 35.000",
-        subtotal: "$ 35.000",
-      },
-    ],
-    total: "$ 125.000",
-    status: "entregado",
-    payment: "mercadopago",
-    paymentStatus: "pagado",
-    invoiceNumber: "F-001",
-  },
-  {
-    number: "PV-DEMO-02",
-    client: "Juan Pérez",
-    clientId: "C-002",
-    email: "juan.perez@hotmail.com",
-    phone: "+54 11 4756-8830",
-    date: "06/10/2026",
-    deliveryAddress: {
-      province: "Buenos Aires",
-      locality: "La Plata",
-      street: "Calle 12",
-      number: "456",
-      apartment: "",
-    },
-    items: [
-      {
-        sku: "PRD-003",
-        product: "Teclado mecánico TKL",
-        qty: 1,
-        unitPrice: "$ 45.000",
-        subtotal: "$ 45.000",
-      },
-    ],
-    total: "$ 45.000",
-    status: "proceso",
-    payment: "tarjeta",
-    paymentStatus: "pendiente",
-    invoiceNumber: "F-002",
-  },
-  {
-    number: "PV-DEMO-03",
-    client: "Laura Fernández",
-    clientId: "C-003",
-    email: "laura.fernandez@gmail.com",
-    phone: "+54 341 422-9102",
-    date: "01/10/2026",
-    deliveryAddress: {
-      province: "Santa Fe",
-      locality: "Rosario",
-      street: "Bv. Oroño",
-      number: "2890",
-      apartment: "PB",
-    },
-    items: [
-      {
-        sku: "PRD-002",
-        product: 'Monitor 24" Full HD',
-        qty: 1,
-        unitPrice: "$ 90.000",
-        subtotal: "$ 90.000",
-      },
-    ],
-    total: "$ 90.000",
-    status: "pendiente",
-    payment: "mercadopago",
-    paymentStatus: "pendiente",
-    invoiceNumber: "F-003",
-  },
-  {
-    number: "PV-DEMO-04",
-    client: "Carlos Rodríguez",
-    clientId: "C-004",
-    email: "carlos.rodriguez@outlook.com",
-    phone: "+54 261 429-7731",
-    date: "08/10/2026",
-    deliveryAddress: {
-      province: "Mendoza",
-      locality: "Mendoza",
-      street: "Av. San Martín",
-      number: "891",
-      apartment: "5°C",
-    },
-    items: [
-      {
-        sku: "PRD-005",
-        product: "Auriculares Bluetooth",
-        qty: 1,
-        unitPrice: "$ 60.000",
-        subtotal: "$ 60.000",
-      },
-    ],
-    total: "$ 60.000",
-    status: "entregado",
-    payment: "efectivo",
-    paymentStatus: "pagado",
-    invoiceNumber: "F-004",
-  },
-  {
-    number: "PV-DEMO-05",
-    client: "Ana Martínez",
-    clientId: "C-005",
-    email: "ana.martinez@gmail.com",
-    phone: "+54 351 458-2210",
-    date: "07/10/2026",
-    deliveryAddress: {
-      province: "Córdoba",
-      locality: "Córdoba",
-      street: "Av. Colón",
-      number: "540",
-      apartment: "",
-    },
-    items: [
-      {
-        sku: "PRD-006",
-        product: "Disco SSD 1TB NVMe",
-        qty: 1,
-        unitPrice: "$ 32.000",
-        subtotal: "$ 32.000",
-      },
-    ],
-    total: "$ 32.000",
-    status: "entregado",
-    payment: "mercadopago",
-    paymentStatus: "pagado",
-    invoiceNumber: "F-005",
-  },
-];
-
-let orders: SalesOrder[] = [...demoOrders];
+let orders: SalesOrder[] = [];
 let budgets: Budget[] = [];
+let ordersLoaded = false;
+let ordersLoadPromise: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -189,14 +45,57 @@ export function useBudgets(): Budget[] {
   return useSyncExternalStore(subscribe, getBudgets, getBudgets);
 }
 
-export function addOrder(order: SalesOrder) {
-  orders = [...orders, order];
-  emit();
+export function loadSalesOrders(force = false): Promise<void> {
+  if (ordersLoaded && !force) return Promise.resolve();
+  if (ordersLoadPromise) return ordersLoadPromise;
+
+  ordersLoadPromise = listSalesOrders()
+    .then((loadedOrders) => {
+      orders = loadedOrders;
+      ordersLoaded = true;
+      emit();
+    })
+    .finally(() => {
+      ordersLoadPromise = null;
+    });
+  return ordersLoadPromise;
 }
 
-export function removeOrder(number: string) {
-  orders = orders.filter((order) => order.number !== number);
+function saveSalesOrder(order: SalesOrder): SalesOrder {
+  orders = [order, ...orders.filter((item) => item.number !== order.number)];
+  ordersLoaded = true;
   emit();
+  return order;
+}
+
+export async function getSalesOrder(id: string): Promise<SalesOrder> {
+  const cached = orders.find((order) => order.number === id);
+  if (cached) return cached;
+  return saveSalesOrder(await getSalesOrderApi(id));
+}
+
+export async function createSalesOrder(
+  payload: SalesOrderPayload
+): Promise<SalesOrder> {
+  return saveSalesOrder(await createSalesOrderApi(payload));
+}
+
+export async function updateSalesOrder(
+  id: string,
+  payload: SalesOrderPayload
+): Promise<SalesOrder> {
+  return saveSalesOrder(await updateSalesOrderApi(id, payload));
+}
+
+export async function advanceSalesOrder(
+  id: string,
+  estado: "proceso" | "enviado" | "entregado"
+): Promise<SalesOrder> {
+  return saveSalesOrder(await advanceSalesOrderApi(id, estado));
+}
+
+export async function cancelSalesOrder(id: string): Promise<SalesOrder> {
+  return saveSalesOrder(await cancelSalesOrderApi(id));
 }
 
 export function updateOrder(number: string, patch: Partial<SalesOrder>) {

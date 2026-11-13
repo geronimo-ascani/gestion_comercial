@@ -7,94 +7,67 @@ import { Card, CardContent, CardFooter } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { FormPage } from "~/components/ui/form-page";
 import { Combobox } from "~/components/ui/combobox";
 
 import {
-  computePercentageDiscount,
   formatMoney,
   parseNumberInput,
   parsePercentInput,
 } from "~/lib/currency";
-import type { LineItem, OrderDraft, PaymentMethod } from "./sales-types";
-import { formatDate } from "./sales-types";
-import { addOrder, updateBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
+import type { LineItem } from "./sales-types";
+import {
+  createSalesOrder,
+  loadSalesOrders,
+  updateSalesOrder,
+  useOrders,
+} from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
-import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from "./sales-stock";
+import { stockValidationMessage } from "./sales-stock";
 import { refreshCustomers, useCustomers } from "../customers/customers-store";
-import { useProducts } from "../products/products-store";
+import {
+  invalidateProducts,
+  refreshProducts,
+  useProducts,
+} from "../products/products-store";
 import { useCurrentUser } from "../auth/session-store";
-import { createInvoiceFromOrder, usePayments } from "../payments/payments-store";
-import { usePaymentMethods } from "../payments/payment-methods-store";
 
 export function NewOrderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const orders = useOrders();
-  const budgets = useBudgets();
   const customers = useCustomers();
   const currentUser = useCurrentUser();
   const canCreateCustomers = ["administrador", "ventas"].includes(
     currentUser?.role ?? ""
   );
   const products = useProducts();
-  const payments = usePayments();
-  const paymentMethods = usePaymentMethods();
   const [searchParams] = useSearchParams();
 
   const editNumber = searchParams.get("edit");
   const editing = editNumber
     ? (orders.find((order) => order.number === editNumber) ?? null)
     : null;
-  const fromBudgetNumber = searchParams.get("fromBudget");
-  const sourceBudget =
-    !editing && fromBudgetNumber
-      ? (budgets.find((budget) => budget.number === fromBudgetNumber) ?? null)
-      : null;
-
-  const nextOrderNumber = `PV-${String(orders.length + 1).padStart(3, "0")}`;
   const backTo = "/sales?tab=orders";
 
-  const [client, setClient] = useState(
-    editing?.clientId ?? sourceBudget?.clientId ?? ""
-  );
-  const [province, setProvince] = useState(
-    editing?.deliveryAddress.province ?? ""
-  );
-  const [locality, setLocality] = useState(
-    editing?.deliveryAddress.locality ?? ""
-  );
+  const [client, setClient] = useState(editing?.clientId ?? "");
+  const [province, setProvince] = useState(editing?.deliveryAddress.province ?? "");
+  const [locality, setLocality] = useState(editing?.deliveryAddress.locality ?? "");
   const [street, setStreet] = useState(editing?.deliveryAddress.street ?? "");
   const [number, setNumber] = useState(editing?.deliveryAddress.number ?? "");
   const [apartment, setApartment] = useState(
-    editing?.deliveryAddress.apartment ?? ""
-  );
-  const [payment, setPayment] = useState<PaymentMethod>(
-    editing?.payment ?? "tarjeta"
+    editing?.deliveryAddress.apartment ?? "",
   );
   const [items, setItems] = useState<LineItem[]>(
-    editing?.items ?? sourceBudget?.items ?? []
+    editing?.items ?? [],
   );
   const [subtotal, setSubtotal] = useState(
-    editing?.subtotal ??
-      sourceBudget?.subtotal ??
-      editing?.total ??
-      sourceBudget?.total ??
-      "$0"
+    editing?.subtotal ?? editing?.total ?? "$0",
   );
   const [discount, setDiscount] = useState(
     editing?.discount
       ? String(parsePercentInput(editing.discount))
-      : sourceBudget?.discount
-        ? String(parsePercentInput(sourceBudget.discount))
-        : "0"
+      : "0",
   );
   const [addressErrors, setAddressErrors] = useState<
     Record<string, string | null>
@@ -102,6 +75,34 @@ export function NewOrderPage() {
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [discountError, setDiscountError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const editReservedStock = new Map<string, number>();
+  for (const item of editing?.items ?? []) {
+    const product = products.find(
+      (candidate) => candidate.id === item.sku || candidate.code === item.sku,
+    );
+    if (product) {
+      editReservedStock.set(
+        product.id,
+        (editReservedStock.get(product.id) ?? 0) + item.qty,
+      );
+    }
+  }
+  const formProducts = products.map((product) => ({
+    ...product,
+    stock: product.stock + (editReservedStock.get(product.id) ?? 0),
+  }));
+  const editorItems = (editing?.items ?? []).map((item) => {
+    const product = products.find(
+      (candidate) => candidate.id === item.sku || candidate.code === item.sku,
+    );
+    return product
+      ? { ...item, unitPrice: formatMoney(product.salePrice) }
+      : item;
+  });
 
   const discountPercent = parsePercentInput(discount);
   const subtotalValue = parseNumberInput(subtotal);
@@ -116,19 +117,40 @@ export function NewOrderPage() {
         100
     ) / 100
   );
-  const { amount: discountAmount, total: totalValue } =
-    computePercentageDiscount(
-      subtotalValue,
-      discountPercent
+  const totalValue = items.reduce((sum, item) => {
+    const lineSubtotal = parseNumberInput(item.subtotal);
+    return (
+      sum +
+      Math.round(
+        lineSubtotal * (1 - discountPercent / 100) * 100,
+      ) /
+        100
     );
+  }, 0);
+  const discountAmount =
+    Math.round((subtotalValue - totalValue) * 100) / 100;
   const total = formatMoney(totalValue);
 
   useEffect(() => {
-    void refreshCustomers().catch((error: unknown) => {
-      setClientError(
-        error instanceof Error ? error.message : "No se pudieron cargar los clientes."
-      );
-    });
+    void Promise.allSettled([
+      loadSalesOrders(),
+      refreshProducts(),
+      refreshCustomers(),
+    ])
+      .then((results) => {
+        const failed = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+        if (failed) {
+        setRequestError(
+          failed.reason instanceof Error
+            ? failed.reason.message
+            : "No se pudieron cargar los datos necesarios para el pedido.",
+        );
+        }
+      })
+      .finally(() => setOrdersLoading(false));
   }, []);
 
   function prefillAddressFromCustomer(customerId: string) {
@@ -149,88 +171,29 @@ export function NewOrderPage() {
       setClient(preselected);
       prefillAddressFromCustomer(preselected);
     }
-  }, [location.state]);
+  }, [location.state, customers]);
 
   useEffect(() => {
-    setClient(editing?.clientId ?? sourceBudget?.clientId ?? "");
+    if (!editNumber) return;
+    setClient(editing?.clientId ?? "");
     setProvince(editing?.deliveryAddress.province ?? "");
     setLocality(editing?.deliveryAddress.locality ?? "");
     setStreet(editing?.deliveryAddress.street ?? "");
     setNumber(editing?.deliveryAddress.number ?? "");
     setApartment(editing?.deliveryAddress.apartment ?? "");
-    setPayment(editing?.payment ?? "tarjeta");
-    setItems(editing?.items ?? sourceBudget?.items ?? []);
-    setSubtotal(
-      editing?.subtotal ??
-        sourceBudget?.subtotal ??
-        editing?.total ??
-        sourceBudget?.total ??
-        "$0"
-    );
+    setItems(editing?.items ?? []);
+    setSubtotal(editing?.subtotal ?? editing?.total ?? "$0");
     setDiscount(
       editing?.discount
         ? String(parsePercentInput(editing.discount))
-        : sourceBudget?.discount
-          ? String(parsePercentInput(sourceBudget.discount))
-          : "0"
+        : "0",
     );
     setAddressErrors({});
     setItemsError(null);
     setClientError(null);
     setDiscountError(null);
-    if (sourceBudget && !editing) {
-      prefillAddressFromCustomer(sourceBudget.clientId ?? "");
-    }
-  }, [editNumber, editing, fromBudgetNumber, sourceBudget]);
-
-  // Restaura el borrador cuando se vuelve del formulario de medios de pago.
-  useEffect(() => {
-    const navState = location.state as
-      | { draft?: OrderDraft; selectPaymentMethod?: string }
-      | null;
-    if (!navState?.draft && !navState?.selectPaymentMethod) return;
-    const draft = navState.draft;
-    if (draft) {
-      setClient(draft.client);
-      setProvince(draft.province);
-      setLocality(draft.locality);
-      setStreet(draft.street);
-      setNumber(draft.number);
-      setApartment(draft.apartment);
-      setItems(draft.items);
-      setSubtotal(draft.subtotal);
-      setDiscount(draft.discount);
-      setPayment(draft.payment);
-    }
-    if (navState.selectPaymentMethod) {
-      setPayment(navState.selectPaymentMethod);
-    }
-    setAddressErrors({});
-    setItemsError(null);
-    setClientError(null);
-    setDiscountError(null);
-  }, [location.state]);
-
-  function handleAddPaymentMethod() {
-    const draft: OrderDraft = {
-      client,
-      province,
-      locality,
-      street,
-      number,
-      apartment,
-      payment,
-      items,
-      subtotal,
-      discount,
-    };
-    navigate("/payments/new-method", {
-      state: {
-        backTo: `${location.pathname}${location.search}`,
-        draft,
-      },
-    });
-  }
+    setRequestError(null);
+  }, [editNumber, editing]);
 
   function handleItemsChange(nextItems: LineItem[], nextSubtotal: string) {
     setItems(nextItems);
@@ -238,7 +201,7 @@ export function NewOrderPage() {
     setItemsError(null);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextAddressErrors: Record<string, string | null> = {
       province: !province.trim() ? "La provincia es obligatoria" : null,
@@ -270,74 +233,124 @@ export function NewOrderPage() {
       setDiscountError("El descuento debe estar entre 0 y 100%");
       return;
     }
-    const stockError = stockValidationMessage(items, products);
+    if (
+      items.some((item) => {
+        const lineDiscount = parsePercentInput(item.discount ?? "0");
+        return lineDiscount < 0 || lineDiscount > 100;
+      })
+    ) {
+      setItemsError("Los descuentos por producto deben estar entre 0 y 100%.");
+      return;
+    }
+    const stockError = stockValidationMessage(items, formProducts);
     if (stockError) {
       setItemsError(stockError);
       return;
     }
-    const customer = customers.find((item) => item.id === client);
-    const orderData = {
-      client: customer ? `${customer.firstName} ${customer.lastName}` : "Sin definir",
-      clientId: client,
-      email: customer?.email,
-      phone: customer?.phone,
-      deliveryAddress: {
-        province: province.trim(),
-        locality: locality.trim(),
-        street: street.trim(),
-        number: number.trim(),
-        apartment: apartment.trim(),
-      },
-      items,
-      subtotal: formatMoney(parseNumberInput(subtotal)),
-      discount: discountPercent > 0 ? `${discountPercent}%` : undefined,
-      total,
-      payment,
+    const payload = {
+      id_cliente: client,
+      entrega_provincia: province.trim(),
+      entrega_localidad: locality.trim(),
+      entrega_calle: street.trim(),
+      entrega_altura: number.trim(),
+      entrega_cp: "",
+      entrega_depto: apartment.trim(),
+      descuento_compra: discountPercent,
+      items: items.map((item) => {
+        const product = products.find(
+          (candidate) =>
+            candidate.id === item.sku || candidate.code === item.sku,
+        );
+        return {
+          id_producto: product?.id ?? item.sku ?? "",
+          cantidad: item.qty,
+          descuento_producto: parsePercentInput(item.discount ?? "0"),
+        };
+      }),
     };
-    if (editing) {
-      applyOrderStockDelta(editing.items, items);
-      updateOrder(editing.number, orderData);
-      navigate(backTo);
-      return;
+
+    setSubmitting(true);
+    setRequestError(null);
+    try {
+      const saved = editing
+        ? await updateSalesOrder(editing.number, payload)
+        : await createSalesOrder(payload);
+      invalidateProducts();
+      navigate(`/sales/${saved.number}`);
+    } catch (error) {
+      setRequestError(
+        error instanceof Error ? error.message : "No se pudo guardar el pedido.",
+      );
+    } finally {
+      setSubmitting(false);
     }
-    applyOrderStock(items);
-    const newOrder = {
-      number: nextOrderNumber,
-      ...orderData,
-      date: formatDate(new Date()),
-      status: "pendiente" as const,
-      paymentStatus: "pendiente" as const,
-    };
-    addOrder(newOrder);
-    const invoiceNumber = createInvoiceFromOrder(newOrder);
-    updateOrder(newOrder.number, { invoiceNumber });
-    if (sourceBudget && sourceBudget.status !== "convertido") {
-      updateBudget(sourceBudget.number, { status: "convertido" });
-    }
-    navigate(`/sales/${nextOrderNumber}`);
   }
 
-  if (
-    editing &&
-    (editing.paymentStatus === "pagado" ||
-      payments.some(
-        (payment) =>
-          payment.orderNumber === editing.number &&
-          payment.status === "aprobado"
-      ))
-  ) {
+  function retryOrderLoad() {
+    setOrdersLoading(true);
+    setRequestError(null);
+    void loadSalesOrders(true)
+      .catch((error: unknown) => {
+        setRequestError(
+          error instanceof Error ? error.message : "No se pudieron cargar los pedidos.",
+        );
+      })
+      .finally(() => setOrdersLoading(false));
+  }
+
+  if (ordersLoading) {
+    return (
+      <FormPage
+        backLabel="Volver a Ventas"
+        backTo={backTo}
+        title={editNumber ? `Editar pedido ${editNumber}` : "Nuevo pedido de venta"}
+      >
+        <Card>
+          <CardContent className="flex h-40 items-center justify-center text-muted-foreground">
+            Cargando pedidos…
+          </CardContent>
+        </Card>
+      </FormPage>
+    );
+  }
+
+  if (editNumber && !editing) {
+    return (
+      <FormPage
+        backLabel="Volver a Ventas"
+        backTo={backTo}
+        title={`Pedido ${editNumber}`}
+        description={requestError ?? "No se encontró el pedido solicitado."}
+      >
+        <Card>
+          <CardContent className="flex h-40 flex-col items-center justify-center gap-3 text-center">
+            <p className={requestError ? "text-destructive" : "text-muted-foreground"} role={requestError ? "alert" : undefined}>
+              {requestError ?? `No se encontró el pedido ${editNumber}.`}
+            </p>
+            <Button
+              variant="outline"
+              onClick={requestError ? retryOrderLoad : () => navigate(backTo)}
+            >
+              {requestError ? "Reintentar" : "Volver a Ventas"}
+            </Button>
+          </CardContent>
+        </Card>
+      </FormPage>
+    );
+  }
+
+  if (editing && editing.status !== "pendiente") {
     return (
       <FormPage
         backLabel="Volver a Ventas"
         backTo={backTo}
         title={`Pedido ${editing.number}`}
-        description="Este pedido ya tiene un pago registrado y no puede editarse."
+        description="Solo se pueden editar pedidos pendientes."
       >
         <Card>
           <CardContent className="flex h-40 flex-col items-center justify-center gap-3 text-center">
             <p className="text-muted-foreground">
-              El pedido {editing.number} tiene un pago registrado, por lo que no
-              puede modificarse.
+              El pedido {editing.number} ya no está pendiente y no puede modificarse.
             </p>
             <Button variant="outline" onClick={() => navigate(backTo)}>
               Volver a Ventas
@@ -352,22 +365,13 @@ export function NewOrderPage() {
     <FormPage
       backLabel="Volver a Ventas"
       backTo={backTo}
-      title={
-        editing
-          ? `Editar pedido ${editing.number}`
-          : sourceBudget
-            ? `Nuevo pedido desde presupuesto ${sourceBudget.number}`
-            : "Nuevo pedido de venta"
-      }
-      description={
-        sourceBudget
-          ? `Cliente y productos precargados del presupuesto ${sourceBudget.number}. Complete los datos obligatorios del pedido (dirección de entrega y método de pago). Al crear el pedido, el comprobante se envía automáticamente por email al cliente.`
-          : "Cargue el cliente, los productos y el método de pago. Al crear el pedido, el comprobante se envía automáticamente por email al cliente."
-      }
+      title={editing ? `Editar pedido ${editing.number}` : "Nuevo pedido de venta"}
+      description="Los precios y el stock se validan en el servidor. El pedido reserva stock al crearse."
     >
       <Card>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <CardContent className="space-y-4 pt-6">
+            <FieldError message={requestError} />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="order-client">Cliente</Label>
@@ -498,14 +502,12 @@ export function NewOrderPage() {
               <LineItemsEditor
                 key={
                   editing
-                    ? editing.number
-                    : sourceBudget
-                      ? `budget-${sourceBudget.number}`
-                      : "new"
+                    ? `${editing.number}-${products.length}`
+                    : "new"
                 }
-                products={products}
+                products={formProducts}
                 priceMode="sale"
-                initialItems={editing?.items ?? sourceBudget?.items}
+                initialItems={editorItems}
                 onChange={handleItemsChange}
                 summaryLabel="Subtotal de productos"
                 allowLineDiscount
@@ -567,42 +569,17 @@ export function NewOrderPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="order-payment">Método de pago</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={payment}
-                  onValueChange={(value) => setPayment(value as PaymentMethod)}
-                >
-                  <SelectTrigger id="order-payment" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {paymentMethods.map((paymentMethod) => (
-                      <SelectItem key={paymentMethod.id} value={paymentMethod.id}>
-                        {paymentMethod.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  size="icon"
-                  aria-label="Agregar medio de pago"
-                  title="Agregar medio de pago"
-                  onClick={handleAddPaymentMethod}
-                >
-                  <Plus />
-                </Button>
-              </div>
-            </div>
           </CardContent>
           <CardFooter className="justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => navigate(backTo)}>
               Cancelar
             </Button>
-            <Button type="submit">
-              {editing ? "Guardar cambios" : "Crear pedido"}
+            <Button type="submit" disabled={submitting}>
+              {submitting
+                ? "Guardando…"
+                : editing
+                  ? "Guardar cambios"
+                  : "Crear pedido"}
             </Button>
           </CardFooter>
         </form>

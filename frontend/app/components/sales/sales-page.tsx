@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from "react";
-import { Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useState, type ReactElement } from "react";
+import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -52,19 +52,18 @@ import type {
   Budget,
   BudgetStatus,
   OrderStatus,
-  PaymentMethod,
-  SalesOrder,
 } from "./sales-types";
-import { removeBudget, removeOrder, useBudgets, useOrders } from "./sales-store";
-import { restoreOrderStock } from "./sales-stock";
-import { usePayments } from "../payments/payments-store";
-import { usePaymentMethods } from "../payments/payment-methods-store";
+import {
+  loadSalesOrders,
+  removeBudget,
+  useBudgets,
+  useOrders,
+} from "./sales-store";
 import { compareByDateDesc } from "~/lib/utils";
 import {
   BudgetStatusBadge,
   OrderLineItemsTable,
   OrderStatusBadge,
-  PaymentBadge,
 } from "./sales-views";
 
 function ConfirmDeleteDialog({
@@ -106,11 +105,9 @@ function ConfirmDeleteDialog({
 function BudgetDetailDialog({
   budget,
   trigger,
-  onConvert,
 }: {
   budget: Budget;
   trigger: ReactElement;
-  onConvert: () => void;
 }) {
   const discountPercent = budget.discount
     ? parsePercentInput(budget.discount)
@@ -149,19 +146,12 @@ function BudgetDetailDialog({
               : undefined
           }
         />
+        <p className="text-sm text-muted-foreground">
+          La conversión de presupuestos a pedidos estará disponible en una etapa posterior.
+        </p>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
             Cerrar
-          </DialogClose>
-          <DialogClose
-            render={
-              <Button onClick={onConvert} disabled={budget.status === "convertido"} />
-            }
-          >
-            <FileText />
-            {budget.status === "convertido"
-              ? "Ya convertido"
-              : "Convertir en pedido"}
           </DialogClose>
         </DialogFooter>
       </DialogContent>
@@ -177,23 +167,31 @@ export function SalesPage() {
   const loading = useInitialLoading();
   const orders = useOrders();
   const budgets = useBudgets();
-  const payments = usePayments();
-  const paymentMethods = usePaymentMethods();
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
-  const [orderPayment, setOrderPayment] = useState<"all" | PaymentMethod>("all");
   const [budgetQuery, setBudgetQuery] = useState("");
   const [budgetStatus, setBudgetStatus] = useState<"all" | BudgetStatus>("all");
   const debouncedOrderQuery = useDebouncedValue(orderQuery);
   const debouncedBudgetQuery = useDebouncedValue(budgetQuery);
 
+  useEffect(() => {
+    void loadSalesOrders()
+      .catch((error: unknown) => {
+        setOrdersError(
+          error instanceof Error ? error.message : "No se pudieron cargar los pedidos.",
+        );
+      })
+      .finally(() => setOrdersLoading(false));
+  }, []);
+
   const filteredOrders = orders.filter((order) => {
-    const haystack = `${order.number} ${order.client} ${order.payment}`.toLowerCase();
+    const haystack = `${order.number} ${order.client}`.toLowerCase();
     const matchesQuery = haystack.includes(debouncedOrderQuery.trim().toLowerCase());
     const matchesStatus = orderStatus === "all" || order.status === orderStatus;
-    const matchesPayment = orderPayment === "all" || order.payment === orderPayment;
-    return matchesQuery && matchesStatus && matchesPayment;
+    return matchesQuery && matchesStatus;
   }).sort((a, b) => {
     const dateDiff = compareByDateDesc(a.date, b.date);
     if (dateDiff !== 0) return dateDiff;
@@ -211,32 +209,13 @@ export function SalesPage() {
     setSearchParams({ tab }, { replace: true });
   }
 
-  function handleConvertBudget(budget: Budget) {
-    navigate(`/sales/new-order?fromBudget=${budget.number}`);
-  }
-
-  function handleRemoveOrder(order: SalesOrder) {
-    if (order.status !== "cancelado") restoreOrderStock(order.items);
-    removeOrder(order.number);
-  }
-
-  function hasRegisteredPayment(order: SalesOrder): boolean {
-    return (
-      order.paymentStatus === "pagado" ||
-      payments.some(
-        (payment) =>
-          payment.orderNumber === order.number && payment.status === "aprobado"
-      )
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Ventas</h1>
           <p className="text-muted-foreground">
-            Pedidos, presupuestos y facturación.
+            Pedidos y presupuestos.
           </p>
         </div>
         <Button
@@ -301,28 +280,6 @@ export function SalesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="order-payment-filter">Pago</Label>
-                <Select
-                  items={{ all: "Todos" }}
-                  value={orderPayment}
-                  onValueChange={(value) =>
-                    setOrderPayment(value as "all" | PaymentMethod)
-                  }
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    {paymentMethods.map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
-                        {method.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               {orderQuery && (
                 <span className="text-sm text-muted-foreground">
                   {filteredOrders.length} de {orders.length} pedidos
@@ -339,8 +296,32 @@ export function SalesPage() {
               <Badge variant="secondary">{orders.length} pedidos</Badge>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <TableSkeleton rows={6} columns={8} />
+              {ordersError && (
+                <div className="mb-4 flex flex-wrap items-center gap-3" role="alert">
+                  <p className="text-sm text-destructive">{ordersError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setOrdersLoading(true);
+                      setOrdersError(null);
+                      void loadSalesOrders(true)
+                        .catch((error: unknown) => {
+                          setOrdersError(
+                            error instanceof Error
+                              ? error.message
+                              : "No se pudieron cargar los pedidos.",
+                          );
+                        })
+                        .finally(() => setOrdersLoading(false));
+                    }}
+                  >
+                    Reintentar
+                  </Button>
+                </div>
+              )}
+              {loading || ordersLoading ? (
+                <TableSkeleton rows={6} columns={7} />
               ) : (
                 <Table>
                   <TableHeader>
@@ -351,7 +332,6 @@ export function SalesPage() {
                       <TableHead className="text-right">Productos</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Pago</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -359,7 +339,7 @@ export function SalesPage() {
                   {filteredOrders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={7}
                         className="h-24 text-center text-muted-foreground"
                       >
                         {orders.length === 0
@@ -386,9 +366,6 @@ export function SalesPage() {
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>
-                        <TableCell>
-                          <PaymentBadge payment={order.payment} />
-                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button
@@ -399,7 +376,7 @@ export function SalesPage() {
                             >
                               <Eye />
                             </Button>
-                            {!hasRegisteredPayment(order) && (
+                            {order.status === "pendiente" && (
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
@@ -411,23 +388,6 @@ export function SalesPage() {
                                 <Pencil />
                               </Button>
                             )}
-                            {!hasRegisteredPayment(order) && (
-                              <ConfirmDeleteDialog
-                                title="¿Eliminar pedido?"
-                                description={`Esta acción no se puede deshacer. Se eliminará el pedido ${order.number} del cliente ${order.client}.`}
-                                onDelete={() => handleRemoveOrder(order)}
-                                trigger={
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="text-destructive hover:text-destructive"
-                                    aria-label={`Eliminar pedido ${order.number}`}
-                                  >
-                                    <Trash2 />
-                                  </Button>
-                                }
-                              />
-                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -438,7 +398,9 @@ export function SalesPage() {
               )}
             </CardContent>
             <CardFooter className="justify-between text-sm text-muted-foreground">
-              
+              <span>
+                Mostrando {filteredOrders.length} de {orders.length} pedidos
+              </span>
             </CardFooter>
           </Card>
         </section>
@@ -546,7 +508,6 @@ export function SalesPage() {
                           <div className="flex justify-end gap-1">
                             <BudgetDetailDialog
                               budget={budget}
-                              onConvert={() => handleConvertBudget(budget)}
                               trigger={
                                 <Button
                                   variant="ghost"

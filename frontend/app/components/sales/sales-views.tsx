@@ -13,11 +13,8 @@ import type {
   BudgetStatus,
   LineItem,
   OrderStatus,
-  PaymentMethod,
-  PaymentStatus,
 } from "./sales-types";
 import { formatMoney, parseNumberInput } from "~/lib/currency";
-import { getPaymentMethodLabel } from "../payments/payment-methods-store";
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const config: Record<OrderStatus, { label: string; variant: "success" | "warning" | "info" | "secondary" | "destructive" }> = {
@@ -31,32 +28,12 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-export function PaymentBadge({ payment }: { payment: PaymentMethod }) {
-  const variant =
-    payment === "mercadopago"
-      ? "info"
-      : payment === "tarjeta"
-        ? "outline"
-        : "secondary";
-  return <Badge variant={variant}>{getPaymentMethodLabel(payment)}</Badge>;
-}
-
 export function BudgetStatusBadge({ status }: { status: BudgetStatus }) {
   const config: Record<BudgetStatus, { label: string; variant: "success" | "warning" | "info" | "destructive" }> = {
     pendiente: { label: "Pendiente", variant: "warning" },
     aprobado: { label: "Aprobado", variant: "success" },
     vencido: { label: "Vencido", variant: "destructive" },
     convertido: { label: "Convertido", variant: "info" },
-  };
-  const { label, variant } = config[status];
-  return <Badge variant={variant}>{label}</Badge>;
-}
-
-export function OrderPaymentStatusBadge({ status }: { status: PaymentStatus }) {
-  const config: Record<PaymentStatus, { label: string; variant: "success" | "warning" | "destructive" }> = {
-    pendiente: { label: "Pendiente", variant: "warning" },
-    pagado: { label: "Pagado", variant: "success" },
-    rechazado: { label: "Rechazado", variant: "destructive" },
   };
   const { label, variant } = config[status];
   return <Badge variant={variant}>{label}</Badge>;
