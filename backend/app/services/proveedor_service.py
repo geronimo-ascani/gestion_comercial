@@ -127,5 +127,5 @@ class ProveedorService:
         try:
             if not self._repo.eliminar(id_proveedor):
                 raise ProveedorNoEncontrado(id_proveedor)
-        except errors.ForeignKeyViolation as exc:
+        except (errors.ForeignKeyViolation, errors.RestrictViolation) as exc:
             raise ProveedorEnUso(id_proveedor) from exc

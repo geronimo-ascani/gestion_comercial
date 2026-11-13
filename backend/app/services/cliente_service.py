@@ -142,5 +142,5 @@ class ClienteService:
         try:
             if not self._repo.eliminar(id_cliente):
                 raise ClienteNoEncontrado(id_cliente)
-        except errors.ForeignKeyViolation as exc:
+        except (errors.ForeignKeyViolation, errors.RestrictViolation) as exc:
             raise ClienteEnUso(id_cliente) from exc
