@@ -17,8 +17,11 @@ from app.schemas.catalogo import (
 from app.schemas.inventario import MovimientoInventarioRead
 from app.services.producto_service import (
     ProductoDatosInvalidos,
+    ProductoDadoDeBaja,
     ProductoEnUso,
     ProductoError,
+    ProductoCodigoNoDisponible,
+    ProductoCodigoNoEncontrado,
     ProductoNoEncontrado,
     ProductoService,
     ProductoSinCambios,
@@ -50,6 +53,21 @@ def _error_http(exc: ProductoError) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="El stock actual no alcanza para realizar la salida",
+        )
+    if isinstance(exc, ProductoDadoDeBaja):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El producto está dado de baja y no admite operaciones.",
+        )
+    if isinstance(exc, ProductoCodigoNoEncontrado):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe una reserva activa para ese código.",
+        )
+    if isinstance(exc, ProductoCodigoNoDisponible):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El código ya fue utilizado o anulado y no puede modificarse.",
         )
     if isinstance(exc, ProductoSinCambios):
         return HTTPException(
@@ -130,6 +148,22 @@ def reservar_codigo_producto(
     _: Annotated[dict, Depends(require_roles("administrador"))],
 ) -> ProductoCodigoRead:
     return ProductoCodigoRead(id_producto=service.reservar_codigo())
+
+
+@router.delete(
+    "/codigos/{id_producto}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def anular_codigo_producto(
+    service: ServiceDep,
+    id_producto: ProductoId,
+    _: Annotated[dict, Depends(require_roles("administrador"))],
+) -> Response:
+    try:
+        service.anular_codigo(id_producto)
+    except ProductoError as exc:
+        raise _error_http(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{id_producto}", response_model=ProductoRead)

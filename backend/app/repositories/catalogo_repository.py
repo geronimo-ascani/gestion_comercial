@@ -5,6 +5,7 @@ from psycopg.rows import dict_row
 
 AlicuotaRow = dict[str, Any]
 UnidadRow = dict[str, Any]
+CondicionIVARow = dict[str, Any]
 
 
 class CatalogoRepository:
@@ -28,6 +29,17 @@ class CatalogoRepository:
                 """
                 SELECT id_unidad, descripcion, unidad_venta
                 FROM unidad
+                ORDER BY descripcion
+                """
+            )
+            return cur.fetchall()
+
+    def listar_condiciones_iva(self) -> list[CondicionIVARow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id_condicion_iva, codigo_afip, descripcion
+                FROM condicion_iva
                 ORDER BY descripcion
                 """
             )

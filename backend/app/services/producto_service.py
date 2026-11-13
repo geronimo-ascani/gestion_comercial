@@ -62,6 +62,18 @@ class ProductoStockInsuficiente(ProductoError):
     pass
 
 
+class ProductoDadoDeBaja(ProductoError):
+    pass
+
+
+class ProductoCodigoNoEncontrado(ProductoError):
+    pass
+
+
+class ProductoCodigoNoDisponible(ProductoError):
+    pass
+
+
 class ProductoService:
     def __init__(
         self,
@@ -171,7 +183,22 @@ class ProductoService:
     def reservar_codigo(self) -> str:
         return self._repo.reservar_codigo()
 
+    def anular_codigo(self, id_producto: str) -> None:
+        estado = self._repo.estado_codigo_reservado(id_producto)
+        if estado is None:
+            if self._repo.obtener(id_producto, incluir_dados_de_baja=True) is not None:
+                raise ProductoCodigoNoDisponible(id_producto)
+            raise ProductoCodigoNoEncontrado(id_producto)
+        if estado != "reservado":
+            raise ProductoCodigoNoDisponible(id_producto)
+        if not self._repo.anular_codigo_reservado(id_producto):
+            raise ProductoCodigoNoDisponible(id_producto)
+
     def crear(self, datos: ProductoCreate) -> ProductoRow:
+        if not datos.estado:
+            raise ProductoDatosInvalidos(
+                "Un producto nuevo debe crearse en estado activo"
+            )
         alicuota = self._obtener_alicuota(datos.id_alicuota_iva)
         self._validar_categoria(datos.id_categoria)
         id_unidad = self._resolver_unidad(datos.id_unidad)
@@ -207,6 +234,14 @@ class ProductoService:
 
         try:
             with self._repo.transaction():
+                if datos.id_producto is not None:
+                    estado_codigo = self._repo.estado_codigo_reservado(
+                        datos.id_producto
+                    )
+                    if estado_codigo != "reservado":
+                        raise ProductoCodigoNoDisponible(datos.id_producto)
+                    if not self._repo.consumir_codigo_reservado(datos.id_producto):
+                        raise ProductoCodigoNoDisponible(datos.id_producto)
                 producto = self._repo.crear(campos, precio_venta)
                 if stock_actual > 0:
                     self._movimientos.crear_ajuste(
@@ -228,7 +263,9 @@ class ProductoService:
     def actualizar(
         self, id_producto: str, datos: ProductoUpdate
     ) -> ProductoRow:
-        actual = self.obtener(id_producto)
+        actual = self._repo.obtener(id_producto, incluir_dados_de_baja=True)
+        if actual is None:
+            raise ProductoNoEncontrado(id_producto)
         cambios = {
             campo: valor
             for campo, valor in datos.model_dump(exclude_unset=True).items()
@@ -236,6 +273,8 @@ class ProductoService:
         }
         if not cambios:
             raise ProductoSinCambios(id_producto)
+        if not actual["estado"] and cambios.get("estado") is not True:
+            raise ProductoDadoDeBaja(id_producto)
 
         if "id_categoria" in cambios:
             self._validar_categoria(cambios["id_categoria"])
@@ -289,9 +328,15 @@ class ProductoService:
         return producto
 
     def eliminar(self, id_producto: str, definitivo: bool) -> None:
-        self.obtener(id_producto)
+        producto_actual = self._repo.obtener(
+            id_producto, incluir_dados_de_baja=True
+        )
+        if producto_actual is None:
+            raise ProductoNoEncontrado(id_producto)
 
         if not definitivo:
+            if not producto_actual["estado"]:
+                raise ProductoDadoDeBaja(id_producto)
             producto = self._repo.actualizar(id_producto, {"estado": False})
             if producto is None:
                 raise ProductoNoEncontrado(id_producto)
@@ -337,7 +382,8 @@ class ProductoService:
         limit: int,
         offset: int,
     ) -> list[MovimientoRow]:
-        self.obtener(id_producto)
+        if self._repo.obtener(id_producto, incluir_dados_de_baja=True) is None:
+            raise ProductoNoEncontrado(id_producto)
         if desde is not None and hasta is not None and desde > hasta:
             raise ProductoDatosInvalidos(
                 "La fecha 'desde' no puede ser posterior a la fecha 'hasta'"
@@ -368,8 +414,13 @@ class ProductoService:
             with self._repo.transaction():
                 producto = self._repo.aplicar_delta_stock(id_producto, delta)
                 if producto is None:
-                    if self._repo.obtener(id_producto) is None:
+                    existente = self._repo.obtener(
+                        id_producto, incluir_dados_de_baja=True
+                    )
+                    if existente is None:
                         raise ProductoNoEncontrado(id_producto)
+                    if not existente["estado"]:
+                        raise ProductoDadoDeBaja(id_producto)
                     raise ProductoStockInsuficiente(id_producto)
                 movimiento = self._movimientos.crear_ajuste(
                     id_producto,

@@ -4,6 +4,7 @@ export interface Address {
   street: string;
   number: string;
   apartment: string;
+  postalCode?: string;
 }
 
 export const emptyAddress: Address = {

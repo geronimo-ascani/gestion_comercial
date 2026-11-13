@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -24,6 +24,7 @@ import {
 import { requireText } from "~/lib/validation";
 import {
   actualizarProducto,
+  anularCodigoProducto,
   crearProducto,
   listarAlicuotas,
   listarCategorias,
@@ -77,6 +78,9 @@ export function ProductFormPage() {
   const [stock, setStock] = useState("");
   const [minStock, setMinStock] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const reservedCode = useRef<string | null>(null);
+  const reservationCommitted = useRef(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!canManageProducts) return;
@@ -84,13 +88,31 @@ export function ProductFormPage() {
     setLoading(true);
     setLoadError(null);
 
+    const reservationPromise = editId
+      ? Promise.resolve(null)
+      : reservarCodigoProducto();
+    void reservationPromise.then(
+      (codigoReservado) => {
+        if (!codigoReservado) return;
+        if (cancelled) {
+          void anularCodigoProducto(codigoReservado).catch((error: unknown) => {
+            console.error("No se pudo anular el código reservado:", error);
+          });
+          return;
+        }
+        reservedCode.current = codigoReservado;
+        setCode(codigoReservado);
+      },
+      () => undefined
+    );
+
     Promise.all([
       listarCategorias(),
       listarAlicuotas(),
       editId ? obtenerProducto(editId) : Promise.resolve(null),
-      editId ? Promise.resolve(null) : reservarCodigoProducto(),
+      reservationPromise,
     ])
-      .then(([categorias, alicuotasData, producto, codigoReservado]) => {
+      .then(([categorias, alicuotasData, producto]) => {
         if (cancelled) return;
 
         setCategories(categorias);
@@ -107,7 +129,6 @@ export function ProductFormPage() {
           setStock(String(producto.stock));
           setMinStock(String(producto.minStock));
         } else {
-          setCode(codigoReservado ?? "");
           setCategoryId(categorias[0]?.id_categoria ?? "");
           setAlicuotaId(
             defaultAlicuota(alicuotasData)?.id_alicuota_iva ?? ""
@@ -123,6 +144,13 @@ export function ProductFormPage() {
 
     return () => {
       cancelled = true;
+      const codigoReservado = reservedCode.current;
+      if (codigoReservado && !reservationCommitted.current && !savingRef.current) {
+        reservedCode.current = null;
+        void anularCodigoProducto(codigoReservado).catch((error: unknown) => {
+          console.error("No se pudo anular el código reservado:", error);
+        });
+      }
     };
   }, [canManageProducts, editId]);
 
@@ -195,6 +223,7 @@ export function ProductFormPage() {
     };
 
     setSaving(true);
+    savingRef.current = true;
     try {
       if (editId) {
         await actualizarProducto(editId, payload);
@@ -204,6 +233,8 @@ export function ProductFormPage() {
           stock_actual: Math.floor(parseNumberInput(stock)),
           id_producto: code,
         });
+        reservationCommitted.current = true;
+        reservedCode.current = null;
       }
       await refreshProducts();
       navigate(backTo);
@@ -211,6 +242,7 @@ export function ProductFormPage() {
       setSubmitError(errorMessage(error));
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   }
 

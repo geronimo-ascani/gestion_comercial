@@ -9,4 +9,6 @@ export interface Customer {
   email: string;
   address: Address;
   balance?: number;
+  taxConditionId?: string;
+  taxCondition?: string;
 }

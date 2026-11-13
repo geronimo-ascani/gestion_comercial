@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -32,12 +32,16 @@ import {
 } from "~/components/ui/table";
 
 import { TableSkeleton } from "~/components/ui/skeleton";
-import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatAddress } from "~/lib/address";
 import { formatMoney } from "~/lib/currency";
+import { useCurrentUser } from "../auth/session-store";
 import type { Provider } from "../purchases/purchases-types";
-import { removeProvider, useProviders } from "../purchases/purchases-store";
+import {
+  refreshProviders,
+  removeProvider,
+  useProviders,
+} from "../purchases/purchases-store";
 
 function ProviderDetailDialog({
   provider,
@@ -115,10 +119,42 @@ function ConfirmDeleteDialog({
 
 export function ProvidersPage() {
   const navigate = useNavigate();
-  const loading = useInitialLoading();
+  const currentUser = useCurrentUser();
+  const canManage = currentUser?.role === "administrador";
   const providers = useProviders();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshProviders()
+      .catch((caught: unknown) => {
+        if (!cancelled) {
+          setError(
+            caught instanceof Error ? caught.message : "No se pudieron cargar los proveedores."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleDelete(id: string) {
+    setError(null);
+    try {
+      await removeProvider(id);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "No se pudo eliminar el proveedor."
+      );
+    }
+  }
 
   const filteredProviders = providers.filter((provider) => {
     const haystack =
@@ -135,10 +171,12 @@ export function ProvidersPage() {
             Registro y gestión de proveedores.
           </p>
         </div>
-        <Button onClick={() => navigate("/purchases/new-provider")}>
-          <Plus />
-          Nuevo proveedor
-        </Button>
+        {canManage && (
+          <Button onClick={() => navigate("/purchases/new-provider")}>
+            <Plus />
+            Nuevo proveedor
+          </Button>
+        )}
       </div>
 
       <div className="relative w-full max-w-sm">
@@ -159,6 +197,7 @@ export function ProvidersPage() {
           <Badge variant="secondary">{providers.length} proveedores</Badge>
         </CardHeader>
         <CardContent>
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
           {loading ? (
             <TableSkeleton rows={6} columns={4} />
           ) : (
@@ -168,14 +207,14 @@ export function ProvidersPage() {
                   <TableHead>Nombre / Razón social</TableHead>
                   <TableHead>CUIT</TableHead>
                   <TableHead>Teléfono</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  {canManage && <TableHead className="text-right">Acciones</TableHead>}
                 </TableRow>
               </TableHeader>
             <TableBody>
               {filteredProviders.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={canManage ? 4 : 3}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {providers.length === 0
@@ -193,7 +232,7 @@ export function ProvidersPage() {
                       {provider.cuit || "—"}
                     </TableCell>
                     <TableCell>{provider.phone || "—"}</TableCell>
-                    <TableCell className="text-right">
+                    {canManage && <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <ProviderDetailDialog
                           provider={provider}
@@ -222,7 +261,7 @@ export function ProvidersPage() {
                         <ConfirmDeleteDialog
                           title="¿Eliminar proveedor?"
                           description={`Se eliminará el proveedor ${provider.name}. Esta acción no se puede deshacer.`}
-                          onConfirm={() => removeProvider(provider.id)}
+                          onConfirm={() => void handleDelete(provider.id)}
                           trigger={
                             <Button
                               variant="ghost"
@@ -235,7 +274,7 @@ export function ProvidersPage() {
                           }
                         />
                       </div>
-                    </TableCell>
+                    </TableCell>}
                   </TableRow>
                 ))
               )}

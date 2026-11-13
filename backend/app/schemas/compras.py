@@ -2,34 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from .base import SchemaBase, UpdateSchema
-
-
-class ProveedorFields(SchemaBase):
-    banco: str
-    cuenta: str
-    cuit: str
-    email: str
-    razon_social: str
-    saldo: float
-    telefono: str
-
-
-class ProveedorCreate(ProveedorFields):
-    pass
-
-
-class ProveedorRead(ProveedorFields):
-    id_proveedor: str
-
-
-class ProveedorUpdate(UpdateSchema):
-    banco: str | None = None
-    cuenta: str | None = None
-    cuit: str | None = None
-    email: str | None = None
-    razon_social: str | None = None
-    saldo: float | None = None
-    telefono: str | None = None
+from .proveedores import ProveedorCreate, ProveedorRead, ProveedorUpdate
 
 
 class PedidoProveedorFields(SchemaBase):

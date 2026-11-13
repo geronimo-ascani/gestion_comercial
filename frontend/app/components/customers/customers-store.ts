@@ -1,87 +1,15 @@
 import { useSyncExternalStore } from "react";
 
+import {
+  customerPayload,
+  createCustomer,
+  deleteCustomerApi,
+  listCustomers,
+  updateCustomerApi,
+} from "./customers-api";
 import type { Customer } from "./customers-types";
 
-let customers: Customer[] = [
-  {
-    id: "C-001",
-    firstName: "María",
-    lastName: "González",
-    document: "27.123.456",
-    phone: "+54 11 5458-1024",
-    email: "maria.gonzalez@gmail.com",
-    balance: 125000,
-    address: {
-      province: "Buenos Aires",
-      locality: "CABA",
-      street: "Av. Corrientes",
-      number: "1234",
-      apartment: "3°B",
-    },
-  },
-  {
-    id: "C-002",
-    firstName: "Juan",
-    lastName: "Pérez",
-    document: "30.654.789",
-    phone: "+54 11 4756-8830",
-    email: "juan.perez@hotmail.com",
-    address: {
-      province: "Buenos Aires",
-      locality: "La Plata",
-      street: "Calle 12",
-      number: "456",
-      apartment: "",
-    },
-  },
-  {
-    id: "C-003",
-    firstName: "Laura",
-    lastName: "Fernández",
-    document: "23.987.321",
-    phone: "+54 341 422-9102",
-    email: "laura.fernandez@gmail.com",
-    balance: -45000,
-    address: {
-      province: "Santa Fe",
-      locality: "Rosario",
-      street: "Bv. Oroño",
-      number: "2890",
-      apartment: "PB",
-    },
-  },
-  {
-    id: "C-004",
-    firstName: "Carlos",
-    lastName: "Rodríguez",
-    document: "30.321.654",
-    phone: "+54 261 429-7731",
-    email: "carlos.rodriguez@outlook.com",
-    address: {
-      province: "Mendoza",
-      locality: "Mendoza",
-      street: "Av. San Martín",
-      number: "891",
-      apartment: "5°C",
-    },
-  },
-  {
-    id: "C-005",
-    firstName: "Ana",
-    lastName: "Martínez",
-    document: "27.456.987",
-    phone: "+54 351 458-2210",
-    email: "ana.martinez@gmail.com",
-    address: {
-      province: "Córdoba",
-      locality: "Córdoba",
-      street: "Av. Colón",
-      number: "540",
-      apartment: "",
-    },
-  },
-];
-
+let customers: Customer[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -90,9 +18,7 @@ function emit() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return () => listeners.delete(listener);
 }
 
 function getCustomers() {
@@ -103,19 +29,31 @@ export function useCustomers(): Customer[] {
   return useSyncExternalStore(subscribe, getCustomers, getCustomers);
 }
 
-export function addCustomer(customer: Customer) {
-  customers = [...customers, customer];
+export async function refreshCustomers(): Promise<Customer[]> {
+  customers = await listCustomers();
   emit();
+  return customers;
 }
 
-export function updateCustomer(id: string, patch: Partial<Customer>) {
-  customers = customers.map((customer) =>
-    customer.id === id ? { ...customer, ...patch } : customer
-  );
+export async function addCustomer(customer: Customer): Promise<Customer> {
+  const saved = await createCustomer(customerPayload(customer));
+  customers = [...customers.filter((item) => item.id !== saved.id), saved];
   emit();
+  return saved;
 }
 
-export function removeCustomer(id: string) {
+export async function updateCustomer(
+  id: string,
+  customer: Customer
+): Promise<Customer> {
+  const saved = await updateCustomerApi(id, customerPayload(customer));
+  customers = customers.map((item) => (item.id === id ? saved : item));
+  emit();
+  return saved;
+}
+
+export async function removeCustomer(id: string): Promise<void> {
+  await deleteCustomerApi(id);
   customers = customers.filter((customer) => customer.id !== id);
   emit();
 }

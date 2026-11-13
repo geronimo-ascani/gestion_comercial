@@ -102,11 +102,17 @@ class ProductoRepository:
             fila = cur.fetchone()
             return int(fila["total"]) if fila is not None else 0
 
-    def obtener(self, id_producto: str) -> ProductoRow | None:
+    def obtener(
+        self, id_producto: str, incluir_dados_de_baja: bool = False
+    ) -> ProductoRow | None:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                f"{_SELECT_PRODUCTO} WHERE p.id_producto = %s",
-                (id_producto,),
+                f"""
+                {_SELECT_PRODUCTO}
+                WHERE p.id_producto = %s
+                  AND (%s OR p.estado = TRUE)
+                """,
+                (id_producto, incluir_dados_de_baja),
             )
             return cur.fetchone()
 
@@ -157,7 +163,7 @@ class ProductoRepository:
         return producto
 
     def reservar_codigo(self) -> str:
-        with self._conn.cursor() as cur:
+        with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT 'PRD-' || LPAD(nextval('producto_id_seq')::text, 4, '0')
@@ -166,7 +172,57 @@ class ProductoRepository:
             )
             fila = cur.fetchone()
             assert fila is not None
-            return str(fila["id_producto"])
+            id_producto = str(fila["id_producto"])
+            cur.execute(
+                """
+                INSERT INTO reserva_codigo_producto (id_producto, estado)
+                VALUES (%s, 'reservado')
+                """,
+                (id_producto,),
+            )
+            return id_producto
+
+    def anular_codigo_reservado(self, id_producto: str) -> bool:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE reserva_codigo_producto
+                SET estado = 'anulado', fecha_actualizacion = now()
+                WHERE id_producto = %s AND estado = 'reservado'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM producto WHERE producto.id_producto = %s
+                  )
+                RETURNING id_producto
+                """,
+                (id_producto, id_producto),
+            )
+            return cur.fetchone() is not None
+
+    def consumir_codigo_reservado(self, id_producto: str) -> bool:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE reserva_codigo_producto
+                SET estado = 'usado', fecha_actualizacion = now()
+                WHERE id_producto = %s AND estado = 'reservado'
+                RETURNING id_producto
+                """,
+                (id_producto,),
+            )
+            return cur.fetchone() is not None
+
+    def estado_codigo_reservado(self, id_producto: str) -> str | None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT estado
+                FROM reserva_codigo_producto
+                WHERE id_producto = %s
+                """,
+                (id_producto,),
+            )
+            row = cur.fetchone()
+            return row["estado"] if row is not None else None
 
     def actualizar(
         self, id_producto: str, campos: dict[str, Any]
@@ -195,7 +251,7 @@ class ProductoRepository:
 
         if fila is None:
             return None
-        return self.obtener(id_producto)
+        return self.obtener(id_producto, incluir_dados_de_baja=True)
 
     def aplicar_delta_stock(
         self, id_producto: str, delta: Decimal
@@ -206,6 +262,7 @@ class ProductoRepository:
                 UPDATE producto
                 SET stock_actual = stock_actual + %(delta)s
                 WHERE id_producto = %(id_producto)s
+                  AND estado = TRUE
                   AND stock_actual + %(delta)s >= 0
                 RETURNING id_producto
                 """,

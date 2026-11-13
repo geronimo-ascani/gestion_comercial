@@ -28,8 +28,9 @@ import { formatDate } from "./sales-types";
 import { addOrder, updateBudget, updateOrder, useBudgets, useOrders } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
 import { applyOrderStock, applyOrderStockDelta, stockValidationMessage } from "./sales-stock";
-import { useCustomers } from "../customers/customers-store";
+import { refreshCustomers, useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
+import { useCurrentUser } from "../auth/session-store";
 import { createInvoiceFromOrder, usePayments } from "../payments/payments-store";
 import { usePaymentMethods } from "../payments/payment-methods-store";
 
@@ -39,6 +40,8 @@ export function NewOrderPage() {
   const orders = useOrders();
   const budgets = useBudgets();
   const customers = useCustomers();
+  const currentUser = useCurrentUser();
+  const canCreateCustomers = currentUser?.role === "administrador";
   const products = useProducts();
   const payments = usePayments();
   const paymentMethods = usePaymentMethods();
@@ -117,6 +120,14 @@ export function NewOrderPage() {
       discountPercent
     );
   const total = formatMoney(totalValue);
+
+  useEffect(() => {
+    void refreshCustomers().catch((error: unknown) => {
+      setClientError(
+        error instanceof Error ? error.message : "No se pudieron cargar los clientes."
+      );
+    });
+  }, []);
 
   function prefillAddressFromCustomer(customerId: string) {
     const customer = customers.find((item) => item.id === customerId);
@@ -384,21 +395,23 @@ export function NewOrderPage() {
                 />
                 <FieldError message={clientError} />
               </div>
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  type="button"
-                  onClick={() =>
-                    navigate("/customers/new", {
-                      state: { backTo: "/sales/new-order" },
-                    })
-                  }
-                >
-                  <Plus />
-                  Nuevo cliente
-                </Button>
-              </div>
+              {canCreateCustomers && (
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    type="button"
+                    onClick={() =>
+                      navigate("/customers/new", {
+                        state: { backTo: "/sales/new-order" },
+                      })
+                    }
+                  >
+                    <Plus />
+                    Nuevo cliente
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

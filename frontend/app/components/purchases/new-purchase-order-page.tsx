@@ -13,13 +13,21 @@ import type { LineItem } from "../sales/sales-types";
 import { formatDate } from "../sales/sales-types";
 import { LineItemsEditor } from "../sales/line-items-editor";
 import { useProducts } from "../products/products-store";
+import { useCurrentUser } from "../auth/session-store";
 import type { PurchaseOrder } from "./purchases-types";
-import { addPurchaseOrder, useProviders, usePurchaseOrders } from "./purchases-store";
+import {
+  addPurchaseOrder,
+  refreshProviders,
+  useProviders,
+  usePurchaseOrders,
+} from "./purchases-store";
 
 export function NewPurchaseOrderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const providers = useProviders();
+  const currentUser = useCurrentUser();
+  const canCreateProviders = currentUser?.role === "administrador";
   const orders = usePurchaseOrders();
   const products = useProducts();
 
@@ -31,6 +39,14 @@ export function NewPurchaseOrderPage() {
   const [total, setTotal] = useState("$0");
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refreshProviders().catch((error: unknown) => {
+      setProviderError(
+        error instanceof Error ? error.message : "No se pudieron cargar los proveedores."
+      );
+    });
+  }, []);
 
   useEffect(() => {
     const preselected = (location.state as { providerId?: string } | null)
@@ -104,21 +120,23 @@ export function NewPurchaseOrderPage() {
                 />
                 <FieldError message={providerError} />
               </div>
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  type="button"
-                  onClick={() =>
-                    navigate("/purchases/new-provider", {
-                      state: { backTo: "/purchases/new-order" },
-                    })
-                  }
-                >
-                  <Plus />
-                  Nuevo proveedor
-                </Button>
-              </div>
+              {canCreateProviders && (
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    type="button"
+                    onClick={() =>
+                      navigate("/purchases/new-provider", {
+                        state: { backTo: "/purchases/new-order" },
+                      })
+                    }
+                  >
+                    <Plus />
+                    Nuevo proveedor
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

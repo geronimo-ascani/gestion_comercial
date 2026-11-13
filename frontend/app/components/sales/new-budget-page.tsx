@@ -20,14 +20,17 @@ import type { LineItem } from "./sales-types";
 import { formatDateForInput, formatDate, formatInputDate } from "./sales-types";
 import { addBudget, updateBudget, useBudgets } from "./sales-store";
 import { LineItemsEditor } from "./line-items-editor";
-import { useCustomers } from "../customers/customers-store";
+import { refreshCustomers, useCustomers } from "../customers/customers-store";
 import { useProducts } from "../products/products-store";
+import { useCurrentUser } from "../auth/session-store";
 
 export function NewBudgetPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const budgets = useBudgets();
   const customers = useCustomers();
+  const currentUser = useCurrentUser();
+  const canCreateCustomers = currentUser?.role === "administrador";
   const products = useProducts();
   const [searchParams] = useSearchParams();
 
@@ -74,6 +77,14 @@ export function NewBudgetPage() {
       discountPercent
     );
   const total = formatMoney(totalValue);
+
+  useEffect(() => {
+    void refreshCustomers().catch((error: unknown) => {
+      setClientError(
+        error instanceof Error ? error.message : "No se pudieron cargar los clientes."
+      );
+    });
+  }, []);
 
   useEffect(() => {
     const preselected = (location.state as { clienteId?: string } | null)
@@ -194,21 +205,23 @@ export function NewBudgetPage() {
                 />
                 <FieldError message={expiresError} />
               </div>
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  type="button"
-                  onClick={() =>
-                    navigate("/customers/new", {
-                      state: { backTo: "/sales/new-budget" },
-                    })
-                  }
-                >
-                  <Plus />
-                  Nuevo cliente
-                </Button>
-              </div>
+              {canCreateCustomers && (
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    type="button"
+                    onClick={() =>
+                      navigate("/customers/new", {
+                        state: { backTo: "/sales/new-budget" },
+                      })
+                    }
+                  >
+                    <Plus />
+                    Nuevo cliente
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

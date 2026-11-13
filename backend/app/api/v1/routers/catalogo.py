@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import get_catalogo_service
 from app.api.v1.routers.auth import get_current_user
 from app.schemas.catalogo import AlicuotaIVARead, UnidadRead
+from app.schemas.clientes import CondicionIVARead
 from app.services.catalogo_service import CatalogoService
 
 router = APIRouter(tags=["Catálogo"], dependencies=[Depends(get_current_user)])
@@ -25,4 +26,14 @@ def listar_unidades(service: ServiceDep) -> list[UnidadRead]:
     return [
         UnidadRead.model_validate(unidad)
         for unidad in service.listar_unidades()
+    ]
+
+
+@router.get("/condiciones-iva", response_model=list[CondicionIVARead])
+def listar_condiciones_iva(
+    service: ServiceDep,
+) -> list[CondicionIVARead]:
+    return [
+        CondicionIVARead.model_validate(condicion)
+        for condicion in service.listar_condiciones_iva()
     ]

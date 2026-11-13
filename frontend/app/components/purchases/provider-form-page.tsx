@@ -1,13 +1,12 @@
-import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useState, type FormEvent } from "react";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter } from "~/components/ui/card";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
 import { FormPage } from "~/components/ui/form-page";
-
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import {
   requireText,
   validateAddress,
@@ -15,66 +14,114 @@ import {
   validateEmail,
   validatePhone,
 } from "~/lib/validation";
-import { parseNumberInput } from "~/lib/currency";
-import { addProvider, updateProvider, useProviders } from "./purchases-store";
+
+import { useCurrentUser } from "../auth/session-store";
+import { getProvider } from "./providers-api";
+import {
+  addProvider,
+  updateProvider,
+} from "./purchases-store";
 import type { Provider } from "./purchases-types";
 
 export function ProviderFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const providers = useProviders();
+  const currentUser = useCurrentUser();
   const editId = searchParams.get("edit");
-  const editing = editId
-    ? (providers.find((provider) => provider.id === editId) ?? null)
-    : null;
   const backTo =
     (location.state as { backTo?: string } | null)?.backTo ?? "/providers";
 
-  const [name, setName] = useState(editing?.name ?? "");
-  const [cuit, setCuit] = useState(editing?.cuit ?? "");
-  const [phone, setPhone] = useState(editing?.phone ?? "");
-  const [email, setEmail] = useState(editing?.email ?? "");
-  const [province, setProvince] = useState(editing?.address?.province ?? "");
-  const [locality, setLocality] = useState(editing?.address?.locality ?? "");
-  const [street, setStreet] = useState(editing?.address?.street ?? "");
-  const [number, setNumber] = useState(editing?.address?.number ?? "");
-  const [apartment, setApartment] = useState(editing?.address?.apartment ?? "");
-  const [bank, setBank] = useState(editing?.bank ?? "");
-  const [account, setAccount] = useState(editing?.account ?? "");
-  const [balance, setBalance] = useState(
-    editing && typeof editing.balance === "number" ? String(editing.balance) : ""
-  );
+  const [loading, setLoading] = useState(Boolean(editId));
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [cuit, setCuit] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [province, setProvince] = useState("");
+  const [locality, setLocality] = useState("");
+  const [street, setStreet] = useState("");
+  const [number, setNumber] = useState("");
+  const [apartment, setApartment] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [bank, setBank] = useState("");
+  const [account, setAccount] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
-  function setField(field: string, value: string, setter: (value: string) => void) {
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    setLoading(true);
+    getProvider(editId)
+      .then((provider) => {
+        if (cancelled) return;
+        setName(provider.name);
+        setCuit(provider.cuit);
+        setPhone(provider.phone);
+        setEmail(provider.email);
+        setProvince(provider.address.province);
+        setLocality(provider.address.locality);
+        setStreet(provider.address.street);
+        setNumber(provider.address.number);
+        setApartment(provider.address.apartment);
+        setPostalCode(provider.address.postalCode ?? "");
+        setBank(provider.bank);
+        setAccount(provider.account);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSubmitError(
+            error instanceof Error ? error.message : "No se pudo cargar el proveedor."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId]);
+
+  function setField(
+    field: string,
+    value: string,
+    setter: (value: string) => void
+  ) {
     setter(value);
-    setErrors((prev) => ({ ...prev, [field]: null }));
+    setErrors((previous) => ({ ...previous, [field]: null }));
+    setSubmitError(null);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next: Record<string, string | null> = {
-      name: requireText(name, "Nombre / Razón social"),
+      name: requireText(name, "Razón social"),
       cuit: cuit.trim()
         ? validateDocument(cuit)
         : requireText(cuit, "CUIT"),
       email: email.trim()
         ? validateEmail(email)
         : requireText(email, "Correo electrónico"),
-      phone: phone.trim() ? validatePhone(phone) : requireText(phone, "Teléfono"),
-      balance: balance.trim()
-        ? Number.isFinite(parseNumberInput(balance))
-          ? null
-          : "Saldo inválido"
-        : null,
-      ...validateAddress({ province, locality, street, number, apartment }, { required: true }),
+      phone: phone.trim()
+        ? validatePhone(phone)
+        : requireText(phone, "Teléfono"),
+      bank: requireText(bank, "Banco"),
+      account: requireText(account, "Número de cuenta"),
+      postalCode: requireText(postalCode, "Código postal"),
+      ...validateAddress(
+        { province, locality, street, number, apartment },
+        { required: true }
+      ),
     };
     setErrors(next);
-    if (Object.values(next).some((error) => error)) return;
+    setSubmitError(null);
+    if (Object.values(next).some(Boolean)) return;
+
     const provider: Provider = {
-      id: editing?.id ?? crypto.randomUUID(),
-      name: name.trim() || "Sin definir",
+      id: editId ?? "",
+      name: name.trim(),
       cuit: cuit.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -84,196 +131,121 @@ export function ProviderFormPage() {
         street: street.trim(),
         number: number.trim(),
         apartment: apartment.trim(),
+        postalCode: postalCode.trim(),
       },
       bank: bank.trim(),
       account: account.trim(),
-      balance: balance.trim() ? parseNumberInput(balance) : 0,
     };
-    if (editing) {
-      updateProvider(provider.id, provider);
-    } else {
-      addProvider(provider);
+
+    setSaving(true);
+    try {
+      const saved = editId
+        ? await updateProvider(editId, provider)
+        : await addProvider(provider);
+      navigate(backTo, { state: { providerId: saved.id } });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "No se pudo guardar el proveedor."
+      );
+    } finally {
+      setSaving(false);
     }
-    navigate(backTo, { state: { providerId: provider.id } });
+  }
+
+  if (currentUser?.role !== "administrador") {
+    return <Navigate to="/providers" replace />;
+  }
+
+  if (loading) {
+    return (
+      <FormPage backLabel="Volver" backTo={backTo} title="Cargando proveedor">
+        <p role="status" className="text-sm text-muted-foreground">Cargando datos…</p>
+      </FormPage>
+    );
   }
 
   return (
     <FormPage
       backLabel="Volver"
       backTo={backTo}
-      title={editing ? "Editar proveedor" : "Nuevo proveedor"}
-      description="Complete los datos del proveedor. Nombre / Razón social, CUIT, teléfono, correo electrónico y dirección son obligatorios."
+      title={editId ? "Editar proveedor" : "Nuevo proveedor"}
+      description="Complete los datos del proveedor. El saldo se gestiona desde las operaciones comerciales."
     >
       <Card>
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-          <CardContent className="pt-6">
+          <CardContent className="space-y-4 pt-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="provider-name">Nombre / Razón social</Label>
-                <Input
-                  id="provider-name"
-                  value={name}
-                  onChange={(event) =>
-                    setField("name", event.target.value, setName)
-                  }
-                  placeholder="Ej. Distribuidora San Juan"
-                  aria-invalid={!!errors.name}
-                />
+                <Input id="provider-name" value={name} onChange={(event) => setField("name", event.target.value, setName)} aria-invalid={!!errors.name} />
                 <FieldError message={errors.name} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-cuit">CUIT</Label>
-                <Input
-                  id="provider-cuit"
-                  value={cuit}
-                  onChange={(event) =>
-                    setField("cuit", event.target.value, setCuit)
-                  }
-                  placeholder="20-12345678-9"
-                  aria-invalid={!!errors.cuit}
-                />
+                <Input id="provider-cuit" value={cuit} onChange={(event) => setField("cuit", event.target.value, setCuit)} aria-invalid={!!errors.cuit} />
                 <FieldError message={errors.cuit} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-phone">Teléfono</Label>
-                <Input
-                  id="provider-phone"
-                  value={phone}
-                  onChange={(event) =>
-                    setField("phone", event.target.value, setPhone)
-                  }
-                  placeholder="+54 11 5555-0000"
-                  aria-invalid={!!errors.phone}
-                />
+                <Input id="provider-phone" value={phone} onChange={(event) => setField("phone", event.target.value, setPhone)} aria-invalid={!!errors.phone} />
                 <FieldError message={errors.phone} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-email">Correo electrónico</Label>
-                <Input
-                  id="provider-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) =>
-                    setField("email", event.target.value, setEmail)
-                  }
-                  placeholder="ventas@proveedor.com.ar"
-                  aria-invalid={!!errors.email}
-                />
+                <Input id="provider-email" type="email" value={email} onChange={(event) => setField("email", event.target.value, setEmail)} aria-invalid={!!errors.email} />
                 <FieldError message={errors.email} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="provider-balance">Saldo en cuenta corriente</Label>
-                <Input
-                  id="provider-balance"
-                  inputMode="decimal"
-                  value={balance}
-                  onChange={(event) =>
-                    setField("balance", event.target.value, setBalance)
-                  }
-                  placeholder="0"
-                  aria-invalid={!!errors.balance}
-                />
-                <FieldError message={errors.balance} />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Dirección</Label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="provider-street">Calle</Label>
-                    <Input
-                      id="provider-street"
-                      value={street}
-                      onChange={(event) =>
-                        setField("street", event.target.value, setStreet)
-                      }
-                      placeholder="Nombre de la calle"
-                      aria-invalid={!!errors.street}
-                    />
-                    <FieldError message={errors.street} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="provider-number">Altura</Label>
-                    <Input
-                      id="provider-number"
-                      value={number}
-                      onChange={(event) =>
-                        setField(
-                          "number",
-                          event.target.value.replace(/\D/g, ""),
-                          setNumber
-                        )
-                      }
-                      placeholder="1234"
-                      aria-invalid={!!errors.number}
-                    />
-                    <FieldError message={errors.number} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="provider-apartment">Departamento</Label>
-                    <Input
-                      id="provider-apartment"
-                      value={apartment}
-                      onChange={(event) =>
-                        setField("apartment", event.target.value, setApartment)
-                      }
-                      placeholder="Ej. 3º B"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="provider-locality">Localidad</Label>
-                    <Input
-                      id="provider-locality"
-                      value={locality}
-                      onChange={(event) =>
-                        setField("locality", event.target.value, setLocality)
-                      }
-                      placeholder="Ej. Córdoba"
-                      aria-invalid={!!errors.locality}
-                    />
-                    <FieldError message={errors.locality} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="provider-province">Provincia</Label>
-                    <Input
-                      id="provider-province"
-                      value={province}
-                      onChange={(event) =>
-                        setField("province", event.target.value, setProvince)
-                      }
-                      placeholder="Ej. Buenos Aires"
-                      aria-invalid={!!errors.province}
-                    />
-                    <FieldError message={errors.province} />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="provider-bank">Banco</Label>
-                <Input
-                  id="provider-bank"
-                  value={bank}
-                  onChange={(event) => setBank(event.target.value)}
-                  placeholder="Ej. Banco Galicia"
-                />
+                <Input id="provider-bank" value={bank} onChange={(event) => setField("bank", event.target.value, setBank)} aria-invalid={!!errors.bank} />
+                <FieldError message={errors.bank} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-account">Número de cuenta</Label>
-                <Input
-                  id="provider-account"
-                  value={account}
-                  onChange={(event) => setAccount(event.target.value)}
-                  placeholder="CBU / número de cuenta"
-                />
+                <Input id="provider-account" value={account} onChange={(event) => setField("account", event.target.value, setAccount)} aria-invalid={!!errors.account} />
+                <FieldError message={errors.account} />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>Dirección</Label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="provider-street">Calle</Label>
+                  <Input id="provider-street" value={street} onChange={(event) => setField("street", event.target.value, setStreet)} aria-invalid={!!errors.street} />
+                  <FieldError message={errors.street} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-number">Altura</Label>
+                  <Input id="provider-number" value={number} onChange={(event) => setField("number", event.target.value.replace(/\D/g, ""), setNumber)} aria-invalid={!!errors.number} />
+                  <FieldError message={errors.number} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-apartment">Departamento</Label>
+                  <Input id="provider-apartment" value={apartment} onChange={(event) => setField("apartment", event.target.value, setApartment)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-locality">Localidad</Label>
+                  <Input id="provider-locality" value={locality} onChange={(event) => setField("locality", event.target.value, setLocality)} aria-invalid={!!errors.locality} />
+                  <FieldError message={errors.locality} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-province">Provincia</Label>
+                  <Input id="provider-province" value={province} onChange={(event) => setField("province", event.target.value, setProvince)} aria-invalid={!!errors.province} />
+                  <FieldError message={errors.province} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-postal-code">Código postal</Label>
+                  <Input id="provider-postal-code" value={postalCode} onChange={(event) => setField("postalCode", event.target.value, setPostalCode)} aria-invalid={!!errors.postalCode} />
+                  <FieldError message={errors.postalCode} />
+                </div>
+              </div>
+            </div>
+            {submitError && <p role="alert" className="text-sm text-destructive">{submitError}</p>}
           </CardContent>
           <CardFooter className="justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate(backTo)}>
-              Cancelar
-            </Button>
-            <Button type="submit">
-              {editing ? "Guardar cambios" : "Crear proveedor"}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => navigate(backTo)}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Guardando…" : editId ? "Guardar cambios" : "Crear proveedor"}</Button>
           </CardFooter>
         </form>
       </Card>

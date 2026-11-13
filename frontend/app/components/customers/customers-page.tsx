@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -33,10 +33,10 @@ import {
 
 import { formatAddress } from "~/lib/address";
 import { formatMoney } from "~/lib/currency";
-import { removeCustomer, useCustomers } from "./customers-store";
+import { useCurrentUser } from "../auth/session-store";
+import { refreshCustomers, removeCustomer, useCustomers } from "./customers-store";
 import type { Customer } from "./customers-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
-import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 
 function CustomerDetailDialog({
@@ -117,10 +117,42 @@ function ConfirmDeleteDialog({
 
 export function CustomersPage() {
   const navigate = useNavigate();
-  const loading = useInitialLoading();
+  const currentUser = useCurrentUser();
+  const canManage = currentUser?.role === "administrador";
   const customers = useCustomers();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshCustomers()
+      .catch((caught: unknown) => {
+        if (!cancelled) {
+          setError(
+            caught instanceof Error ? caught.message : "No se pudieron cargar los clientes."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleDelete(id: string) {
+    setError(null);
+    try {
+      await removeCustomer(id);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "No se pudo eliminar el cliente."
+      );
+    }
+  }
 
   const filtered = customers.filter((customer) => {
     const haystack =
@@ -137,10 +169,12 @@ export function CustomersPage() {
             Registro y gestión de clientes.
           </p>
         </div>
-        <Button onClick={() => navigate("/customers/new")}>
-          <Plus />
-          Nuevo cliente
-        </Button>
+        {canManage && (
+          <Button onClick={() => navigate("/customers/new")}>
+            <Plus />
+            Nuevo cliente
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -168,6 +202,7 @@ export function CustomersPage() {
           <Badge variant="secondary">{customers.length} clientes</Badge>
         </CardHeader>
         <CardContent>
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
           {loading ? (
             <TableSkeleton rows={6} columns={5} />
           ) : (
@@ -178,14 +213,14 @@ export function CustomersPage() {
                 <TableHead>DNI / CUIT</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead className="text-right">Saldo</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
+                {canManage && <TableHead className="text-right">Acciones</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={canManage ? 5 : 4}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {customers.length === 0
@@ -214,7 +249,7 @@ export function CustomersPage() {
                     >
                       {formatMoney(customer.balance ?? 0)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    {canManage && <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <CustomerDetailDialog
                           customer={customer}
@@ -241,7 +276,7 @@ export function CustomersPage() {
                         <ConfirmDeleteDialog
                           title="¿Eliminar cliente?"
                           description={`Se eliminará ${customer.firstName} ${customer.lastName}. Esta acción no se puede deshacer.`}
-                          onConfirm={() => removeCustomer(customer.id)}
+                          onConfirm={() => void handleDelete(customer.id)}
                           trigger={
                             <Button
                               variant="ghost"
@@ -254,7 +289,7 @@ export function CustomersPage() {
                           }
                         />
                       </div>
-                    </TableCell>
+                    </TableCell>}
                   </TableRow>
                 ))
               )}

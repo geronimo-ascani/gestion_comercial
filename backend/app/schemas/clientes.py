@@ -1,17 +1,60 @@
+import re
 from datetime import date, datetime
 from decimal import Decimal
+
+from pydantic import Field, field_validator
 
 from .base import SchemaBase, UpdateSchema
 
 
-class ClienteFields(SchemaBase):
-    apellido: str
-    dni_cuit: str
-    email: str
-    nombre: str
-    saldo: float
-    telefono: str
+class DireccionEntidad(SchemaBase):
+    altura: str = Field(min_length=1, max_length=10)
+    calle: str = Field(min_length=1, max_length=160)
+    cp: str = Field(min_length=1, max_length=10)
+    depto: str = Field(default="", max_length=20)
+    localidad: str = Field(min_length=1, max_length=120)
+    provincia: str = Field(min_length=1, max_length=120)
+
+
+class DireccionEntidadRead(SchemaBase):
+    altura: str
+    calle: str
+    cp: str
+    depto: str
+    localidad: str
+    provincia: str
+
+
+class CondicionIVARead(SchemaBase):
     id_condicion_iva: str
+    codigo_afip: str
+    descripcion: str
+
+
+class ClienteFields(SchemaBase):
+    apellido: str = Field(min_length=1, max_length=120)
+    dni_cuit: str = Field(min_length=7, max_length=20)
+    email: str = Field(max_length=160)
+    nombre: str = Field(min_length=1, max_length=120)
+    telefono: str = Field(min_length=1, max_length=40)
+    id_condicion_iva: str = Field(min_length=1, max_length=20)
+    direccion: DireccionEntidad
+
+    @field_validator("dni_cuit")
+    @classmethod
+    def validar_dni_cuit(cls, valor: str) -> str:
+        digitos = re.sub(r"[^0-9]", "", valor)
+        if not 7 <= len(digitos) <= 11:
+            raise ValueError("DNI/CUIT debe contener entre 7 y 11 dígitos")
+        return digitos
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, valor: str) -> str:
+        email = valor.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("Debe ingresar un correo electrónico válido")
+        return email
 
 
 class ClienteCreate(ClienteFields):
@@ -19,17 +62,40 @@ class ClienteCreate(ClienteFields):
 
 
 class ClienteRead(ClienteFields):
+    direccion: DireccionEntidadRead
     id_cliente: str
+    saldo: Decimal
+    condicion_iva_descripcion: str
 
 
 class ClienteUpdate(UpdateSchema):
-    apellido: str | None = None
-    dni_cuit: str | None = None
-    email: str | None = None
-    nombre: str | None = None
-    saldo: float | None = None
-    telefono: str | None = None
-    id_condicion_iva: str | None = None
+    apellido: str | None = Field(default=None, min_length=1, max_length=120)
+    dni_cuit: str | None = Field(default=None, min_length=7, max_length=20)
+    email: str | None = Field(default=None, max_length=160)
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    telefono: str | None = Field(default=None, min_length=1, max_length=40)
+    id_condicion_iva: str | None = Field(default=None, min_length=1, max_length=20)
+    direccion: DireccionEntidad | None = None
+
+    @field_validator("dni_cuit")
+    @classmethod
+    def validar_dni_cuit(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        digitos = re.sub(r"[^0-9]", "", valor)
+        if not 7 <= len(digitos) <= 11:
+            raise ValueError("DNI/CUIT debe contener entre 7 y 11 dígitos")
+        return digitos
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        email = valor.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("Debe ingresar un correo electrónico válido")
+        return email
 
 
 class DireccionFields(SchemaBase):

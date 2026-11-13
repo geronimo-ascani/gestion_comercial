@@ -193,6 +193,13 @@ export async function reservarCodigoProducto(): Promise<string> {
   return data.id_producto;
 }
 
+export async function anularCodigoProducto(id: string): Promise<void> {
+  await apiRequest<void>(
+    `/productos/codigos/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+}
+
 export async function actualizarProducto(
   id: string,
   datos: ProductoUpdatePayload
