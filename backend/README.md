@@ -12,6 +12,7 @@ PostgreSQL database:
 psql "$env:DATABASE_URL" -f .\sql\001_schema_completo.sql
 psql "$env:DATABASE_URL" -f .\sql\002_auth_recovery.sql
 psql "$env:DATABASE_URL" -f .\sql\003_producto_reservas.sql
+psql "$env:DATABASE_URL" -f .\sql\004_pedido_provincia_entrega.sql
 ```
 
 Run the API from this directory with `fastapi dev app/main.py`.
@@ -43,11 +44,11 @@ reset links to the frontend.
 ## Customers and suppliers
 
 - `GET /api/v1/clientes` and `GET /api/v1/clientes/{id}` are available to
-  administrators and sales employees. Customer create, update, and delete
-  operations are administrator-only.
+  administrators and sales employees. Administrators and sales employees can
+  create customers; update and delete operations are administrator-only.
 - `GET /api/v1/proveedores` and `GET /api/v1/proveedores/{id}` are available to
-  administrators and supply employees. Supplier create, update, and delete
-  operations are administrator-only.
+  administrators and supply employees. Administrators and supply employees can
+  create suppliers; update and delete operations are administrator-only.
 - Both lists accept `q`, `limit`, and `offset`. Customer addresses are managed
   with the customer record; supplier addresses are managed with the supplier
   record. `GET /api/v1/condiciones-iva` supplies the required customer tax
@@ -61,3 +62,26 @@ reset links to the frontend.
   records are not deleted. Account balances are read-only in these endpoints.
 - These endpoints use the existing `cliente`, `proveedor`, and `direccion`
   tables from `001_schema_completo.sql`; no additional migration is needed.
+- Purchase orders capture a database-backed payment method at creation.
+- Delivery province for sales orders is added by
+  `004_pedido_provincia_entrega.sql`.
+
+## Purchase orders
+
+- `POST /api/v1/compras/pedidos` creates an order with one or more active
+  products, entered unit purchase prices, and a required payment method. The
+  authenticated employee is recorded by the backend, and the total is
+  calculated from the detail lines.
+- `GET /api/v1/compras/pedidos` and
+  `GET /api/v1/compras/pedidos/{id_pedido_proveedor}` return order headers and
+  their product details. Lists accept `estado`, `q`, `limit`, and `offset`.
+- `POST /api/v1/compras/pedidos/{id_pedido_proveedor}/recepcion` receives the
+  full order. It updates product stock and writes purchase inventory movements
+  in the same transaction. Repeating receipt does not apply the stock twice.
+- `POST /api/v1/compras/pedidos/{id_pedido_proveedor}/cancelacion` cancels a
+  pending or approved order without changing stock. Received orders cannot be
+  cancelled.
+- These endpoints are available to administrators and supply employees.
+- The purchase-order form, list, full-receipt action, and cancellation action
+  use these endpoints; the backend remains authoritative for order totals and
+  inventory changes.

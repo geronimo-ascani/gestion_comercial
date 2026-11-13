@@ -43,6 +43,7 @@ interface LineItemsEditorProps {
   summaryLabel?: string;
   /** Habilita el descuento porcentual por línea (ventas). */
   allowLineDiscount?: boolean;
+  allowPriceEdit?: boolean;
 }
 
 export function LineItemsEditor({
@@ -52,11 +53,11 @@ export function LineItemsEditor({
   initialItems = [],
   summaryLabel = "Total",
   allowLineDiscount = false,
+  allowPriceEdit = true,
 }: LineItemsEditorProps) {
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initialItems.map((item) => ({
-      productId:
-        products.find((product) => product.code === item.sku)?.id ?? "",
+      productId: item.sku ?? "",
       productName: item.product,
       qty: String(item.qty),
       price: String(parseNumberInput(item.unitPrice)),
@@ -75,7 +76,7 @@ export function LineItemsEditor({
         const { qty, price, discountPercent, discountAmount, net } =
           computeLine(line);
         return {
-          sku: product?.code,
+          sku: product?.code ?? line.productId,
           product: line.productName,
           qty,
           unitPrice: formatMoney(price),
@@ -218,7 +219,11 @@ export function LineItemsEditor({
                     updateLine(index, { price: event.target.value })
                   }
                   placeholder="$ 0"
-                  className="w-full sm:w-28"
+                  readOnly={!allowPriceEdit}
+                  className={cn(
+                    "w-full sm:w-28",
+                    !allowPriceEdit && "cursor-not-allowed bg-muted"
+                  )}
                   aria-label="Precio unitario"
                 />
                 {allowLineDiscount && (

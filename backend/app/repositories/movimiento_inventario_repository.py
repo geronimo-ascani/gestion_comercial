@@ -53,6 +53,43 @@ class MovimientoInventarioRepository:
             assert fila is not None
             return fila
 
+    def crear_compra(
+        self,
+        id_pedido_proveedor: str,
+        id_producto: str,
+        cantidad: Decimal,
+    ) -> MovimientoRow:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                WITH movimiento AS (
+                    INSERT INTO movimiento_inventario (
+                        cantidad, fecha_movimiento, motivo, tipo,
+                        id_pedido_cliente, id_pedido_proveedor, id_producto
+                    )
+                    VALUES (
+                        %(cantidad)s, now(), 'compra', 'entrada',
+                        NULL, %(id_pedido_proveedor)s, %(id_producto)s
+                    )
+                    RETURNING id_movimiento, cantidad, fecha_movimiento, motivo, tipo,
+                              id_pedido_cliente, id_pedido_proveedor, id_producto
+                )
+                SELECT m.id_movimiento, m.cantidad, m.fecha_movimiento, m.motivo,
+                       m.tipo, m.id_pedido_cliente, m.id_pedido_proveedor,
+                       m.id_producto, p.nombre AS producto_nombre
+                FROM movimiento m
+                JOIN producto p ON p.id_producto = m.id_producto
+                """,
+                {
+                    "cantidad": cantidad,
+                    "id_pedido_proveedor": id_pedido_proveedor,
+                    "id_producto": id_producto,
+                },
+            )
+            movimiento = cur.fetchone()
+            assert movimiento is not None
+            return movimiento
+
     def listar_por_producto(
         self,
         id_producto: str,

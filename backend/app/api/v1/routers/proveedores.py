@@ -26,6 +26,10 @@ PuedeLeer = Annotated[
     dict[str, Any],
     Depends(require_roles("administrador", "abastecimiento")),
 ]
+PuedeCrear = Annotated[
+    dict[str, Any],
+    Depends(require_roles("administrador", "abastecimiento")),
+]
 SoloAdministrador = Annotated[
     dict[str, Any],
     Depends(require_roles("administrador")),
@@ -90,7 +94,7 @@ def obtener_proveedor(
 def crear_proveedor(
     datos: ProveedorCreate,
     service: ServiceDep,
-    _: SoloAdministrador,
+    _: PuedeCrear,
 ) -> ProveedorRead:
     try:
         return ProveedorRead.model_validate(service.crear(datos))

@@ -6,6 +6,7 @@ from psycopg.rows import dict_row
 AlicuotaRow = dict[str, Any]
 UnidadRow = dict[str, Any]
 CondicionIVARow = dict[str, Any]
+MedioPagoRow = dict[str, Any]
 
 
 class CatalogoRepository:
@@ -41,6 +42,17 @@ class CatalogoRepository:
                 SELECT id_condicion_iva, codigo_afip, descripcion
                 FROM condicion_iva
                 ORDER BY descripcion
+                """
+            )
+            return cur.fetchall()
+
+    def listar_medios_pago(self) -> list[MedioPagoRow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id_medio_pago, medio_pago, tipo_cobro
+                FROM medio_pago
+                ORDER BY medio_pago
                 """
             )
             return cur.fetchall()

@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE pedido_cliente
+    ADD COLUMN IF NOT EXISTS entrega_provincia VARCHAR(120) NOT NULL DEFAULT '';
+
+COMMIT;

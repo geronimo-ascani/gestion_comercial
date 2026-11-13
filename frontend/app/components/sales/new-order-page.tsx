@@ -41,7 +41,9 @@ export function NewOrderPage() {
   const budgets = useBudgets();
   const customers = useCustomers();
   const currentUser = useCurrentUser();
-  const canCreateCustomers = currentUser?.role === "administrador";
+  const canCreateCustomers = ["administrador", "ventas"].includes(
+    currentUser?.role ?? ""
+  );
   const products = useProducts();
   const payments = usePayments();
   const paymentMethods = usePaymentMethods();
@@ -367,51 +369,55 @@ export function NewOrderPage() {
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <CardContent className="space-y-4 pt-6">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="order-client">Cliente</Label>
-                <Combobox
-                  id="order-client"
-                  value={client}
-                  onValueChange={(customerId) => {
-                    setClient(customerId);
-                    setClientError(null);
-                    prefillAddressFromCustomer(customerId);
-                  }}
-                  options={customers.map((customer) => ({
-                    value: customer.id,
-                    label: `${customer.firstName} ${customer.lastName}`,
-                    description: customer.document || undefined,
-                    keywords: [
-                      customer.document,
-                      customer.email,
-                      customer.phone,
-                    ].filter((item): item is string => Boolean(item)),
-                  }))}
-                  placeholder="Seleccionar cliente"
-                  searchPlaceholder="Buscar cliente por nombre, DNI o correo..."
-                  notFoundText="No se encontraron clientes"
-                  emptyText="No hay clientes cargados"
-                  ariaInvalid={!!clientError}
-                />
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Combobox
+                      id="order-client"
+                      value={client}
+                      onValueChange={(customerId) => {
+                        setClient(customerId);
+                        setClientError(null);
+                        prefillAddressFromCustomer(customerId);
+                      }}
+                      options={customers.map((customer) => ({
+                        value: customer.id,
+                        label: `${customer.firstName} ${customer.lastName}`,
+                        description: customer.document || undefined,
+                        keywords: [
+                          customer.document,
+                          customer.email,
+                          customer.phone,
+                        ].filter((item): item is string => Boolean(item)),
+                      }))}
+                      placeholder="Seleccionar cliente"
+                      searchPlaceholder="Buscar cliente por nombre, DNI o correo..."
+                      notFoundText="No se encontraron clientes"
+                      emptyText="No hay clientes cargados"
+                      ariaInvalid={!!clientError}
+                    />
+                  </div>
+                  {canCreateCustomers && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-lg"
+                      className="size-11"
+                      aria-label="Agregar cliente"
+                      title="Agregar cliente"
+                      onClick={() =>
+                        navigate("/customers/new", {
+                          state: { backTo: "/sales/new-order" },
+                        })
+                      }
+                    >
+                      <Plus aria-hidden="true" />
+                    </Button>
+                  )}
+                </div>
                 <FieldError message={clientError} />
               </div>
-              {canCreateCustomers && (
-                <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    type="button"
-                    onClick={() =>
-                      navigate("/customers/new", {
-                        state: { backTo: "/sales/new-order" },
-                      })
-                    }
-                  >
-                    <Plus />
-                    Nuevo cliente
-                  </Button>
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -503,6 +509,7 @@ export function NewOrderPage() {
                 onChange={handleItemsChange}
                 summaryLabel="Subtotal de productos"
                 allowLineDiscount
+                allowPriceEdit={false}
               />
               <FieldError message={itemsError} />
             </div>

@@ -2,6 +2,7 @@ from app.repositories.catalogo_repository import (
     AlicuotaRow,
     CondicionIVARow,
     CatalogoRepository,
+    MedioPagoRow,
     UnidadRow,
 )
 
@@ -18,3 +19,6 @@ class CatalogoService:
 
     def listar_condiciones_iva(self) -> list[CondicionIVARow]:
         return self._repo.listar_condiciones_iva()
+
+    def listar_medios_pago(self) -> list[MedioPagoRow]:
+        return self._repo.listar_medios_pago()

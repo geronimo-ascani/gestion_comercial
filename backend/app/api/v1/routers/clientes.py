@@ -24,6 +24,10 @@ router = APIRouter(
 ServiceDep = Annotated[ClienteService, Depends(get_cliente_service)]
 ClienteId = Annotated[str, Path(min_length=1, max_length=20)]
 PuedeLeer = Annotated[dict[str, Any], Depends(require_roles("administrador", "ventas"))]
+PuedeCrear = Annotated[
+    dict[str, Any],
+    Depends(require_roles("administrador", "ventas")),
+]
 SoloAdministrador = Annotated[dict[str, Any], Depends(require_roles("administrador"))]
 
 
@@ -90,7 +94,7 @@ def obtener_cliente(
 def crear_cliente(
     datos: ClienteCreate,
     service: ServiceDep,
-    _: SoloAdministrador,
+    _: PuedeCrear,
 ) -> ClienteRead:
     try:
         return ClienteRead.model_validate(service.crear(datos))

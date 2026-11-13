@@ -33,6 +33,10 @@ export function CustomerFormPage() {
   const [searchParams] = useSearchParams();
   const currentUser = useCurrentUser();
   const editId = searchParams.get("edit");
+  const canCreate = ["administrador", "ventas"].includes(
+    currentUser?.role ?? ""
+  );
+  const canEdit = currentUser?.role === "administrador";
   const backTo =
     (location.state as { backTo?: string } | null)?.backTo ?? "/customers";
 
@@ -163,7 +167,7 @@ export function CustomerFormPage() {
     }
   }
 
-  if (currentUser?.role !== "administrador") {
+  if (!canCreate || (editId !== null && !canEdit)) {
     return <Navigate to="/customers" replace />;
   }
 

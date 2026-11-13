@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from "react";
-import { Eye, Plus, Search } from "lucide-react";
+import { useEffect, useState, type ReactElement } from "react";
+import { Ban, Check, Eye, Plus, Search } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -40,11 +40,19 @@ import {
 } from "~/components/ui/table";
 
 import { TableSkeleton } from "~/components/ui/skeleton";
-import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
+import { refreshProducts } from "../products/products-store";
 import { OrderLineItemsTable } from "../sales/sales-views";
 import type { PurchaseOrder, PurchaseOrderStatus } from "./purchases-types";
-import { usePurchaseOrders } from "./purchases-store";
+import {
+  loadPurchaseOrders,
+  savePurchaseOrder,
+  usePurchaseOrders,
+} from "./purchases-store";
+import {
+  cancelPurchaseOrder,
+  receivePurchaseOrder,
+} from "./purchases-api";
 import { PurchaseOrderStatusBadge } from "./purchases-views";
 
 function PurchaseOrderDetailDialog({
@@ -81,11 +89,34 @@ function PurchaseOrderDetailDialog({
 export function PurchasesPage() {
   const navigate = useNavigate();
   const orders = usePurchaseOrders();
-  const loading = useInitialLoading();
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [processingOrder, setProcessingOrder] = useState<string | null>(null);
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | PurchaseOrderStatus>("all");
   const debouncedOrderQuery = useDebouncedValue(orderQuery);
+
+  useEffect(() => {
+    let active = true;
+    loadPurchaseOrders()
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "No se pudieron cargar las órdenes de compra."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filteredOrders = orders.filter((order) => {
     const haystack = `${order.number} ${order.provider}`.toLowerCase();
@@ -93,6 +124,48 @@ export function PurchasesPage() {
     const matchesStatus = orderStatus === "all" || order.status === orderStatus;
     return matchesQuery && matchesStatus;
   });
+
+  async function handleReceive(order: PurchaseOrder) {
+    setProcessingOrder(order.number);
+    setActionError(null);
+    try {
+      const received = await receivePurchaseOrder(order.number);
+      savePurchaseOrder(received);
+      try {
+        await refreshProducts();
+      } catch {
+        setActionError(
+          "La recepción se registró, pero no se pudo actualizar la lista de productos."
+        );
+      }
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la recepción."
+      );
+    } finally {
+      setProcessingOrder(null);
+    }
+  }
+
+  async function handleCancel(order: PurchaseOrder) {
+    if (!window.confirm(`¿Cancelar la orden ${order.number}?`)) return;
+    setProcessingOrder(order.number);
+    setActionError(null);
+    try {
+      const cancelled = await cancelPurchaseOrder(order.number);
+      savePurchaseOrder(cancelled);
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cancelar la orden."
+      );
+    } finally {
+      setProcessingOrder(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -106,6 +179,12 @@ export function PurchasesPage() {
           Nueva orden de compra
         </Button>
       </div>
+
+      {(loadError || actionError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {actionError ?? loadError}
+        </p>
+      )}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative w-full max-w-sm">
@@ -204,18 +283,49 @@ export function PurchasesPage() {
                       <PurchaseOrderStatusBadge status={order.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <PurchaseOrderDetailDialog
-                        order={order}
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Ver orden ${order.number}`}
-                          >
-                            <Eye />
-                          </Button>
-                        }
-                      />
+                      <div className="flex justify-end gap-1">
+                        <PurchaseOrderDetailDialog
+                          order={order}
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon-lg"
+                              className="size-11"
+                              aria-label={`Ver orden ${order.number}`}
+                            >
+                              <Eye />
+                            </Button>
+                          }
+                        />
+                        {["pendiente", "aprobada"].includes(order.status) && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-lg"
+                              className="size-11"
+                              aria-label={`Recibir orden ${order.number}`}
+                              title="Recibir orden"
+                              disabled={processingOrder === order.number}
+                              onClick={() => void handleReceive(order)}
+                            >
+                              <Check />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon-lg"
+                              className="size-11"
+                              aria-label={`Cancelar orden ${order.number}`}
+                              title="Cancelar orden"
+                              disabled={processingOrder === order.number}
+                              onClick={() => void handleCancel(order)}
+                            >
+                              <Ban />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

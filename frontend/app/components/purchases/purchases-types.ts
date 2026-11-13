@@ -23,6 +23,7 @@ export interface PurchaseOrder {
   number: string;
   providerId: string;
   provider: string;
+  paymentMethodId?: string;
   date: string;
   receivedDate?: string;
   items: LineItem[];

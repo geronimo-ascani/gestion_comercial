@@ -21,6 +21,7 @@ import {
   addProvider,
   updateProvider,
 } from "./purchases-store";
+import type { LineItem } from "../sales/sales-types";
 import type { Provider } from "./purchases-types";
 
 export function ProviderFormPage() {
@@ -29,8 +30,22 @@ export function ProviderFormPage() {
   const [searchParams] = useSearchParams();
   const currentUser = useCurrentUser();
   const editId = searchParams.get("edit");
-  const backTo =
-    (location.state as { backTo?: string } | null)?.backTo ?? "/providers";
+  const canCreate = ["administrador", "abastecimiento"].includes(
+    currentUser?.role ?? ""
+  );
+  const canEdit = currentUser?.role === "administrador";
+  const navigationState = location.state as {
+    backTo?: string;
+    purchaseDraft?: {
+      providerId: string;
+      paymentMethodId: string;
+      items: LineItem[];
+    };
+  } | null;
+  const backTo = navigationState?.backTo ?? "/providers";
+  const backState = navigationState?.purchaseDraft
+    ? { purchaseDraft: navigationState.purchaseDraft }
+    : undefined;
 
   const [loading, setLoading] = useState(Boolean(editId));
   const [saving, setSaving] = useState(false);
@@ -142,7 +157,9 @@ export function ProviderFormPage() {
       const saved = editId
         ? await updateProvider(editId, provider)
         : await addProvider(provider);
-      navigate(backTo, { state: { providerId: saved.id } });
+      navigate(backTo, {
+        state: { ...backState, providerId: saved.id },
+      });
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "No se pudo guardar el proveedor."
@@ -152,13 +169,18 @@ export function ProviderFormPage() {
     }
   }
 
-  if (currentUser?.role !== "administrador") {
+  if (!canCreate || (editId !== null && !canEdit)) {
     return <Navigate to="/providers" replace />;
   }
 
   if (loading) {
     return (
-      <FormPage backLabel="Volver" backTo={backTo} title="Cargando proveedor">
+      <FormPage
+        backLabel="Volver"
+        backTo={backTo}
+        backState={backState}
+        title="Cargando proveedor"
+      >
         <p role="status" className="text-sm text-muted-foreground">Cargando datos…</p>
       </FormPage>
     );
@@ -168,6 +190,7 @@ export function ProviderFormPage() {
     <FormPage
       backLabel="Volver"
       backTo={backTo}
+      backState={backState}
       title={editId ? "Editar proveedor" : "Nuevo proveedor"}
       description="Complete los datos del proveedor. El saldo se gestiona desde las operaciones comerciales."
     >
@@ -244,7 +267,13 @@ export function ProviderFormPage() {
             {submitError && <p role="alert" className="text-sm text-destructive">{submitError}</p>}
           </CardContent>
           <CardFooter className="justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate(backTo)}>Cancelar</Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(backTo, { state: backState })}
+            >
+              Cancelar
+            </Button>
             <Button type="submit" disabled={saving}>{saving ? "Guardando…" : editId ? "Guardar cambios" : "Crear proveedor"}</Button>
           </CardFooter>
         </form>

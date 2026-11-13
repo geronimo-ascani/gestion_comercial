@@ -116,6 +116,18 @@ class ProductoRepository:
             )
             return cur.fetchone()
 
+    def obtener_activo_para_pedido(self, id_producto: str) -> ProductoRow | None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                {_SELECT_PRODUCTO}
+                WHERE p.id_producto = %s AND p.estado = TRUE
+                FOR SHARE OF p
+                """,
+                (id_producto,),
+            )
+            return cur.fetchone()
+
     def crear(self, datos: dict[str, Any], precio_venta: Decimal) -> ProductoRow:
         parametros = {**datos, "precio_venta": precio_venta}
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -272,6 +284,25 @@ class ProductoRepository:
         if fila is None:
             return None
         return self.obtener(id_producto)
+
+    def aplicar_delta_stock_sistema(
+        self, id_producto: str, delta: Decimal
+    ) -> ProductoRow | None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                UPDATE producto
+                SET stock_actual = stock_actual + %(delta)s
+                WHERE id_producto = %(id_producto)s
+                  AND stock_actual + %(delta)s >= 0
+                RETURNING id_producto
+                """,
+                {"id_producto": id_producto, "delta": delta},
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return self.obtener(id_producto, incluir_dados_de_baja=True)
 
     def eliminar(self, id_producto: str) -> bool:
         with self._conn.cursor() as cur:
