@@ -44,6 +44,7 @@ interface LineItemsEditorProps {
   /** Habilita el descuento porcentual por línea (ventas). */
   allowLineDiscount?: boolean;
   allowPriceEdit?: boolean;
+  showStock?: boolean;
 }
 
 export function LineItemsEditor({
@@ -54,6 +55,7 @@ export function LineItemsEditor({
   summaryLabel = "Total",
   allowLineDiscount = false,
   allowPriceEdit = true,
+  showStock = true,
 }: LineItemsEditorProps) {
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initialItems.map((item) => ({
@@ -176,7 +178,7 @@ export function LineItemsEditor({
             const selectedProduct = products.find(
               (product) => product.id === line.productId
             );
-            const insufficient = selectedProduct
+            const insufficient = showStock && selectedProduct
               ? qty > selectedProduct.stock
               : false;
             return (
@@ -255,7 +257,9 @@ export function LineItemsEditor({
                 >
                   <Trash2 />
                 </Button>
-                {(selectedProduct || discountAmount > 0 || invalidDiscount) && (
+                {((showStock && selectedProduct) ||
+                  discountAmount > 0 ||
+                  invalidDiscount) && (
                   <span
                     className={cn(
                       "text-xs font-medium",
@@ -264,7 +268,7 @@ export function LineItemsEditor({
                         : "text-muted-foreground"
                     )}
                   >
-                    {selectedProduct && (
+                    {showStock && selectedProduct && (
                       <>
                         Stock: {selectedProduct.stock}
                         {insufficient &&

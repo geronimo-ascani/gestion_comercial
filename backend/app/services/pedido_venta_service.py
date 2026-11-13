@@ -1,4 +1,4 @@
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from psycopg import errors
 
@@ -11,8 +11,12 @@ from app.repositories.pedido_venta_repository import (
 )
 from app.repositories.producto_repository import ProductoRepository, ProductoRow
 from app.schemas.pedidos_venta import PedidoVentaInput
+from app.services.venta_calculos import (
+    VentaImporteInvalido,
+    VentaLinea,
+    calcular_linea_venta,
+)
 
-_CENTAVOS = Decimal("0.01")
 _MAX_IMPORTE = Decimal("999999999999.99")
 _TRANSICIONES = {
     "pendiente": "proceso",
@@ -299,49 +303,25 @@ class PedidoVentaService:
         self,
         datos: PedidoVentaInput,
         productos: dict[str, ProductoRow],
-    ) -> list[dict[str, object]]:
-        lineas: list[dict[str, object]] = []
+    ) -> list[VentaLinea]:
+        lineas: list[VentaLinea] = []
         total = Decimal("0")
         for item in datos.items:
             producto = productos[item.id_producto]
-            precio = producto["precio_venta"]
-            base_sin_redondear = item.cantidad * precio
-            if base_sin_redondear > _MAX_IMPORTE:
-                raise PedidoVentaDatosInvalidos(
-                    "El subtotal excede el máximo permitido"
+            try:
+                linea = calcular_linea_venta(
+                    item.id_producto,
+                    item.cantidad,
+                    item.descuento_producto,
+                    datos.descuento_compra,
+                    producto["precio_venta"],
+                    producto["alicuota_porcentaje"],
+                    producto["alicuota_tipo_iva"],
                 )
-            base = base_sin_redondear.quantize(
-                _CENTAVOS, rounding=ROUND_HALF_UP
-            )
-            neto_con_descuento_linea = (
-                base * (Decimal("1") - item.descuento_producto / Decimal("100"))
-            ).quantize(_CENTAVOS, rounding=ROUND_HALF_UP)
-            subtotal = (
-                neto_con_descuento_linea
-                * (Decimal("1") - datos.descuento_compra / Decimal("100"))
-            ).quantize(_CENTAVOS, rounding=ROUND_HALF_UP)
-            porcentaje_iva = producto["alicuota_porcentaje"]
-            neto = (subtotal / (Decimal("1") + porcentaje_iva / Decimal("100"))).quantize(
-                _CENTAVOS, rounding=ROUND_HALF_UP
-            )
-            iva = subtotal - neto
-            if max(subtotal, neto, iva) > _MAX_IMPORTE:
-                raise PedidoVentaDatosInvalidos(
-                    "El subtotal excede el máximo permitido"
-                )
-            lineas.append(
-                {
-                    "id_producto": item.id_producto,
-                    "cantidad": item.cantidad,
-                    "descuento_producto": item.descuento_producto,
-                    "iva": iva,
-                    "neto": neto,
-                    "precio_unitario": precio,
-                    "subtotal": subtotal,
-                    "tipo_iva": producto["alicuota_tipo_iva"],
-                }
-            )
-            total += subtotal
+            except VentaImporteInvalido as exc:
+                raise PedidoVentaDatosInvalidos(str(exc)) from exc
+            lineas.append(linea)
+            total += linea["subtotal"]
         if total > _MAX_IMPORTE:
             raise PedidoVentaDatosInvalidos(
                 "El total excede el máximo permitido"
@@ -363,6 +343,7 @@ class PedidoVentaService:
             "entrega_provincia": datos.entrega_provincia,
             "saldo_pendiente": total,
             "total": total,
+            "id_presupuesto_cliente": None,
         }
 
     def _obtener_despues_de_mutacion(

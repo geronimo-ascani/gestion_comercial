@@ -15,12 +15,14 @@ from app.repositories.pedido_compra_repository import PedidoCompraRepository
 from app.repositories.pedido_venta_repository import PedidoVentaRepository
 from app.repositories.producto_repository import ProductoRepository
 from app.repositories.proveedor_repository import ProveedorRepository
+from app.repositories.presupuesto_repository import PresupuestoRepository
 from app.services.cliente_service import ClienteService
 from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
 from app.services.auth_service import AuthService
 from app.services.producto_service import ProductoService
 from app.services.proveedor_service import ProveedorService
+from app.services.presupuesto_service import PresupuestoService
 from app.services.pedido_compra_service import PedidoCompraService
 from app.services.pedido_venta_service import PedidoVentaService
 
@@ -78,6 +80,17 @@ def get_pedido_venta_service(
     db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
 ) -> PedidoVentaService:
     return PedidoVentaService(
+        PedidoVentaRepository(db),
+        ProductoRepository(db),
+        MovimientoInventarioRepository(db),
+    )
+
+
+def get_presupuesto_service(
+    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+) -> PresupuestoService:
+    return PresupuestoService(
+        PresupuestoRepository(db),
         PedidoVentaRepository(db),
         ProductoRepository(db),
         MovimientoInventarioRepository(db),

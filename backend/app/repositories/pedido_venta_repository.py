@@ -68,13 +68,14 @@ class PedidoVentaRepository:
                 INSERT INTO pedido_cliente (
                     descuento_compra, entrega_altura, entrega_calle, entrega_cp,
                     entrega_depto, entrega_localidad, entrega_provincia,
-                    estado_envio, saldo_pendiente, total, id_cliente
+                    estado_envio, saldo_pendiente, total, id_cliente,
+                    id_presupuesto_cliente
                 )
                 VALUES (
                     %(descuento_compra)s, %(entrega_altura)s, %(entrega_calle)s,
                     %(entrega_cp)s, %(entrega_depto)s, %(entrega_localidad)s,
                     %(entrega_provincia)s, 'pendiente', %(saldo_pendiente)s,
-                    %(total)s, %(id_cliente)s
+                    %(total)s, %(id_cliente)s, %(id_presupuesto_cliente)s
                 )
                 RETURNING id_pedido_cliente
                 """,

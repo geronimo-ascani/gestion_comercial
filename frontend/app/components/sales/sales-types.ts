@@ -57,7 +57,8 @@ export interface OrderDraft {
   discount: string;
 }
 
-export interface Budget {  number: string;
+export interface Budget {
+  number: string;
   client: string;
   clientId?: string;
   date: string;

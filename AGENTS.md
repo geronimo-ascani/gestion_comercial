@@ -55,8 +55,21 @@
   the order `cancelado`, and do not permit reopening a canceled order.
 - Payment methods, invoices, and payment records belong to the later payment
   stage. Do not require or persist a sales-order payment method in Stage 2.
-- Budget conversion is deferred to RF-11; do not make a local budget into a
-  server order as part of this stage.
+
+### Sales budgets
+
+- Budgets are available to `administrador` and `ventas`; creation starts in
+  `pendiente`. Only pending budgets can be edited or deleted.
+- Approval is explicit. A budget whose expiry date has passed is `vencido`
+  and cannot be approved or converted; issue a new budget instead.
+- Budget prices, VAT, line discounts, and order discount are calculated on the
+  server and saved as quote snapshots. Creating a budget does not reserve
+  stock.
+- Conversion is allowed only for approved, unexpired budgets. The delivery
+  address is collected during conversion. In one transaction, preserve the
+  quoted totals, link one sales order to the budget, reserve stock, write
+  sales inventory movements, and mark the budget `convertido`. A budget can
+  be converted only once.
 
 ### Purchase orders
 
@@ -94,11 +107,17 @@
   `POST /ventas/pedidos`, `PUT /ventas/pedidos/{id}`,
   `PATCH /ventas/pedidos/{id}/estado`, and
   `POST /ventas/pedidos/{id}/cancelacion`.
+- Budget API: CRUD under `/ventas/presupuestos`, plus
+  `POST /ventas/presupuestos/{id}/aprobacion` and
+  `POST /ventas/presupuestos/{id}/conversion`.
 - Sales order endpoints are restricted to `administrador` and `ventas`.
   List/detail, pending-only edits, sequential state transitions, and
   idempotent cancellation are enforced by the backend.
 - Focused service and route tests cover sales discounts, VAT, stock reservation
   and restoration, allowed transitions, and role permissions. The PostgreSQL
   create/edit/state/cancel probe was run with temporary data and rolled back.
+- Budget CRUD, approval, expiry, price snapshots, one-time conversion,
+  delivery address capture, stock reservation, and inventory movements are
+  implemented in the backend and integrated with the sales frontend.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

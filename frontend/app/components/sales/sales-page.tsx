@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { BudgetConversionDialog } from "./budget-conversion-dialog";
 import {
   Dialog,
   DialogClose,
@@ -54,6 +55,8 @@ import type {
   OrderStatus,
 } from "./sales-types";
 import {
+  approveBudget,
+  loadBudgets,
   loadSalesOrders,
   removeBudget,
   useBudgets,
@@ -146,9 +149,6 @@ function BudgetDetailDialog({
               : undefined
           }
         />
-        <p className="text-sm text-muted-foreground">
-          La conversión de presupuestos a pedidos estará disponible en una etapa posterior.
-        </p>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
             Cerrar
@@ -169,6 +169,11 @@ export function SalesPage() {
   const budgets = useBudgets();
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [budgetsLoading, setBudgetsLoading] = useState(true);
+  const [budgetsError, setBudgetsError] = useState<string | null>(null);
+  const [budgetActionError, setBudgetActionError] = useState<string | null>(
+    null,
+  );
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
@@ -178,14 +183,67 @@ export function SalesPage() {
   const debouncedBudgetQuery = useDebouncedValue(budgetQuery);
 
   useEffect(() => {
-    void loadSalesOrders()
+    void Promise.allSettled([loadSalesOrders(), loadBudgets()]).then(
+      ([ordersResult, budgetsResult]) => {
+        if (ordersResult.status === "rejected") {
+          setOrdersError(
+            ordersResult.reason instanceof Error
+              ? ordersResult.reason.message
+              : "No se pudieron cargar los pedidos.",
+          );
+        }
+        if (budgetsResult.status === "rejected") {
+          setBudgetsError(
+            budgetsResult.reason instanceof Error
+              ? budgetsResult.reason.message
+              : "No se pudieron cargar los presupuestos.",
+          );
+        }
+        setOrdersLoading(false);
+        setBudgetsLoading(false);
+      },
+    );
+  }, []);
+
+  async function handleApproveBudget(id: string) {
+    setBudgetActionError(null);
+    try {
+      await approveBudget(id);
+    } catch (error) {
+      setBudgetActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo aprobar el presupuesto.",
+      );
+    }
+  }
+
+  async function handleDeleteBudget(id: string) {
+    setBudgetActionError(null);
+    try {
+      await removeBudget(id);
+    } catch (error) {
+      setBudgetActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar el presupuesto.",
+      );
+    }
+  }
+
+  function retryBudgetsLoad() {
+    setBudgetsLoading(true);
+    setBudgetsError(null);
+    void loadBudgets(true)
       .catch((error: unknown) => {
-        setOrdersError(
-          error instanceof Error ? error.message : "No se pudieron cargar los pedidos.",
+        setBudgetsError(
+          error instanceof Error
+            ? error.message
+            : "No se pudieron cargar los presupuestos.",
         );
       })
-      .finally(() => setOrdersLoading(false));
-  }, []);
+      .finally(() => setBudgetsLoading(false));
+  }
 
   const filteredOrders = orders.filter((order) => {
     const haystack = `${order.number} ${order.client}`.toLowerCase();
@@ -456,7 +514,27 @@ export function SalesPage() {
               <Badge variant="secondary">{budgets.length} presupuestos</Badge>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {budgetActionError && (
+                <p className="mb-4 text-sm text-destructive" role="alert">
+                  {budgetActionError}
+                </p>
+              )}
+              {budgetsError && (
+                <div
+                  className="mb-4 flex flex-wrap items-center gap-3"
+                  role="alert"
+                >
+                  <p className="text-sm text-destructive">{budgetsError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={retryBudgetsLoad}
+                  >
+                    Reintentar
+                  </Button>
+                </div>
+              )}
+              {loading || budgetsLoading ? (
                 <TableSkeleton rows={6} columns={8} />
               ) : (
                 <Table>
@@ -518,31 +596,51 @@ export function SalesPage() {
                                 </Button>
                               }
                             />
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Editar presupuesto ${budget.number}`}
-                              onClick={() =>
-                                navigate(`/sales/new-budget?edit=${budget.number}`)
-                              }
-                            >
-                              <Pencil />
-                            </Button>
-                            <ConfirmDeleteDialog
-                              title="¿Eliminar presupuesto?"
-                              description={`Esta acción no se puede deshacer. Se eliminará el presupuesto ${budget.number} del cliente ${budget.client}.`}
-                              onDelete={() => removeBudget(budget.number)}
-                              trigger={
+                            {budget.status === "pendiente" && (
+                              <>
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
-                                  className="text-destructive hover:text-destructive"
-                                  aria-label={`Eliminar presupuesto ${budget.number}`}
+                                  aria-label={`Editar presupuesto ${budget.number}`}
+                                  onClick={() =>
+                                    navigate(
+                                      `/sales/new-budget?edit=${encodeURIComponent(budget.number)}`,
+                                    )
+                                  }
                                 >
-                                  <Trash2 />
+                                  <Pencil />
                                 </Button>
-                              }
-                            />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handleApproveBudget(budget.number)
+                                  }
+                                >
+                                  Aprobar
+                                </Button>
+                                <ConfirmDeleteDialog
+                                  title="¿Eliminar presupuesto?"
+                                  description={`Se eliminará el presupuesto pendiente ${budget.number} del cliente ${budget.client}.`}
+                                  onDelete={() =>
+                                    void handleDeleteBudget(budget.number)
+                                  }
+                                  trigger={
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      className="text-destructive hover:text-destructive"
+                                      aria-label={`Eliminar presupuesto ${budget.number}`}
+                                    >
+                                      <Trash2 />
+                                    </Button>
+                                  }
+                                />
+                              </>
+                            )}
+                            {budget.status === "aprobado" && (
+                              <BudgetConversionDialog budget={budget} />
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
