@@ -93,8 +93,12 @@ def listar_productos(
     id_categoria: Annotated[str | None, Query(max_length=20)] = None,
     id_alicuota_iva: Annotated[str | None, Query(max_length=20)] = None,
     id_unidad: Annotated[str | None, Query(max_length=20)] = None,
-    precio_min: Annotated[Decimal | None, Query(ge=0)] = None,
-    precio_max: Annotated[Decimal | None, Query(ge=0)] = None,
+    precio_min: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=2)
+    ] = None,
+    precio_max: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=2)
+    ] = None,
     stock_estado: Annotated[
         Literal["todos", "en_stock", "critico", "sin_stock"], Query()
     ] = "todos",

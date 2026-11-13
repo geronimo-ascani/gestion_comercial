@@ -1,10 +1,19 @@
 from contextlib import nullcontext
 from decimal import Decimal
 
+import pytest
+from psycopg import errors
+from pydantic import ValidationError
+
 from app.repositories.producto_repository import ProductoRepository
-from app.schemas.catalogo import ProductoAjusteStock, ProductoUpdate
+from app.schemas.catalogo import (
+    ProductoAjusteStock,
+    ProductoCreate,
+    ProductoUpdate,
+)
 from app.services.producto_service import (
     ProductoCodigoNoDisponible,
+    ProductoDatosInvalidos,
     ProductoDadoDeBaja,
     ProductoNoEncontrado,
     ProductoService,
@@ -146,6 +155,106 @@ def test_producto_update_no_acepta_modificar_saldo_directamente() -> None:
         pass
     else:
         raise AssertionError("stock_actual no debe ser actualizable por PATCH")
+
+
+def test_producto_schema_rechaza_valores_fuera_de_precision_sql() -> None:
+    datos_producto = {
+        "nombre": "Producto de prueba",
+        "margen": "100000.00",
+        "precio_compra": "10.00",
+        "stock_actual": "0.000",
+        "stock_minimo": "0.000",
+        "id_alicuota_iva": "IVA-0001",
+        "id_categoria": "CAT-0001",
+    }
+
+    with pytest.raises(ValidationError):
+        ProductoCreate.model_validate(datos_producto)
+    with pytest.raises(ValidationError):
+        ProductoUpdate.model_validate({"margen": "100000.00"})
+    with pytest.raises(ValidationError):
+        ProductoUpdate.model_validate({"precio_compra": "1000000000000.00"})
+    with pytest.raises(ValidationError):
+        ProductoAjusteStock.model_validate(
+            {"tipo": "entrada", "cantidad": "100000000000.000"}
+        )
+
+
+def test_crear_producto_rechaza_precio_venta_calculado_fuera_de_rango() -> None:
+    class FakeCatalogoRepository:
+        def obtener_alicuota(self, _id_alicuota):
+            return {"porcentaje": Decimal("21.00")}
+
+        def existe_categoria(self, _id_categoria):
+            return True
+
+        def obtener_unidad_por_codigo(self, _codigo):
+            return "UN"
+
+        def transaction(self):
+            return nullcontext()
+
+        def crear(self, _campos, _precio_venta):
+            raise AssertionError("No debe persistir un precio fuera de rango")
+
+    datos = ProductoCreate.model_validate(
+        {
+            "nombre": "Producto de prueba",
+            "margen": "1.00",
+            "precio_compra": "999999999999.99",
+            "stock_actual": "0.000",
+            "stock_minimo": "0.000",
+            "id_alicuota_iva": "IVA-0001",
+            "id_categoria": "CAT-0001",
+        }
+    )
+    service = ProductoService(
+        FakeCatalogoRepository(),
+        FakeMovimientoRepository(),
+    )
+
+    with pytest.raises(ProductoDatosInvalidos, match="precio de venta calculado"):
+        service.crear(datos)
+
+
+def test_actualizar_producto_rechaza_precio_venta_calculado_fuera_de_rango() -> None:
+    class FakeCatalogoRepository:
+        def obtener(self, _id_producto, incluir_dados_de_baja=False):
+            return {
+                "id_producto": "PRD-0001",
+                "estado": True,
+                "precio_compra": Decimal("999999999999.99"),
+                "margen": Decimal("0.00"),
+                "alicuota_porcentaje": Decimal("21.00"),
+            }
+
+        def actualizar(self, _id_producto, _cambios):
+            raise AssertionError("No debe persistir un precio fuera de rango")
+
+    service = ProductoService(
+        FakeCatalogoRepository(),
+        FakeMovimientoRepository(),
+    )
+
+    with pytest.raises(ProductoDatosInvalidos, match="precio de venta calculado"):
+        service.actualizar("PRD-0001", ProductoUpdate(margen=Decimal("1.00")))
+
+
+def test_ajuste_stock_mapea_desborde_numerico_a_error_de_datos() -> None:
+    class OverflowRepository(FakeProductoRepository):
+        def aplicar_delta_stock(self, _id_producto, _delta):
+            raise errors.NumericValueOutOfRange()
+
+    service = ProductoService(
+        OverflowRepository(Decimal("99999999999.999")),
+        FakeMovimientoRepository(),
+    )
+
+    with pytest.raises(ProductoDatosInvalidos, match="stock resultante excede"):
+        service.ajustar_stock(
+            "PRD-0001",
+            ProductoAjusteStock(tipo="entrada", cantidad=Decimal("1.000")),
+        )
 
 
 def test_codigo_reservado_puede_anularse_una_sola_vez() -> None:

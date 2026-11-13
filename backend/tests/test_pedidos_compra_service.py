@@ -3,8 +3,12 @@ from copy import deepcopy
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from psycopg import errors
+
 from app.schemas.pedidos_compra import PedidoCompraCreate
 from app.services.pedido_compra_service import (
+    PedidoCompraDatosInvalidos,
     PedidoCompraEstadoInvalido,
     PedidoCompraService,
 )
@@ -122,6 +126,28 @@ def test_crear_pedido_compra_calcula_total_y_asocia_empleado_autenticado() -> No
     assert pedido["items"][0]["subtotal"] == Decimal("300.00")
 
 
+def test_crear_pedido_compra_rechaza_subtotal_fuera_de_rango() -> None:
+    service, pedidos, _productos, _movimientos = _service()
+    datos = PedidoCompraCreate.model_validate(
+        {
+            "id_proveedor": "PROV-0001",
+            "id_medio_pago": "MP-0001",
+            "items": [
+                {
+                    "id_producto": "PRD-0001",
+                    "cantidad": "99999999999.999",
+                    "precio_unitario": "999999999999.99",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(PedidoCompraDatosInvalidos, match="subtotal excede"):
+        service.crear(datos, "EMP-0007")
+
+    assert pedidos.pedido is None
+
+
 def test_recibir_pedido_es_idempotente_y_registra_stock_una_vez() -> None:
     service, _pedidos, productos, movimientos = _service()
     pedido = service.crear(_datos_pedido(), "EMP-0007")
@@ -136,6 +162,26 @@ def test_recibir_pedido_es_idempotente_y_registra_stock_una_vez() -> None:
     assert movimientos.created == [
         ("OC-0001", "PRD-0001", Decimal("2.500"))
     ]
+
+
+def test_recibir_pedido_mapea_desborde_de_stock_a_error_de_datos() -> None:
+    service, pedidos, _productos, movimientos = _service()
+    pedido = service.crear(_datos_pedido(), "EMP-0007")
+
+    class OverflowProductRepository(FakeProductoRepository):
+        def aplicar_delta_stock_sistema(self, _id_producto, _delta):
+            raise errors.NumericValueOutOfRange()
+
+    service = PedidoCompraService(
+        pedidos,
+        OverflowProductRepository(),
+        movimientos,
+    )
+
+    with pytest.raises(PedidoCompraDatosInvalidos, match="stock resultante excede"):
+        service.recibir(pedido["id_pedido_proveedor"])
+
+    assert movimientos.created == []
 
 
 def test_cancelar_pedido_sin_recibir_no_modifica_stock() -> None:

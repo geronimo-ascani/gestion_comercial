@@ -17,6 +17,7 @@ from app.schemas.catalogo import ProductoAjusteStock, ProductoCreate, ProductoUp
 _CENTAVOS = Decimal("0.01")
 _MILESIMAS = Decimal("0.001")
 _CIEN = Decimal("100")
+_MAX_IMPORTE = Decimal("999999999999.99")
 
 
 def _normalizar_dinero(valor: Decimal) -> Decimal:
@@ -215,6 +216,10 @@ class ProductoService:
             margen,
             alicuota["porcentaje"],
         )
+        if precio_venta > _MAX_IMPORTE:
+            raise ProductoDatosInvalidos(
+                "El precio de venta calculado excede el máximo permitido"
+            )
 
         campos = {
             "nombre": datos.nombre,
@@ -256,6 +261,10 @@ class ProductoService:
         except errors.CheckViolation as exc:
             raise ProductoDatosInvalidos(
                 "Los datos del producto no son válidos"
+            ) from exc
+        except errors.NumericValueOutOfRange as exc:
+            raise ProductoDatosInvalidos(
+                "Un valor numérico del producto excede el máximo permitido"
             ) from exc
 
         return producto
@@ -310,6 +319,10 @@ class ProductoService:
                 margen,
                 alicuota_porcentaje,
             )
+            if cambios["precio_venta"] > _MAX_IMPORTE:
+                raise ProductoDatosInvalidos(
+                    "El precio de venta calculado excede el máximo permitido"
+                )
 
         try:
             with self._repo.transaction():
@@ -323,6 +336,10 @@ class ProductoService:
         except errors.CheckViolation as exc:
             raise ProductoDatosInvalidos(
                 "Los datos del producto no son válidos"
+            ) from exc
+        except errors.NumericValueOutOfRange as exc:
+            raise ProductoDatosInvalidos(
+                "Un valor numérico del producto excede el máximo permitido"
             ) from exc
 
         return producto
@@ -430,6 +447,10 @@ class ProductoService:
         except errors.CheckViolation as exc:
             raise ProductoDatosInvalidos(
                 "El stock resultante no es válido"
+            ) from exc
+        except errors.NumericValueOutOfRange as exc:
+            raise ProductoDatosInvalidos(
+                "El stock resultante excede el máximo permitido"
             ) from exc
 
         return movimiento

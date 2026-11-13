@@ -61,7 +61,12 @@ class UnidadUpdate(UpdateSchema):
 class AlicuotaIVAFields(SchemaBase):
     codigo_afip: str
     descripcion: str
-    porcentaje: Decimal
+    porcentaje: Decimal = Field(
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+    )
     tipo_iva: str
 
 
@@ -76,7 +81,13 @@ class AlicuotaIVARead(AlicuotaIVAFields):
 class AlicuotaIVAUpdate(UpdateSchema):
     codigo_afip: str | None = None
     descripcion: str | None = None
-    porcentaje: Decimal | None = None
+    porcentaje: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+    )
     tipo_iva: str | None = None
 
 
@@ -85,10 +96,24 @@ class ProductoFields(SchemaBase):
     descripcion: str = Field(default="", max_length=255)
     estado: bool = True
     imagen: bool = False
-    margen: Decimal = Field(ge=0)
-    precio_compra: Decimal = Field(gt=0)
-    stock_actual: Decimal = Field(default=Decimal("0"), ge=0)
-    stock_minimo: Decimal = Field(default=Decimal("0"), ge=0)
+    margen: Decimal = Field(ge=0, max_digits=7, decimal_places=2)
+    precio_compra: Decimal = Field(
+        gt=0,
+        max_digits=14,
+        decimal_places=2,
+    )
+    stock_actual: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
+        max_digits=14,
+        decimal_places=3,
+    )
+    stock_minimo: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
+        max_digits=14,
+        decimal_places=3,
+    )
     id_alicuota_iva: str = Field(min_length=1, max_length=20)
     id_categoria: str = Field(min_length=1, max_length=20)
 
@@ -136,9 +161,24 @@ class ProductoUpdate(UpdateSchema):
     descripcion: str | None = Field(default=None, max_length=255)
     estado: bool | None = None
     imagen: bool | None = None
-    margen: Decimal | None = Field(default=None, ge=0)
-    precio_compra: Decimal | None = Field(default=None, gt=0)
-    stock_minimo: Decimal | None = Field(default=None, ge=0)
+    margen: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=7,
+        decimal_places=2,
+    )
+    precio_compra: Decimal | None = Field(
+        default=None,
+        gt=0,
+        max_digits=14,
+        decimal_places=2,
+    )
+    stock_minimo: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=14,
+        decimal_places=3,
+    )
     id_alicuota_iva: str | None = Field(default=None, min_length=1, max_length=20)
     id_categoria: str | None = Field(default=None, min_length=1, max_length=20)
     id_unidad: str | None = Field(default=None, min_length=1, max_length=20)
@@ -146,7 +186,7 @@ class ProductoUpdate(UpdateSchema):
 
 class ProductoAjusteStock(SchemaBase):
     tipo: Literal["entrada", "salida"]
-    cantidad: Decimal = Field(gt=0)
+    cantidad: Decimal = Field(gt=0, max_digits=14, decimal_places=3)
 
 
 class ProductoListResponse(SchemaBase):

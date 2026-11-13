@@ -80,7 +80,12 @@ class PedidoCompraService:
                         raise PedidoCompraDatosInvalidos(
                             f"El producto '{item.id_producto}' no existe o está dado de baja"
                         )
-                    subtotal = (item.cantidad * item.precio_unitario).quantize(
+                    subtotal_sin_redondear = item.cantidad * item.precio_unitario
+                    if subtotal_sin_redondear > _MAX_IMPORTE:
+                        raise PedidoCompraDatosInvalidos(
+                            "El subtotal excede el máximo permitido"
+                        )
+                    subtotal = subtotal_sin_redondear.quantize(
                         _CENTAVOS,
                         rounding=ROUND_HALF_UP,
                     )
@@ -138,10 +143,15 @@ class PedidoCompraService:
                 )
 
             for item in pedido["items"]:
-                producto = self._productos.aplicar_delta_stock_sistema(
-                    item["id_producto"],
-                    item["cantidad"],
-                )
+                try:
+                    producto = self._productos.aplicar_delta_stock_sistema(
+                        item["id_producto"],
+                        item["cantidad"],
+                    )
+                except errors.NumericValueOutOfRange as exc:
+                    raise PedidoCompraDatosInvalidos(
+                        "El stock resultante excede el máximo permitido"
+                    ) from exc
                 if producto is None:
                     raise PedidoCompraDatosInvalidos(
                         f"No se pudo actualizar el stock del producto "
