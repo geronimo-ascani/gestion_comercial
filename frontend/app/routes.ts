@@ -14,6 +14,7 @@ export default [
     route("purchases", "routes/purchases.tsx"),
     route("employees", "routes/employees.tsx"),
     route("employees/new", "routes/employees-new.tsx"),
+    route("employees/:id/edit", "routes/employees-edit.tsx"),
     route("sales", "routes/sales.tsx"),
     route("sales/new-order", "routes/sales-new-order.tsx"),
     route("sales/new-budget", "routes/sales-new-budget.tsx"),

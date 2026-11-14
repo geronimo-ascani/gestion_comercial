@@ -1,7 +1,15 @@
 from typing import Annotated, Any
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Path,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.api.deps import get_auth_service
 from app.schemas.auth import (
@@ -13,10 +21,14 @@ from app.schemas.auth import (
     TokenRead,
     UsuarioRead,
 )
+from app.schemas.empleados import EmpleadoCreate, EmpleadoRead, EmpleadoUpdate
 from app.services.auth_service import (
     AuthDatosDuplicados,
     AuthService,
     CredencialesInvalidas,
+    EmpleadoEnUso,
+    EmpleadoNoEncontrado,
+    EmpleadoSinCambios,
     EmailNoConfigurado,
     ErrorEnvioEmail,
     LimiteIntentosExcedido,
@@ -99,6 +111,7 @@ def _administrador(usuario: dict[str, Any]) -> None:
 
 CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 OptionalUser = Annotated[dict[str, Any] | None, Depends(_usuario_opcional)]
+EmpleadoId = Annotated[str, Path(min_length=1, max_length=20)]
 
 
 @router.post("/login", response_model=TokenRead)
@@ -189,6 +202,103 @@ def listar_empleados(
         UsuarioRead.model_validate(usuario)
         for usuario in service.listar_usuarios()
     ]
+
+
+@router.post("/employees", response_model=EmpleadoRead, status_code=201)
+def crear_empleado(
+    datos: EmpleadoCreate,
+    usuario_actual: CurrentUser,
+    service: ServiceDep,
+) -> EmpleadoRead:
+    _administrador(usuario_actual)
+    try:
+        _, empleado = service.registrar(
+            datos.model_dump(),
+            usuario_actual["id_empleado"],
+        )
+    except RegistroBloqueado as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenés permisos para crear este empleado.",
+        ) from exc
+    except AuthDatosDuplicados as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe un usuario con ese correo o DNI/CUIL.",
+        ) from exc
+    return EmpleadoRead.model_validate(empleado)
+
+
+@router.get("/employees/{id_empleado}", response_model=EmpleadoRead)
+def obtener_empleado(
+    id_empleado: EmpleadoId,
+    usuario_actual: CurrentUser,
+    service: ServiceDep,
+) -> EmpleadoRead:
+    _administrador(usuario_actual)
+    empleado = service.obtener_usuario(id_empleado)
+    if empleado is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No existe el empleado '{id_empleado}'",
+        )
+    return EmpleadoRead.model_validate(empleado)
+
+
+@router.patch("/employees/{id_empleado}", response_model=EmpleadoRead)
+def actualizar_empleado(
+    datos: EmpleadoUpdate,
+    id_empleado: EmpleadoId,
+    usuario_actual: CurrentUser,
+    service: ServiceDep,
+) -> EmpleadoRead:
+    _administrador(usuario_actual)
+    try:
+        empleado = service.actualizar_usuario(
+            id_empleado,
+            datos.model_dump(exclude_unset=True),
+        )
+    except EmpleadoNoEncontrado as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No existe el empleado '{id_empleado}'",
+        ) from exc
+    except AuthDatosDuplicados as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe un usuario con ese correo o DNI/CUIL.",
+        ) from exc
+    except EmpleadoSinCambios as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No se enviaron campos para actualizar.",
+        ) from exc
+    return EmpleadoRead.model_validate(empleado)
+
+
+@router.delete("/employees/{id_empleado}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_empleado(
+    id_empleado: EmpleadoId,
+    usuario_actual: CurrentUser,
+    service: ServiceDep,
+) -> Response:
+    _administrador(usuario_actual)
+    try:
+        service.eliminar_usuario(id_empleado)
+    except EmpleadoNoEncontrado as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No existe el empleado '{id_empleado}'",
+        ) from exc
+    except EmpleadoEnUso as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "El empleado tiene pedidos o registros de auditoría asociados "
+                "y no se puede eliminar"
+            ),
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/password/forgot", status_code=202)

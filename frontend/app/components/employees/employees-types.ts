@@ -14,5 +14,7 @@ export interface Employee {
   phone: string;
   email: string;
   hireDate: string;
+  hireDateISO: string;
+  position: string;
   role: EmployeeRole;
 }

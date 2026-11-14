@@ -38,6 +38,18 @@ class AuthDatosDuplicados(AuthError):
     pass
 
 
+class EmpleadoNoEncontrado(AuthError):
+    pass
+
+
+class EmpleadoEnUso(AuthError):
+    pass
+
+
+class EmpleadoSinCambios(AuthError):
+    pass
+
+
 class LimiteIntentosExcedido(AuthError):
     pass
 
@@ -97,6 +109,32 @@ class AuthService:
 
     def listar_usuarios(self) -> list[dict[str, Any]]:
         return [self._usuario_publico(row) for row in self._repo.listar()]
+
+    def actualizar_usuario(
+        self, id_empleado: str, datos: dict[str, Any]
+    ) -> dict[str, Any]:
+        cambios = {
+            campo: valor
+            for campo, valor in datos.items()
+            if valor is not None
+        }
+        if not cambios:
+            raise EmpleadoSinCambios
+        try:
+            empleado = self._repo.actualizar(id_empleado, cambios)
+        except (RegistroDuplicado, errors.UniqueViolation) as exc:
+            raise AuthDatosDuplicados from exc
+        if empleado is None:
+            raise EmpleadoNoEncontrado(id_empleado)
+        return self._usuario_publico(empleado)
+
+    def eliminar_usuario(self, id_empleado: str) -> None:
+        try:
+            eliminado = self._repo.eliminar(id_empleado)
+        except (errors.ForeignKeyViolation, errors.RestrictViolation) as exc:
+            raise EmpleadoEnUso(id_empleado) from exc
+        if not eliminado:
+            raise EmpleadoNoEncontrado(id_empleado)
 
     def verificar_limite_intentos(
         self, identificador: str, limite: int, ventana_segundos: int

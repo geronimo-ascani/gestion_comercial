@@ -38,6 +38,14 @@ export interface RegisterPayload {
   telefono: string;
 }
 
+export interface EmployeeCreatePayload extends RegisterPayload {
+  puesto: string;
+}
+
+export type EmployeeUpdatePayload = Partial<
+  Omit<EmployeeCreatePayload, "password">
+>;
+
 export function mapUsuario(usuario: UsuarioApi): Employee {
   return {
     id: usuario.id_empleado,
@@ -49,6 +57,8 @@ export function mapUsuario(usuario: UsuarioApi): Employee {
     hireDate: new Date(`${usuario.fecha_ingreso}T00:00:00`).toLocaleDateString(
       "es-AR"
     ),
+    hireDateISO: usuario.fecha_ingreso,
+    position: usuario.puesto,
     role: usuario.rol,
   };
 }
@@ -80,6 +90,43 @@ export async function obtenerUsuarioActual(): Promise<Employee> {
 export async function listarEmpleados(): Promise<Employee[]> {
   const data = await apiRequest<UsuarioApi[]>("/auth/employees");
   return data.map(mapUsuario);
+}
+
+export async function obtenerEmpleado(id: string): Promise<Employee> {
+  const data = await apiRequest<UsuarioApi>(
+    `/auth/employees/${encodeURIComponent(id)}`
+  );
+  return mapUsuario(data);
+}
+
+export async function crearEmpleado(
+  payload: EmployeeCreatePayload
+): Promise<Employee> {
+  const data = await apiRequest<UsuarioApi>("/auth/employees", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return mapUsuario(data);
+}
+
+export async function actualizarEmpleado(
+  id: string,
+  payload: EmployeeUpdatePayload
+): Promise<Employee> {
+  const data = await apiRequest<UsuarioApi>(
+    `/auth/employees/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  return mapUsuario(data);
+}
+
+export async function eliminarEmpleado(id: string): Promise<void> {
+  await apiRequest<void>(`/auth/employees/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function solicitarRecuperacion(email: string): Promise<void> {

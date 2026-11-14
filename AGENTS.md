@@ -29,6 +29,10 @@
   Editing/deleting customers and suppliers remains administrator-only.
 - Customer DNI/CUIT and supplier CUIT are normalized for duplicate checks.
   Deleting a referenced customer or supplier returns `409 Conflict`.
+- Employee management is administrator-only. Employee deletion is physical;
+  PostgreSQL references from purchase orders and audit logs restrict deletion
+  and the API returns `409 Conflict`. Do not add a self-deletion or
+  last-administrator policy until that business rule is defined.
 - Product deactivation is a soft delete. Operational stock changes must be
   atomic and recorded in `movimiento_inventario`; stock cannot go negative.
 - Reserved product codes can be annulled only before use and are not reused.
@@ -110,6 +114,9 @@
 - Budget API: CRUD under `/ventas/presupuestos`, plus
   `POST /ventas/presupuestos/{id}/aprobacion` and
   `POST /ventas/presupuestos/{id}/conversion`.
+- Employee management API: `GET/POST /auth/employees`,
+  `GET/PATCH/DELETE /auth/employees/{id}`. The public bootstrap registration
+  at `POST /auth/register` remains separate.
 - Sales order endpoints are restricted to `administrador` and `ventas`.
   List/detail, pending-only edits, sequential state transitions, and
   idempotent cancellation are enforced by the backend.
@@ -119,5 +126,8 @@
 - Budget CRUD, approval, expiry, price snapshots, one-time conversion,
   delivery address capture, stock reservation, and inventory movements are
   implemented in the backend and integrated with the sales frontend.
+- Employee listing, creation, detail, editing, and physical deletion are
+  integrated with the employee frontend; referenced accounts cannot be
+  deleted.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

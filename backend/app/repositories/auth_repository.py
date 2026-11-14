@@ -46,6 +46,91 @@ class AuthRepository:
             cur.execute(f"{_SELECT_USUARIO} FROM empleado ORDER BY apellido, nombre")
             return cur.fetchall()
 
+    def actualizar(
+        self, id_empleado: str, datos: dict[str, Any]
+    ) -> UsuarioRow | None:
+        campos_permitidos = {
+            "apellido",
+            "dni_cuil",
+            "email",
+            "fecha_ingreso",
+            "nombre",
+            "puesto",
+            "rol",
+            "telefono",
+        }
+        cambios = {
+            campo: valor
+            for campo, valor in datos.items()
+            if campo in campos_permitidos
+        }
+        if not cambios:
+            return self.obtener(id_empleado)
+
+        with self._conn.transaction():
+            with self._conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT email, dni_cuil
+                    FROM empleado
+                    WHERE id_empleado = %s
+                    FOR UPDATE
+                    """,
+                    (id_empleado,),
+                )
+                actual = cur.fetchone()
+                if actual is None:
+                    return None
+
+                email = cambios.get("email", actual["email"])
+                dni_cuil = cambios.get("dni_cuil", actual["dni_cuil"])
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM empleado
+                        WHERE id_empleado <> %(id_empleado)s
+                          AND (
+                              LOWER(email) = LOWER(%(email)s)
+                              OR dni_cuil = %(dni_cuil)s
+                          )
+                    ) AS duplicado
+                    """,
+                    {
+                        "id_empleado": id_empleado,
+                        "email": email,
+                        "dni_cuil": dni_cuil,
+                    },
+                )
+                if cur.fetchone()["duplicado"]:
+                    raise RegistroDuplicado
+
+                asignaciones = ", ".join(
+                    f"{campo} = %({campo})s" for campo in cambios
+                )
+                cur.execute(
+                    f"""
+                    UPDATE empleado
+                    SET {asignaciones}, fecha_modificacion = now()
+                    WHERE id_empleado = %(id_empleado)s
+                    """,
+                    {**cambios, "id_empleado": id_empleado},
+                )
+        return self.obtener(id_empleado)
+
+    def eliminar(self, id_empleado: str) -> bool:
+        with self._conn.transaction():
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM empleado
+                    WHERE id_empleado = %s
+                    RETURNING id_empleado
+                    """,
+                    (id_empleado,),
+                )
+                return cur.fetchone() is not None
+
     def registrar_intento(
         self, bucket: str, limite: int, ventana_segundos: int
     ) -> bool:
@@ -132,7 +217,8 @@ class AuthRepository:
                     {
                         **datos,
                         "contrasena_hash": contrasena_hash,
-                        "puesto": rol.replace("_", " ").title(),
+                        "puesto": datos.get("puesto")
+                        or rol.replace("_", " ").title(),
                         "rol": rol,
                     },
                 )

@@ -99,6 +99,8 @@ describe("LoginPage", () => {
       phone: "11111111",
       email: "ana@empresa.com",
       hireDate: "01/01/2025",
+      hireDateISO: "2025-01-01",
+      position: "Administrador",
       role: "administrador",
     });
     renderLogin(LoginPage);
