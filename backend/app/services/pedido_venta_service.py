@@ -1,4 +1,5 @@
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from psycopg import errors
 
@@ -160,7 +161,21 @@ class PedidoVentaService:
                             f"El producto '{id_producto}' está dado de baja"
                         )
 
-                lineas = self._calcular_lineas(datos, productos)
+                precios_cotizados: dict[str, dict[str, Any]] = {}
+                id_presupuesto = pedido["id_presupuesto_cliente"]
+                if id_presupuesto:
+                    precios_cotizados = {
+                        item["id_producto"]: item
+                        for item in self._repo.obtener_items_presupuesto(
+                            id_presupuesto
+                        )
+                    }
+
+                lineas = self._calcular_lineas(
+                    datos,
+                    productos,
+                    precios_cotizados,
+                )
                 total = sum(
                     (linea["subtotal"] for linea in lineas), Decimal("0")
                 )
@@ -189,7 +204,11 @@ class PedidoVentaService:
 
                 self._repo.reemplazar(
                     id_pedido_cliente,
-                    self._datos_cabecera(datos, total),
+                    self._datos_cabecera(
+                        datos,
+                        total,
+                        pedido["id_presupuesto_cliente"],
+                    ),
                     lineas,
                 )
                 for id_producto, delta_stock in deltas_stock.items():
@@ -303,20 +322,36 @@ class PedidoVentaService:
         self,
         datos: PedidoVentaInput,
         productos: dict[str, ProductoRow],
+        precios_cotizados: dict[str, dict[str, Any]] | None = None,
     ) -> list[VentaLinea]:
         lineas: list[VentaLinea] = []
         total = Decimal("0")
         for item in datos.items:
             producto = productos[item.id_producto]
+            cotizacion = (precios_cotizados or {}).get(item.id_producto)
+            precio_unitario = (
+                cotizacion["precio_unitario"]
+                if cotizacion
+                else producto["precio_venta"]
+            )
+            porcentaje_iva = producto["alicuota_porcentaje"]
+            tipo_iva = producto["alicuota_tipo_iva"]
+            if cotizacion:
+                neto_cotizado = cotizacion["neto"]
+                if neto_cotizado > 0:
+                    porcentaje_iva = (
+                        cotizacion["iva"] / neto_cotizado * Decimal("100")
+                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                tipo_iva = cotizacion["tipo_iva"]
             try:
                 linea = calcular_linea_venta(
                     item.id_producto,
                     item.cantidad,
                     item.descuento_producto,
                     datos.descuento_compra,
-                    producto["precio_venta"],
-                    producto["alicuota_porcentaje"],
-                    producto["alicuota_tipo_iva"],
+                    precio_unitario,
+                    porcentaje_iva,
+                    tipo_iva,
                 )
             except VentaImporteInvalido as exc:
                 raise PedidoVentaDatosInvalidos(str(exc)) from exc
@@ -330,7 +365,9 @@ class PedidoVentaService:
 
     @staticmethod
     def _datos_cabecera(
-        datos: PedidoVentaInput, total: Decimal
+        datos: PedidoVentaInput,
+        total: Decimal,
+        id_presupuesto_cliente: str | None = None,
     ) -> dict[str, object]:
         return {
             "id_cliente": datos.id_cliente,
@@ -343,7 +380,7 @@ class PedidoVentaService:
             "entrega_provincia": datos.entrega_provincia,
             "saldo_pendiente": total,
             "total": total,
-            "id_presupuesto_cliente": None,
+            "id_presupuesto_cliente": id_presupuesto_cliente,
         }
 
     def _obtener_despues_de_mutacion(

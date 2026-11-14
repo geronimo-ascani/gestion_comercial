@@ -136,6 +136,7 @@ function mapSalesOrder(order: SalesOrderApi): SalesOrder {
 
   return {
     number: order.id_pedido_cliente,
+    budgetId: order.id_presupuesto_cliente ?? undefined,
     client: `${order.cliente_nombre} ${order.cliente_apellido}`,
     clientId: order.id_cliente,
     email: order.cliente_email,

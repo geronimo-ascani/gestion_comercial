@@ -16,6 +16,7 @@ from app.services.pedido_venta_service import (
 class FakePedidoVentaRepository:
     def __init__(self) -> None:
         self.pedido = None
+        self.presupuesto_items = []
 
     def transaction(self):
         return nullcontext()
@@ -60,6 +61,9 @@ class FakePedidoVentaRepository:
 
     def obtener(self, _id_pedido, bloquear=False):
         return deepcopy(self.pedido)
+
+    def obtener_items_presupuesto(self, _id_presupuesto):
+        return deepcopy(self.presupuesto_items)
 
     def listar(self, _estado, _q, _limit, _offset):
         return [deepcopy(self.pedido)] if self.pedido else []
@@ -191,6 +195,40 @@ def test_editar_pedido_pendiente_aplica_deltas_de_stock() -> None:
         ("PV-0001", "PRD-0001", Decimal("1")),
     ]
     assert movimientos.returns == [("PV-0001", "PRD-0001", Decimal("2"))]
+
+
+def test_editar_pedido_convertido_conserva_precios_e_iva_del_presupuesto() -> None:
+    service, pedidos, productos, _movimientos = _service()
+    pedido = service.crear(_datos("2"))
+    pedidos.pedido["id_presupuesto_cliente"] = "PRE-0001"
+    pedidos.pedido["items"][0].update(
+        {
+            "precio_unitario": Decimal("80.00"),
+            "neto": Decimal("132.23"),
+            "iva": Decimal("27.77"),
+            "tipo_iva": "gravado",
+        }
+    )
+    pedidos.presupuesto_items = [
+        {
+            "id_producto": "PRD-0001",
+            "precio_unitario": Decimal("80.00"),
+            "neto": Decimal("132.23"),
+            "iva": Decimal("27.77"),
+            "tipo_iva": "gravado",
+        }
+    ]
+    productos.producto["precio_venta"] = Decimal("150.00")
+    productos.producto["alicuota_porcentaje"] = Decimal("10.50")
+
+    actualizado = service.actualizar(pedido["id_pedido_cliente"], _datos("3"))
+
+    linea = actualizado["items"][0]
+    assert actualizado["id_presupuesto_cliente"] == "PRE-0001"
+    assert linea["precio_unitario"] == Decimal("80.00")
+    assert linea["subtotal"] == Decimal("240.00")
+    assert linea["neto"] == Decimal("198.35")
+    assert linea["iva"] == Decimal("41.65")
 
 
 def test_cancelar_restaura_stock_una_sola_vez() -> None:

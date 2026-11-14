@@ -96,6 +96,7 @@ export function NewOrderPage() {
     stock: product.stock + (editReservedStock.get(product.id) ?? 0),
   }));
   const editorItems = (editing?.items ?? []).map((item) => {
+    if (editing?.budgetId) return item;
     const product = products.find(
       (candidate) => candidate.id === item.sku || candidate.code === item.sku,
     );
@@ -103,6 +104,12 @@ export function NewOrderPage() {
       ? { ...item, unitPrice: formatMoney(product.salePrice) }
       : item;
   });
+  const preservedPrices = editing?.budgetId
+    ? editing.items.reduce<Record<string, string>>((prices, item) => {
+        if (item.sku) prices[item.sku] = item.unitPrice;
+        return prices;
+      }, {})
+    : undefined;
 
   const discountPercent = parsePercentInput(discount);
   const subtotalValue = parseNumberInput(subtotal);
@@ -512,6 +519,7 @@ export function NewOrderPage() {
                 summaryLabel="Subtotal de productos"
                 allowLineDiscount
                 allowPriceEdit={false}
+                preservedPrices={preservedPrices}
               />
               <FieldError message={itemsError} />
             </div>

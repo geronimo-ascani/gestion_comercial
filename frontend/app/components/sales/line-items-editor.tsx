@@ -45,6 +45,7 @@ interface LineItemsEditorProps {
   allowLineDiscount?: boolean;
   allowPriceEdit?: boolean;
   showStock?: boolean;
+  preservedPrices?: Record<string, string>;
 }
 
 export function LineItemsEditor({
@@ -56,6 +57,7 @@ export function LineItemsEditor({
   allowLineDiscount = false,
   allowPriceEdit = true,
   showStock = true,
+  preservedPrices,
 }: LineItemsEditorProps) {
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initialItems.map((item) => ({
@@ -118,9 +120,9 @@ export function LineItemsEditor({
     updateLine(index, {
       productId,
       productName: product.name,
-      price: String(
-        priceMode === "sale" ? product.salePrice : product.purchasePrice
-      ),
+      price:
+        preservedPrices?.[productId] ??
+        String(priceMode === "sale" ? product.salePrice : product.purchasePrice),
     });
   }
 

@@ -86,6 +86,10 @@
   idempotent; stock increments and purchase movements are written in one
   database transaction.
 - Cancellation is allowed before receipt and has no stock effect.
+- Purchase approval is not part of the current workflow: requests cannot set
+  the order state, and no approval endpoint/action exists. Keep `aprobada`
+  only for compatibility with any legacy database rows; new orders always
+  start as `pendiente`.
 - The purchase form preserves its draft and selected payment method while
   navigating to inline supplier creation.
 

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from psycopg import errors
+from pydantic import ValidationError
 
 from app.schemas.pedidos_compra import PedidoCompraCreate
 from app.services.pedido_compra_service import (
@@ -122,8 +123,27 @@ def test_crear_pedido_compra_calcula_total_y_asocia_empleado_autenticado() -> No
     pedido = service.crear(_datos_pedido(), "EMP-0007")
 
     assert pedido["total"] == Decimal("300.00")
+    assert pedido["estado"] == "pendiente"
     assert pedido["id_empleado"] == "EMP-0007"
     assert pedido["items"][0]["subtotal"] == Decimal("300.00")
+
+
+def test_estado_aprobada_no_se_acepta_desde_el_payload_de_compra() -> None:
+    with pytest.raises(ValidationError):
+        PedidoCompraCreate.model_validate(
+            {
+                "id_proveedor": "PROV-0001",
+                "id_medio_pago": "MP-0001",
+                "estado": "aprobada",
+                "items": [
+                    {
+                        "id_producto": "PRD-0001",
+                        "cantidad": "1",
+                        "precio_unitario": "120.00",
+                    }
+                ],
+            }
+        )
 
 
 def test_crear_pedido_compra_rechaza_subtotal_fuera_de_rango() -> None:

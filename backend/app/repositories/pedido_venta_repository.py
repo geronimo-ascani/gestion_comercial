@@ -110,6 +110,20 @@ class PedidoVentaRepository:
                 ],
             )
 
+    def obtener_items_presupuesto(
+        self, id_presupuesto_cliente: str
+    ) -> list[dict[str, Any]]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id_producto, iva, neto, precio_unitario, tipo_iva
+                FROM detalle_presupuesto_cliente
+                WHERE id_presupuesto_cliente = %s
+                """,
+                (id_presupuesto_cliente,),
+            )
+            return cur.fetchall()
+
     def reemplazar(
         self,
         id_pedido_cliente: str,
@@ -129,7 +143,8 @@ class PedidoVentaRepository:
                     entrega_provincia = %(entrega_provincia)s,
                     saldo_pendiente = %(saldo_pendiente)s,
                     total = %(total)s,
-                    id_cliente = %(id_cliente)s
+                    id_cliente = %(id_cliente)s,
+                    id_presupuesto_cliente = %(id_presupuesto_cliente)s
                 WHERE id_pedido_cliente = %(id_pedido_cliente)s
                 """,
                 {**datos, "id_pedido_cliente": id_pedido_cliente},
