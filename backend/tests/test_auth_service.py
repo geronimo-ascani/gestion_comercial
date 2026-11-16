@@ -54,6 +54,16 @@ class FakeAuthRepository:
         usuario["fecha_modificacion"] = datetime.now(UTC) + timedelta(seconds=1)
         return usuario
 
+    def actualizar_contrasena(
+        self, id_empleado: str, contrasena_hash: str
+    ) -> bool:
+        usuario = self.obtener(id_empleado)
+        if usuario is None:
+            return False
+        usuario["contrasena_hash"] = contrasena_hash
+        usuario["fecha_modificacion"] = datetime.now(UTC) + timedelta(seconds=1)
+        return True
+
     def eliminar(self, id_empleado: str) -> bool:
         if self.obtener(id_empleado) is None:
             return False
@@ -152,6 +162,27 @@ def test_actualizar_empleado_cambia_fecha_de_modificacion_y_devuelve_datos_publi
     assert not service.token_vigente(token, actualizado)
 
 
+def test_admin_password_update_hashes_password_and_invalidates_sessions() -> None:
+    usuario = create_usuario("old-password")
+    repo = FakeAuthRepository(usuario)
+    service = AuthService(repo, create_settings())
+    token, _ = service.autenticar(
+        "admin@example.com", SecretStr("old-password")
+    )
+
+    service.actualizar_contrasena_empleado(
+        "EMP-0001", SecretStr("new-password")
+    )
+
+    assert usuario["contrasena_hash"] != "new-password"
+    assert PasswordHash.recommended().verify(
+        "new-password", usuario["contrasena_hash"]
+    )
+    assert not service.token_vigente(token, usuario)
+    with pytest.raises(CredencialesInvalidas):
+        service.autenticar("admin@example.com", SecretStr("old-password"))
+
+
 def test_actualizar_empleado_traduce_duplicados_y_eliminar_detecta_referencias() -> None:
     class DuplicateRepository(FakeAuthRepository):
         def actualizar(self, _id_empleado: str, _datos: dict) -> dict | None:
@@ -179,6 +210,10 @@ def test_actualizar_o_eliminar_empleado_inexistente_responde_no_encontrado() -> 
         service.actualizar_usuario("EMP-404", {"nombre": "Ana"})
     with pytest.raises(EmpleadoNoEncontrado):
         service.eliminar_usuario("EMP-404")
+    with pytest.raises(EmpleadoNoEncontrado):
+        service.actualizar_contrasena_empleado(
+            "EMP-404", SecretStr("new-password")
+        )
 
 
 def test_eliminar_empleado_sin_referencias_lo_borra() -> None:

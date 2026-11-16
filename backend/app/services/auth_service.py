@@ -128,6 +128,16 @@ class AuthService:
             raise EmpleadoNoEncontrado(id_empleado)
         return self._usuario_publico(empleado)
 
+    def actualizar_contrasena_empleado(
+        self, id_empleado: str, password: SecretStr
+    ) -> None:
+        actualizado = self._repo.actualizar_contrasena(
+            id_empleado,
+            _password_hash.hash(password.get_secret_value()),
+        )
+        if not actualizado:
+            raise EmpleadoNoEncontrado(id_empleado)
+
     def eliminar_usuario(self, id_empleado: str) -> None:
         try:
             eliminado = self._repo.eliminar(id_empleado)

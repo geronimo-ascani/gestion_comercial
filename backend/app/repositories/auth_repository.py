@@ -118,6 +118,30 @@ class AuthRepository:
                 )
         return self.obtener(id_empleado)
 
+    def actualizar_contrasena(
+        self, id_empleado: str, contrasena_hash: str
+    ) -> bool:
+        with self._conn.transaction():
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE recuperacion_contrasena
+                    SET consumido_en = now()
+                    WHERE id_empleado = %s AND consumido_en IS NULL
+                    """,
+                    (id_empleado,),
+                )
+                cur.execute(
+                    """
+                    UPDATE empleado
+                    SET contrasena_hash = %s, fecha_modificacion = now()
+                    WHERE id_empleado = %s
+                    RETURNING id_empleado
+                    """,
+                    (contrasena_hash, id_empleado),
+                )
+                return cur.fetchone() is not None
+
     def eliminar(self, id_empleado: str) -> bool:
         with self._conn.transaction():
             with self._conn.cursor() as cur:

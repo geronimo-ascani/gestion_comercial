@@ -8,6 +8,7 @@ from app.api.v1.routers.auth import get_current_user, router as auth_router
 from app.services.auth_service import (
     AuthDatosDuplicados,
     EmpleadoEnUso,
+    EmpleadoNoEncontrado,
 )
 
 
@@ -39,6 +40,9 @@ class FakeAuthService:
     def actualizar_usuario(self, _id_empleado, _datos):
         raise AuthDatosDuplicados
 
+    def actualizar_contrasena_empleado(self, _id_empleado, _password):
+        return None
+
     def eliminar_usuario(self, _id_empleado):
         raise EmpleadoEnUso
 
@@ -46,6 +50,11 @@ class FakeAuthService:
 class SuccessfulDeleteAuthService(FakeAuthService):
     def eliminar_usuario(self, _id_empleado):
         return None
+
+
+class MissingEmployeeAuthService(FakeAuthService):
+    def actualizar_contrasena_empleado(self, _id_empleado, _password):
+        raise EmpleadoNoEncontrado
 
 
 def _client(
@@ -106,6 +115,33 @@ def test_actualizacion_duplicada_y_baja_referenciada_responden_conflicto() -> No
     assert actualizado.status_code == 409
     assert eliminado.status_code == 409
     assert "no se puede eliminar" in eliminado.json()["detail"]
+
+
+def test_solo_admin_puede_actualizar_contrasena_y_no_se_revela() -> None:
+    with _client() as client:
+        response = client.put(
+            "/api/v1/auth/employees/EMP-0001/password",
+            json={"password": "nueva-password"},
+        )
+    with _client("ventas") as client:
+        forbidden = client.put(
+            "/api/v1/auth/employees/EMP-0001/password",
+            json={"password": "nueva-password"},
+        )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert forbidden.status_code == 403
+
+
+def test_actualizar_contrasena_de_empleado_inexistente_responde_404() -> None:
+    with _client(service_factory=MissingEmployeeAuthService) as client:
+        response = client.put(
+            "/api/v1/auth/employees/EMP-404/password",
+            json={"password": "nueva-password"},
+        )
+
+    assert response.status_code == 404
 
 
 def test_admin_puede_eliminar_fisicamente_empleado_sin_referencias() -> None:

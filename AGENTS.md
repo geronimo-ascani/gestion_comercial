@@ -122,8 +122,11 @@
   `POST /ventas/presupuestos/{id}/aprobacion` and
   `POST /ventas/presupuestos/{id}/conversion`.
 - Employee management API: `GET/POST /auth/employees`,
-  `GET/PATCH/DELETE /auth/employees/{id}`. The public bootstrap registration
-  at `POST /auth/register` remains separate.
+  `GET/PATCH/DELETE /auth/employees/{id}`, and
+  `PUT /auth/employees/{id}/password` for administrator-managed password
+  changes. Password changes invalidate existing sessions and pending password
+  recovery links. The public bootstrap registration at `POST /auth/register`
+  remains separate.
 - Sales order endpoints are restricted to `administrador` and `ventas`.
   List/detail, pending-only edits, sequential state transitions, and
   idempotent cancellation are enforced by the backend.

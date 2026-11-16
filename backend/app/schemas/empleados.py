@@ -56,6 +56,10 @@ class EmpleadoUpdate(UpdateSchema):
         return _validar_email(valor) if valor is not None else None
 
 
+class EmpleadoPasswordUpdate(SchemaBase):
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+
 def _validar_email(valor: str) -> str:
     email = valor.strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):

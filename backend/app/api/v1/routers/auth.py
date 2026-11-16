@@ -21,7 +21,12 @@ from app.schemas.auth import (
     TokenRead,
     UsuarioRead,
 )
-from app.schemas.empleados import EmpleadoCreate, EmpleadoRead, EmpleadoUpdate
+from app.schemas.empleados import (
+    EmpleadoCreate,
+    EmpleadoPasswordUpdate,
+    EmpleadoRead,
+    EmpleadoUpdate,
+)
 from app.services.auth_service import (
     AuthDatosDuplicados,
     AuthService,
@@ -274,6 +279,27 @@ def actualizar_empleado(
             detail="No se enviaron campos para actualizar.",
         ) from exc
     return EmpleadoRead.model_validate(empleado)
+
+
+@router.put(
+    "/employees/{id_empleado}/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def actualizar_contrasena_empleado(
+    datos: EmpleadoPasswordUpdate,
+    id_empleado: EmpleadoId,
+    usuario_actual: CurrentUser,
+    service: ServiceDep,
+) -> Response:
+    _administrador(usuario_actual)
+    try:
+        service.actualizar_contrasena_empleado(id_empleado, datos.password)
+    except EmpleadoNoEncontrado as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No existe el empleado '{id_empleado}'",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/employees/{id_empleado}", status_code=status.HTTP_204_NO_CONTENT)
