@@ -174,6 +174,7 @@ export function SalesPage() {
   const [budgetActionError, setBudgetActionError] = useState<string | null>(
     null,
   );
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState<"all" | OrderStatus>("all");
@@ -207,10 +208,11 @@ export function SalesPage() {
 
   async function handleApproveBudget(id: string) {
     setBudgetActionError(null);
+    setApprovalError(null);
     try {
       await approveBudget(id);
     } catch (error) {
-      setBudgetActionError(
+      setApprovalError(
         error instanceof Error
           ? error.message
           : "No se pudo aprobar el presupuesto.",
@@ -269,6 +271,22 @@ export function SalesPage() {
 
   return (
     <div className="space-y-6">
+      <Dialog
+        open={approvalError !== null}
+        onOpenChange={(open) => {
+          if (!open) setApprovalError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>No se puede aprobar el presupuesto</DialogTitle>
+            <DialogDescription>{approvalError}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button />}>Entendido</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Ventas</h1>

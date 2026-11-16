@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_presupuesto_service
 from app.api.v1.routers.auth import get_current_user
 from app.api.v1.routers.presupuestos import router
+from app.services.presupuesto_service import PresupuestoStockInsuficiente
 
 _PRESUPUESTO = {
     "id_presupuesto_cliente": "PRE-0001",
@@ -43,14 +44,21 @@ class FakePresupuestoService:
         return _PRESUPUESTO
 
 
-def _client(rol: str) -> TestClient:
+class StockInsuficienteService(FakePresupuestoService):
+    def aprobar(self, _id_presupuesto):
+        raise PresupuestoStockInsuficiente(
+            "Stock insuficiente para aprobar el presupuesto."
+        )
+
+
+def _client(rol: str, service_factory=FakePresupuestoService) -> TestClient:
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_current_user] = lambda: {
         "id_empleado": "EMP-0001",
         "rol": rol,
     }
-    app.dependency_overrides[get_presupuesto_service] = FakePresupuestoService
+    app.dependency_overrides[get_presupuesto_service] = service_factory
     return TestClient(app)
 
 
@@ -95,3 +103,13 @@ def test_supply_role_cannot_create_budgets() -> None:
         )
 
     assert response.status_code == 403
+
+
+def test_approval_reports_insufficient_stock_as_conflict() -> None:
+    with _client("ventas", StockInsuficienteService) as client:
+        response = client.post(
+            "/api/v1/ventas/presupuestos/PRE-0001/aprobacion"
+        )
+
+    assert response.status_code == 409
+    assert "Stock insuficiente" in response.json()["detail"]

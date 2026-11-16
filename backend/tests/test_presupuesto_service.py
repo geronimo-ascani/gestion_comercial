@@ -88,6 +88,7 @@ class FakeProductoRepository:
     ):
         return {
             "id_producto": "PRD-0001",
+            "nombre": "Producto",
             "estado": True,
             "stock_actual": self.stock,
             "precio_venta": self.precio_venta,
@@ -183,15 +184,58 @@ def _service(stock: Decimal = Decimal("5.000")):
 
 
 def test_crear_presupuesto_calcula_importes_y_no_reserva_stock() -> None:
-    service, _presupuestos, _pedidos, productos, _movimientos = _service()
+    service, _presupuestos, _pedidos, productos, _movimientos = _service(
+        Decimal("1.000")
+    )
 
-    presupuesto = service.crear(_datos())
+    presupuesto = service.crear(_datos("2"))
 
     assert presupuesto["estado"] == "pendiente"
     assert presupuesto["total"] == Decimal("194.40")
     assert presupuesto["items"][0]["neto"] == Decimal("160.66")
     assert presupuesto["items"][0]["iva"] == Decimal("33.74")
-    assert productos.stock == Decimal("5.000")
+    assert productos.stock == Decimal("1.000")
+
+
+def test_no_se_puede_aprobar_presupuesto_con_stock_insuficiente() -> None:
+    service, presupuestos, pedidos, productos, movimientos = _service(
+        Decimal("1.000")
+    )
+    presupuesto = service.crear(_datos("2"))
+
+    with pytest.raises(
+        PresupuestoStockInsuficiente,
+        match="Stock insuficiente",
+    ):
+        service.aprobar(presupuesto["id_presupuesto_cliente"])
+
+    assert presupuestos.presupuesto["estado"] == "pendiente"
+    assert pedidos.pedido is None
+    assert productos.stock == Decimal("1.000")
+    assert movements_empty(movimientos)
+
+
+def test_aprobacion_suma_cantidades_del_mismo_producto() -> None:
+    service, presupuestos, pedidos, productos, movimientos = _service(
+        Decimal("3.000")
+    )
+    presupuesto = service.crear(_datos("1"))
+    linea = presupuestos.presupuesto["items"][0]
+    presupuestos.presupuesto["items"] = [
+        {**linea, "cantidad": Decimal("2")},
+        {**linea, "cantidad": Decimal("2")},
+    ]
+
+    with pytest.raises(
+        PresupuestoStockInsuficiente,
+        match="solicitado 4",
+    ):
+        service.aprobar(presupuesto["id_presupuesto_cliente"])
+
+    assert presupuestos.presupuesto["estado"] == "pendiente"
+    assert pedidos.pedido is None
+    assert productos.stock == Decimal("3.000")
+    assert movements_empty(movimientos)
 
 
 def test_no_se_puede_crear_presupuesto_ya_vencido() -> None:
@@ -247,11 +291,10 @@ def test_no_se_puede_convertir_presupuesto_sin_aprobar() -> None:
 
 
 def test_conversion_rechaza_vencimiento_y_stock_insuficiente() -> None:
-    service, presupuestos, pedidos, productos, movimientos = _service(
-        Decimal("1.000")
-    )
+    service, presupuestos, pedidos, productos, movimientos = _service()
     presupuesto = service.crear(_datos())
     service.aprobar(presupuesto["id_presupuesto_cliente"])
+    productos.stock = Decimal("1.000")
 
     with pytest.raises(PresupuestoStockInsuficiente):
         service.convertir("PRE-0001", _direccion())

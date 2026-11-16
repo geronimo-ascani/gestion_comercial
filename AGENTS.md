@@ -67,8 +67,11 @@
 - Approval is explicit. A budget whose expiry date has passed is `vencido`
   and cannot be approved or converted; issue a new budget instead.
 - Budget prices, VAT, line discounts, and order discount are calculated on the
-  server and saved as quote snapshots. Creating a budget does not reserve
-  stock.
+  server and saved as quote snapshots. Creating or editing a budget does not
+  reserve stock and is allowed even when available stock is insufficient; the
+  UI warns about the affected products. Approval requires sufficient available
+  stock for every line and returns `409 Conflict` otherwise, leaving the
+  budget pending.
 - Conversion is allowed only for approved, unexpired budgets. The delivery
   address is collected during conversion. In one transaction, preserve the
   quoted totals, link one sales order to the budget, reserve stock, write

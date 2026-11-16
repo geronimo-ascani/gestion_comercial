@@ -172,6 +172,23 @@ class PresupuestoService:
                 raise PresupuestoEstadoInvalido(
                     "Solo se pueden aprobar presupuestos pendientes"
                 )
+            productos = self._bloquear_productos(
+                [item["id_producto"] for item in presupuesto["items"]]
+            )
+            cantidades: dict[str, Decimal] = {}
+            for item in presupuesto["items"]:
+                cantidades[item["id_producto"]] = (
+                    cantidades.get(item["id_producto"], Decimal("0"))
+                    + item["cantidad"]
+                )
+            for id_producto, cantidad in cantidades.items():
+                producto = productos[id_producto]
+                if cantidad > producto["stock_actual"]:
+                    raise PresupuestoStockInsuficiente(
+                        f"Stock insuficiente para aprobar el presupuesto. "
+                        f"{producto['nombre']}: solicitado {cantidad}, "
+                        f"disponible {producto['stock_actual']}"
+                    )
             if not self._repo.marcar_aprobado(id_presupuesto_cliente):
                 raise PresupuestoEstadoInvalido(
                     "El presupuesto cambió de estado y no pudo aprobarse"

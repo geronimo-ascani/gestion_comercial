@@ -79,6 +79,31 @@ export function NewBudgetPage() {
       ? { ...item, unitPrice: formatMoney(product.salePrice) }
       : item;
   });
+  const stockByProduct = new Map<
+    string,
+    { id: string; name: string; quantity: number; stock: number }
+  >();
+  for (const item of items) {
+    const product = products.find(
+      (candidate) =>
+        candidate.id === item.sku || candidate.code === item.sku,
+    );
+    if (!product) continue;
+    const existing = stockByProduct.get(product.id);
+    if (existing) {
+      existing.quantity += item.qty;
+    } else {
+      stockByProduct.set(product.id, {
+        id: product.id,
+        name: product.name,
+        quantity: item.qty,
+        stock: product.stock,
+      });
+    }
+  }
+  const itemsWithInsufficientStock = [...stockByProduct.values()].filter(
+    (item) => item.quantity > item.stock,
+  );
   const lineDiscountTotal = Math.max(
     0,
     Math.round(
@@ -344,9 +369,30 @@ export function NewBudgetPage() {
                 summaryLabel="Subtotal de productos"
                 allowLineDiscount
                 allowPriceEdit={false}
-                showStock={false}
+                showStock
               />
               <FieldError message={itemsError} />
+              {itemsWithInsufficientStock.length > 0 && (
+                <div
+                  className="space-y-1 rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p>Hay productos con stock insuficiente:</p>
+                  <ul className="list-inside list-disc">
+                    {itemsWithInsufficientStock.map((item) => (
+                      <li key={item.id}>
+                        {item.name}: solicitados {item.quantity}, disponibles{" "}
+                        {item.stock}.
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    Podés guardar el presupuesto pendiente, pero no aprobarlo
+                    hasta que haya stock suficiente.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
