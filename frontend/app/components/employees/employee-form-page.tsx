@@ -16,6 +16,7 @@ import {
 } from "~/components/ui/select";
 import {
   requireText,
+  validateDocument,
   validateEmail,
   validatePhone,
 } from "~/lib/validation";
@@ -112,7 +113,9 @@ export function EmployeeFormPage() {
     const nextErrors: Record<string, string | null> = {
       firstName: requireText(firstName, "Nombre"),
       lastName: requireText(lastName, "Apellido"),
-      document: requireText(document, "DNI/CUIL"),
+      document: document.trim()
+        ? validateDocument(document)
+        : requireText(document, "DNI/CUIL"),
       phone: phone.trim()
         ? validatePhone(phone)
         : requireText(phone, "Teléfono"),

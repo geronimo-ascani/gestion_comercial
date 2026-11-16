@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.clientes import ClienteCreate, ClienteRead, ClienteUpdate
+from app.schemas.empleados import EmpleadoCreate, EmpleadoUpdate
 from app.schemas.proveedores import (
     ProveedorCreate,
     ProveedorRead,
@@ -150,3 +151,40 @@ def test_proveedor_read_acepta_direccion_legacy_vacia() -> None:
 def test_proveedor_no_permite_editar_saldo() -> None:
     with pytest.raises(ValidationError):
         ProveedorUpdate.model_validate({"saldo": 500})
+
+
+def _empleado_data(**overrides) -> dict:
+    datos = {
+        "apellido": "Pérez",
+        "dni_cuil": "20-12345678-6",
+        "email": "EMPLEADO@example.com",
+        "fecha_ingreso": "2026-01-01",
+        "nombre": "Ana",
+        "password": "password-segura",
+        "puesto": "Vendedora",
+        "telefono": "1144445555",
+    }
+    datos.update(overrides)
+    return datos
+
+
+def test_empleado_normaliza_dni_cuil_y_email_en_alta_y_edicion() -> None:
+    empleado = EmpleadoCreate.model_validate(_empleado_data())
+    actualizacion = EmpleadoUpdate.model_validate(
+        {"dni_cuil": "20.123.456"}
+    )
+
+    assert empleado.dni_cuil == "20123456786"
+    assert empleado.email == "empleado@example.com"
+    assert actualizacion.dni_cuil == "20123456"
+
+
+def test_empleado_rechaza_dni_cuil_con_longitud_o_formato_invalido() -> None:
+    with pytest.raises(ValidationError):
+        EmpleadoCreate.model_validate(_empleado_data(dni_cuil="123456"))
+    with pytest.raises(ValidationError):
+        EmpleadoCreate.model_validate(
+            _empleado_data(dni_cuil="123456789012")
+        )
+    with pytest.raises(ValidationError):
+        EmpleadoUpdate.model_validate({"dni_cuil": "sin-digitos"})

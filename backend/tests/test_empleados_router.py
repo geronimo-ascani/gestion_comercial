@@ -52,6 +52,15 @@ class SuccessfulDeleteAuthService(FakeAuthService):
         return None
 
 
+class CapturingAuthService(FakeAuthService):
+    def __init__(self) -> None:
+        self.datos = None
+
+    def registrar(self, datos, _administrador_id):
+        self.datos = datos
+        return None, dict(_EMPLEADO)
+
+
 class MissingEmployeeAuthService(FakeAuthService):
     def actualizar_contrasena_empleado(self, _id_empleado, _password):
         raise EmpleadoNoEncontrado
@@ -102,6 +111,28 @@ def test_empleado_no_administrador_no_puede_gestionar_empleados() -> None:
         response = client.get("/api/v1/auth/employees")
 
     assert response.status_code == 403
+
+
+def test_alta_normaliza_dni_cuil_antes_de_persistir() -> None:
+    service = CapturingAuthService()
+    with _client(service_factory=lambda: service) as client:
+        response = client.post(
+            "/api/v1/auth/employees",
+            json={
+                "apellido": "Pérez",
+                "dni_cuil": "20-12345678-6",
+                "email": "ANA@example.com",
+                "fecha_ingreso": "2026-01-01",
+                "nombre": "Ana",
+                "password": "password-segura",
+                "puesto": "Vendedora",
+                "rol": "ventas",
+                "telefono": "11111111",
+            },
+        )
+
+    assert response.status_code == 201
+    assert service.datos["dni_cuil"] == "20123456786"
 
 
 def test_actualizacion_duplicada_y_baja_referenciada_responden_conflicto() -> None:

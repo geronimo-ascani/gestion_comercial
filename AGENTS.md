@@ -27,7 +27,8 @@
 - Roles are `administrador`, `ventas`, and `abastecimiento`.
 - Sales can create customers inline; supply can create suppliers inline.
   Editing/deleting customers and suppliers remains administrator-only.
-- Customer DNI/CUIT and supplier CUIT are normalized for duplicate checks.
+- Customer DNI/CUIT, supplier CUIT, and employee DNI/CUIL are normalized to
+  digits for duplicate checks.
   Deleting a referenced customer or supplier returns `409 Conflict`.
 - Employee management is administrator-only. Employee deletion is physical;
   PostgreSQL references from purchase orders and audit logs restrict deletion

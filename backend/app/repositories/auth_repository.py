@@ -92,7 +92,7 @@ class AuthRepository:
                         WHERE id_empleado <> %(id_empleado)s
                           AND (
                               LOWER(email) = LOWER(%(email)s)
-                              OR dni_cuil = %(dni_cuil)s
+                              OR regexp_replace(dni_cuil, '[^0-9]', '', 'g') = %(dni_cuil)s
                           )
                     ) AS duplicado
                     """,
@@ -217,7 +217,7 @@ class AuthRepository:
                         SELECT 1
                         FROM empleado
                         WHERE LOWER(email) = LOWER(%(email)s)
-                           OR dni_cuil = %(dni_cuil)s
+                           OR regexp_replace(dni_cuil, '[^0-9]', '', 'g') = %(dni_cuil)s
                     ) AS duplicado
                     """,
                     {"email": datos["email"], "dni_cuil": datos["dni_cuil"]},

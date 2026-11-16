@@ -20,6 +20,11 @@ class EmpleadoCreate(SchemaBase):
     rol: EmpleadoRol = "ventas"
     telefono: str = Field(min_length=1, max_length=40)
 
+    @field_validator("dni_cuil")
+    @classmethod
+    def validar_dni_cuil(cls, valor: str) -> str:
+        return _normalizar_dni_cuil(valor)
+
     @field_validator("email")
     @classmethod
     def validar_email(cls, valor: str) -> str:
@@ -50,6 +55,11 @@ class EmpleadoUpdate(UpdateSchema):
     rol: EmpleadoRol | None = None
     telefono: str | None = Field(default=None, min_length=1, max_length=40)
 
+    @field_validator("dni_cuil")
+    @classmethod
+    def validar_dni_cuil(cls, valor: str | None) -> str | None:
+        return _normalizar_dni_cuil(valor) if valor is not None else None
+
     @field_validator("email")
     @classmethod
     def validar_email(cls, valor: str | None) -> str | None:
@@ -58,6 +68,13 @@ class EmpleadoUpdate(UpdateSchema):
 
 class EmpleadoPasswordUpdate(SchemaBase):
     password: SecretStr = Field(min_length=8, max_length=128)
+
+
+def _normalizar_dni_cuil(valor: str) -> str:
+    digitos = re.sub(r"[^0-9]", "", valor)
+    if not 7 <= len(digitos) <= 11:
+        raise ValueError("DNI/CUIL debe contener entre 7 y 11 dígitos")
+    return digitos
 
 
 def _validar_email(valor: str) -> str:

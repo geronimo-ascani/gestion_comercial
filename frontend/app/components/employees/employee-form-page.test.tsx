@@ -29,7 +29,7 @@ describe("EmployeeFormPage", () => {
       id: "EMP-0002",
       firstName: "Ana",
       lastName: "Pérez",
-      cuil: "20123456789",
+      cuil: "20123456786",
       phone: "11111111",
       email: "ana@example.com",
       hireDate: "1/1/2026",
@@ -52,7 +52,7 @@ describe("EmployeeFormPage", () => {
     const values: Record<string, string> = {
       Nombre: "Ana",
       Apellido: "Pérez",
-      "DNI / CUIL": "20123456789",
+      "DNI / CUIL": "20123456786",
       Teléfono: "11111111",
       "Correo electrónico": "ana@example.com",
       "Fecha de ingreso": "2026-01-01",
