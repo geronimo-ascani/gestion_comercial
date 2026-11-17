@@ -79,10 +79,7 @@ class PresupuestoService:
         return presupuesto
 
     def crear(self, datos: PresupuestoInput) -> PresupuestoRow:
-        if datos.fecha_vencimiento < date.today():
-            raise PresupuestoDatosInvalidos(
-                "La fecha de vencimiento no puede estar en el pasado"
-            )
+        self._validar_fecha_vencimiento(datos)
         try:
             with self._repo.transaction():
                 if not self._repo.cliente_existe(datos.id_cliente):
@@ -121,6 +118,7 @@ class PresupuestoService:
     def actualizar(
         self, id_presupuesto_cliente: str, datos: PresupuestoInput
     ) -> PresupuestoRow:
+        self._validar_fecha_vencimiento(datos)
         self._sincronizar_vencimiento(id_presupuesto_cliente)
         try:
             with self._repo.transaction():
@@ -301,6 +299,13 @@ class PresupuestoService:
     def _sincronizar_vencimiento(self, id_presupuesto_cliente: str) -> None:
         with self._repo.transaction():
             self._repo.marcar_vencido(id_presupuesto_cliente)
+
+    @staticmethod
+    def _validar_fecha_vencimiento(datos: PresupuestoInput) -> None:
+        if datos.fecha_vencimiento < date.today():
+            raise PresupuestoDatosInvalidos(
+                "La fecha de vencimiento no puede estar en el pasado"
+            )
 
     def _validar_no_vencido(
         self,

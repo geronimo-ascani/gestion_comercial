@@ -258,6 +258,30 @@ def test_no_se_puede_crear_presupuesto_ya_vencido() -> None:
         service.crear(datos)
 
 
+def test_no_se_puede_actualizar_presupuesto_con_vencimiento_pasado() -> None:
+    service, presupuestos, _pedidos, _productos, _movimientos = _service()
+    presupuesto = service.crear(_datos())
+    fecha_original = presupuestos.presupuesto["fecha_vencimiento"]
+    datos = PresupuestoInput.model_validate(
+        {
+            "id_cliente": "CLI-0001",
+            "fecha_muestra": (date.today() - timedelta(days=10)).isoformat(),
+            "fecha_vencimiento": (date.today() - timedelta(days=1)).isoformat(),
+            "items": [
+                {
+                    "id_producto": "PRD-0001",
+                    "cantidad": "1",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(PresupuestoDatosInvalidos, match="no puede estar en el pasado"):
+        service.actualizar(presupuesto["id_presupuesto_cliente"], datos)
+
+    assert presupuestos.presupuesto["fecha_vencimiento"] == fecha_original
+
+
 def test_conversion_aprobada_conserva_precio_y_reserva_stock_una_vez() -> None:
     service, presupuestos, _pedidos, productos, movimientos = _service()
     presupuesto = service.crear(_datos())
