@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 
 import { AppLayout } from "~/components/layout/app-layout";
 import {
@@ -7,9 +7,11 @@ import {
   useCurrentUser,
 } from "~/components/auth/session-store";
 import { Button } from "~/components/ui/button";
+import { canAccessRoute, defaultRouteForRole } from "~/lib/permissions";
 
 export default function AppLayoutRoute() {
   const currentUser = useCurrentUser();
+  const location = useLocation();
   const navigate = useNavigate();
   const [hydrated, setHydrated] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -45,6 +47,9 @@ export default function AppLayoutRoute() {
     );
   }
   if (!currentUser) return null;
+  if (!canAccessRoute(currentUser.role, location.pathname)) {
+    return <Navigate to={defaultRouteForRole(currentUser.role)} replace />;
+  }
 
   return <AppLayout />;
 }

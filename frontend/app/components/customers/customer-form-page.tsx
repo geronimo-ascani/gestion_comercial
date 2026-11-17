@@ -36,7 +36,8 @@ export function CustomerFormPage() {
   const canCreate = ["administrador", "ventas"].includes(
     currentUser?.role ?? ""
   );
-  const canEdit = currentUser?.role === "administrador";
+  const canEdit =
+    currentUser?.role === "administrador" || currentUser?.role === "ventas";
   const backTo =
     (location.state as { backTo?: string } | null)?.backTo ?? "/customers";
 

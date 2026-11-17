@@ -117,4 +117,37 @@ describe("LoginPage", () => {
     });
     expect(sessionStorage.getItem("gc-access-token")).toBe("test-token");
   });
+
+  it("inicia sesión como ventas y navega a su inicio", async () => {
+    const LoginPage = await loadPage();
+    const api = await import("./auth-api");
+    vi.mocked(api.iniciarSesion).mockResolvedValue({
+      access_token: "sales-token",
+      token_type: "bearer",
+    });
+    vi.mocked(api.obtenerUsuarioActual).mockResolvedValue({
+      id: "EMP-0002",
+      firstName: "Vera",
+      lastName: "Ventas",
+      cuil: "20123456786",
+      phone: "11111111",
+      email: "vera@empresa.com",
+      hireDate: "01/01/2025",
+      hireDateISO: "2025-01-01",
+      position: "Vendedora",
+      role: "ventas",
+    });
+    renderLogin(LoginPage);
+    fireEvent.change(screen.getByLabelText("Correo electrónico"), {
+      target: { value: "vera@empresa.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Contraseña"), {
+      target: { value: "password-segura" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location")).toHaveTextContent("/sales");
+    });
+  });
 });

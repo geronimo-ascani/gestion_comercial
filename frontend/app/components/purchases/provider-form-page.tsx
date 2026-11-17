@@ -33,7 +33,9 @@ export function ProviderFormPage() {
   const canCreate = ["administrador", "abastecimiento"].includes(
     currentUser?.role ?? ""
   );
-  const canEdit = currentUser?.role === "administrador";
+  const canEdit =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "abastecimiento";
   const navigationState = location.state as {
     backTo?: string;
     purchaseDraft?: {

@@ -65,6 +65,7 @@ import { NewVsRecurrent } from "./new-vs-recurrent-panel";
 import { RankingsPanel } from "./rankings-panel";
 import { ProviderDeliveryRankingPanel } from "./provider-delivery-ranking-panel";
 import { usePurchaseOrders } from "../purchases/purchases-store";
+import { useCurrentUser } from "../auth/session-store";
 
 function scale(value: number, factor: number): number {
   return Math.round(value * factor);
@@ -73,6 +74,11 @@ function scale(value: number, factor: number): number {
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const currentUser = useCurrentUser();
+  const role = currentUser?.role;
+  const isAdmin = role === "administrador";
+  const canSeeSales = isAdmin || role === "ventas";
+  const canSeeSupply = isAdmin || role === "abastecimiento";
   const loading = useInitialLoading();
   const purchaseOrders = usePurchaseOrders();
   const config = periodConfigs[period];
@@ -100,6 +106,7 @@ export function AnalyticsPage() {
       delta: config.kpis.deltaVentas,
       icon: TrendingUp,
       badge: "success" as const,
+      visible: isAdmin || role === "ventas",
     },
     {
       title: "GASTOS",
@@ -107,6 +114,7 @@ export function AnalyticsPage() {
       delta: config.kpis.deltaGastos,
       icon: TrendingDown,
       badge: "secondary" as const,
+      visible: isAdmin,
     },
     {
       title: "INGRESOS NETOS",
@@ -114,6 +122,7 @@ export function AnalyticsPage() {
       delta: config.kpis.deltaNeto,
       icon: DollarSign,
       badge: "success" as const,
+      visible: isAdmin,
     },
     {
       title: "MARGEN DE GANANCIA",
@@ -121,8 +130,9 @@ export function AnalyticsPage() {
       delta: "del neto / ventas",
       icon: TrendingUp,
       badge: "outline" as const,
+      visible: isAdmin,
     },
-  ];
+  ].filter((kpi) => kpi.visible);
 
   const totalPayments = payments.reduce((sum, item) => sum + item.amount, 0);
 
@@ -136,19 +146,23 @@ export function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {periodOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
+          {canSeeSales && (
+            <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {isAdmin && (
+            <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
+          )}
         </div>
       </div>
 
@@ -156,31 +170,36 @@ export function AnalyticsPage() {
         <AnalyticsSkeleton />
       ) : (
         <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardDescription>{kpi.title}</CardDescription>
-              <kpi.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <div className="text-2xl font-bold">{kpi.value}</div>
-                <Badge variant={kpi.badge}>{kpi.delta}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {config.label.toLowerCase()}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {kpis.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map((kpi) => (
+            <Card key={kpi.title}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardDescription>{kpi.title}</CardDescription>
+                <kpi.icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  <div className="text-2xl font-bold">{kpi.value}</div>
+                  <Badge variant={kpi.badge}>{kpi.delta}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {config.label.toLowerCase()}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
+      {canSeeSales && (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
           <CardHeader>
             <CardTitle>Tendencias de ventas</CardTitle>
-            <CardDescription>Últimos 12 meses (ventas vs gastos)</CardDescription>
+            <CardDescription>
+              {isAdmin ? "Últimos 12 meses (ventas vs gastos)" : "Últimos 12 meses"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -201,12 +220,15 @@ export function AnalyticsPage() {
                 />
                 <Legend />
                 <Bar dataKey="ventas" name="Ventas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} />
+                {isAdmin && (
+                  <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} />
+                )}
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
+        {isAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>Ventas por método de pago</CardTitle>
@@ -267,8 +289,11 @@ export function AnalyticsPage() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
+      )}
 
+      {canSeeSales && (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <HeatmapPanel data={buildHeatmap(config.factor)} />
@@ -281,18 +306,26 @@ export function AnalyticsPage() {
           />
         </div>
       </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        {canSeeSupply && (
+        <div className={canSeeSales ? "lg:col-span-2" : "lg:col-span-3"}>
           <ImmobilizedInventory items={oldStock} />
         </div>
-        <div className="lg:col-span-1">
+        )}
+        {canSeeSales && (
+        <div className={canSeeSupply ? "lg:col-span-1" : "lg:col-span-3"}>
           <NewVsRecurrent series={recurrentSeries} />
         </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RankingsPanel products={products} />
+        <div className={canSeeSales ? "" : "lg:col-span-2"}>
+          <RankingsPanel products={products} />
+        </div>
+        {canSeeSales && (
         <Card>
           <CardHeader>
             <CardTitle>Clientes por facturación</CardTitle>
@@ -323,19 +356,24 @@ export function AnalyticsPage() {
             </Table>
           </CardContent>
         </Card>
+        )}
       </div>
 
-      <ProviderDeliveryRankingPanel orders={purchaseOrders} />
+      {canSeeSupply && (
+        <ProviderDeliveryRankingPanel orders={purchaseOrders} />
+      )}
         </>
       )}
 
-      <ReportPreviewDialog
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        title="Previsualización de reporte"
-      >
-        <ExecutiveReportSheet period={period} />
-      </ReportPreviewDialog>
+      {isAdmin && (
+        <ReportPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title="Previsualización de reporte"
+        >
+          <ExecutiveReportSheet period={period} />
+        </ReportPreviewDialog>
+      )}
     </div>
   );
 }

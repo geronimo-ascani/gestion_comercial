@@ -22,6 +22,7 @@ import {
 } from "~/lib/validation";
 
 import { logoutUser, useCurrentUser } from "../auth/session-store";
+import { defaultRouteForRole } from "~/lib/permissions";
 import {
   createEmployee,
   getEmployee,
@@ -171,7 +172,7 @@ export function EmployeeFormPage() {
   }
 
   if (currentUser?.role !== "administrador") {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={defaultRouteForRole(currentUser?.role)} replace />;
   }
 
   if (loading) {

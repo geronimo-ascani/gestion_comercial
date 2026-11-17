@@ -70,17 +70,20 @@ export async function initializeSession(): Promise<void> {
 export async function loginUser(
   email: string,
   password: string
-): Promise<void> {
+): Promise<Employee> {
   const data = await iniciarSesion(email, password);
   setAccessToken(data.access_token);
+  let user: Employee;
   try {
-    currentUser = await obtenerUsuarioActual();
+    user = await obtenerUsuarioActual();
   } catch (error) {
     setAccessToken(null);
     throw error;
   }
+  currentUser = user;
   initialized = true;
   emit();
+  return user;
 }
 
 export function acceptRegisteredSession(

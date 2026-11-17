@@ -7,6 +7,7 @@ import { Label } from "~/components/ui/label";
 import { FieldError } from "~/components/ui/field-error";
 
 import { requireText, validateEmail } from "~/lib/validation";
+import { defaultRouteForRole } from "~/lib/permissions";
 import {
   initializeSession,
   loginUser,
@@ -33,7 +34,9 @@ export function LoginPage() {
     });
   }, []);
 
-  if (currentUser) return <Navigate to="/dashboard" replace />;
+  if (currentUser) {
+    return <Navigate to={defaultRouteForRole(currentUser.role)} replace />;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,8 +51,8 @@ export function LoginPage() {
 
     setSubmitting(true);
     try {
-      await loginUser(email, password);
-      navigate("/dashboard");
+      const user = await loginUser(email, password);
+      navigate(defaultRouteForRole(user.role));
     } catch (error) {
       setErrors({
         password:

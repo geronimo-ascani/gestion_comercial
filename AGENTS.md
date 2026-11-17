@@ -25,8 +25,9 @@
 ## Roles and Existing Business Rules
 
 - Roles are `administrador`, `ventas`, and `abastecimiento`.
-- Sales can create customers inline; supply can create suppliers inline.
-  Editing/deleting customers and suppliers remains administrator-only.
+- Sales can create and manage customers, including inline creation. Supply can
+  create and manage suppliers, including inline creation. Administrators can
+  manage both.
 - Customer DNI/CUIT, supplier CUIT, and employee DNI/CUIL are normalized to
   digits for duplicate checks.
   Deleting a referenced customer or supplier returns `409 Conflict`.
@@ -140,5 +141,8 @@
 - Employee listing, creation, detail, editing, and physical deletion are
   integrated with the employee frontend; referenced accounts cannot be
   deleted.
+- Frontend navigation, route guards, and analytics sections are filtered by role
+  through `frontend/app/lib/permissions.ts`. The backend still enforces every
+  permission; the frontend only hides inaccessible views and actions.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

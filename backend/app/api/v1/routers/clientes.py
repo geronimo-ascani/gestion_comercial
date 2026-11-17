@@ -28,7 +28,10 @@ PuedeCrear = Annotated[
     dict[str, Any],
     Depends(require_roles("administrador", "ventas")),
 ]
-SoloAdministrador = Annotated[dict[str, Any], Depends(require_roles("administrador"))]
+PuedeGestionar = Annotated[
+    dict[str, Any],
+    Depends(require_roles("administrador", "ventas")),
+]
 
 
 def _error_http(exc: ClienteError) -> HTTPException:
@@ -107,7 +110,7 @@ def actualizar_cliente(
     datos: ClienteUpdate,
     service: ServiceDep,
     id_cliente: ClienteId,
-    _: SoloAdministrador,
+    _: PuedeGestionar,
 ) -> ClienteRead:
     try:
         return ClienteRead.model_validate(service.actualizar(id_cliente, datos))
@@ -119,7 +122,7 @@ def actualizar_cliente(
 def eliminar_cliente(
     service: ServiceDep,
     id_cliente: ClienteId,
-    _: SoloAdministrador,
+    _: PuedeGestionar,
 ) -> Response:
     try:
         service.eliminar(id_cliente)

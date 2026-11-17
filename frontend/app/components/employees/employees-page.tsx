@@ -41,6 +41,7 @@ import {
   useEmployees,
 } from "./employees-store";
 import { logoutUser, useCurrentUser } from "../auth/session-store";
+import { defaultRouteForRole } from "~/lib/permissions";
 
 function ConfirmDeleteEmployee({
   name,
@@ -105,7 +106,7 @@ export function EmployeesPage() {
   }, []);
 
   if (currentUser?.role !== "administrador") {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={defaultRouteForRole(currentUser?.role)} replace />;
   }
 
   const filtered = employees.filter((employee) => {

@@ -118,7 +118,8 @@ function ConfirmDeleteDialog({
 export function CustomersPage() {
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
-  const canManage = currentUser?.role === "administrador";
+  const canManage =
+    currentUser?.role === "administrador" || currentUser?.role === "ventas";
   const customers = useCustomers();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

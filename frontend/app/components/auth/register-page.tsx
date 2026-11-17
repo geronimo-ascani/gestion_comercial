@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { requireText, validateEmail } from "~/lib/validation";
+import { defaultRouteForRole } from "~/lib/permissions";
 
 import { refreshEmployees } from "../employees/employees-store";
 import {
@@ -54,7 +55,7 @@ export function RegisterPage() {
   }, []);
 
   if (currentUser && currentUser.role !== "administrador") {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={defaultRouteForRole(currentUser.role)} replace />;
   }
 
   function setField(
@@ -106,11 +107,9 @@ export function RegisterPage() {
       });
 
       if (response.access_token) {
-        acceptRegisteredSession(
-          response.access_token,
-          mapUsuario(response.user)
-        );
-        navigate("/dashboard");
+        const user = mapUsuario(response.user);
+        acceptRegisteredSession(response.access_token, user);
+        navigate(defaultRouteForRole(user.role));
       } else {
         await refreshEmployees();
         navigate("/employees");

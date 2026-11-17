@@ -18,11 +18,13 @@ import {
 import { appConfig, navItems } from "~/config/app";
 import { employeeRoleLabels } from "~/components/employees/employees-types";
 import { logoutUser, useCurrentUser } from "~/components/auth/session-store";
+import { navItemsForRole } from "~/lib/permissions";
 
 export function AppSidebar({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const currentUser = useCurrentUser();
+  const visibleNavItems = navItemsForRole(navItems, currentUser?.role);
 
   const initials = currentUser
     ? `${currentUser.firstName.charAt(0)}${currentUser.lastName.charAt(0)}`.toUpperCase()
@@ -59,13 +61,7 @@ export function AppSidebar({ collapsed }: { collapsed: boolean }) {
       <nav
         className={cn("flex-1 space-y-1", collapsed ? "p-2" : "p-3")}
       >
-        {navItems
-          .filter(
-            (item) =>
-              item.to !== "/employees" ||
-              currentUser?.role === "administrador"
-          )
-          .map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

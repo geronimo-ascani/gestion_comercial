@@ -1,9 +1,27 @@
-import { redirect } from "react-router";
+import { useEffect } from "react";
+import { Navigate } from "react-router";
 
-export function loader() {
-  return redirect("/dashboard");
-}
+import {
+  initializeSession,
+  useCurrentUser,
+  useSessionInitialized,
+} from "~/components/auth/session-store";
+import { defaultRouteForRole } from "~/lib/permissions";
 
 export default function HomePage() {
-  return null;
+  const currentUser = useCurrentUser();
+  const sessionInitialized = useSessionInitialized();
+
+  useEffect(() => {
+    void initializeSession().catch(() => {});
+  }, []);
+
+  if (!sessionInitialized) return null;
+
+  return (
+    <Navigate
+      to={currentUser ? defaultRouteForRole(currentUser.role) : "/login"}
+      replace
+    />
+  );
 }
