@@ -168,7 +168,15 @@
   `backend/app/services/analitica_calculos.py` (KPIs, trends, AOV/UPT, new vs.
   recurring, heatmap, rankings, price comparison, category margin, idle
   inventory, payment methods, demand forecast, and percentage variation).
-  Repository queries, analytics endpoints, and replacement of the frontend demo
-  data are still pending.
+- Analytics are served by `GET /analiticas?periodo=...` (roles
+  `administrador`, `ventas`, `abastecimiento`), backed by
+  `analitica_repository.py`, `analitica_service.py`, and the response schema in
+  `schemas/analitica.py`. Sections are returned according to the role:
+  administrators receive everything, sales receive commercial sections without
+  purchase data, and supply receives supplier/price/inventory sections plus the
+  demand forecast.
+- The analytics frontend now consumes the real endpoint through
+  `frontend/app/components/analytics/analytics-api.ts`; the executive report
+  prints the same backend data. The main dashboard is still a placeholder.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

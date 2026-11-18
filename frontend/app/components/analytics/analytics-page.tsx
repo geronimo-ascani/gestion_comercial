@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DollarSign, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Bar,
@@ -38,107 +38,134 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import {
+  KpiSkeleton,
+  PanelSkeleton,
+  Skeleton,
+  TableSkeleton,
+} from "~/components/ui/skeleton";
 
-import { KpiSkeleton, PanelSkeleton, Skeleton, TableSkeleton } from "~/components/ui/skeleton";
-import { useInitialLoading } from "~/lib/use-initial-loading";
 import { ExecutiveReportSheet } from "~/components/reports/executive-report-sheet";
 import { ReportPreviewDialog } from "~/components/reports/report-preview-dialog";
+import { useCurrentUser } from "../auth/session-store";
 
-import { AovPanel } from "./aov-panel";
 import {
-  aovSeries,
-  basePayments,
-  buildHeatmap,
-  formatAR,
-  oldStock,
-  periodConfigs,
-  periodOptions,
-  recurrentSeries,
-  tendencies,
-  topCustomers,
-  topProducts,
+  fetchAnalytics,
+  type AnalyticsData,
   type Period,
+} from "./analytics-api";
+import {
+  formatAR,
+  formatDelta,
+  formatPercent,
+  paymentColor,
+  periodLabel,
+  periodOptions,
 } from "./analytics-data";
+import { AovPanel } from "./aov-panel";
+import { CategoryMarginPanel } from "./category-margin-panel";
+import { DemandForecastPanel } from "./demand-forecast-panel";
 import { HeatmapPanel } from "./heatmap-panel";
 import { ImmobilizedInventory } from "./immobilized-inventory";
 import { NewVsRecurrent } from "./new-vs-recurrent-panel";
-import { RankingsPanel } from "./rankings-panel";
+import { PriceComparisonPanel } from "./price-comparison-panel";
 import { ProviderDeliveryRankingPanel } from "./provider-delivery-ranking-panel";
-import { usePurchaseOrders } from "../purchases/purchases-store";
-import { useCurrentUser } from "../auth/session-store";
+import { RankingsPanel } from "./rankings-panel";
 
-function scale(value: number, factor: number): number {
-  return Math.round(value * factor);
-}
+const tooltipStyle = {
+  backgroundColor: "var(--color-popover)",
+  borderColor: "var(--color-border)",
+  borderRadius: 8,
+};
 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const currentUser = useCurrentUser();
   const role = currentUser?.role;
   const isAdmin = role === "administrador";
   const canSeeSales = isAdmin || role === "ventas";
   const canSeeSupply = isAdmin || role === "abastecimiento";
-  const loading = useInitialLoading();
-  const purchaseOrders = usePurchaseOrders();
-  const config = periodConfigs[period];
 
-  const payments = basePayments.map((payment) => ({
-    ...payment,
-    amount: scale(payment.amount, config.factor),
-  }));
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
 
-  const products = topProducts.map((product) => ({
-    ...product,
-    qty: Math.max(1, scale(product.qty, Math.max(1, config.factor))),
-  }));
+    fetchAnalytics(period)
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "No se pudieron cargar las analíticas."
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-  const customers = topCustomers.map((customer) => ({
-    ...customer,
-    orders: Math.max(1, scale(customer.orders, config.factor)),
-    amount: scale(customer.amount, config.factor),
-  }));
+    return () => {
+      active = false;
+    };
+  }, [period, reloadKey]);
 
-  const kpis = [
+  const kpis = data?.kpis ?? null;
+  const variacion = data?.variacion ?? null;
+
+  const kpiCards = [
     {
       title: "VENTAS TOTALES",
-      value: formatAR(config.kpis.ventas),
-      delta: config.kpis.deltaVentas,
+      value: formatAR(kpis?.ventas ?? 0),
+      delta: formatDelta(variacion?.ventas),
+      deltaVariant:
+        (variacion?.ventas ?? 0) >= 0 ? ("success" as const) : ("destructive" as const),
       icon: TrendingUp,
-      badge: "success" as const,
-      visible: isAdmin || role === "ventas",
+      visible: canSeeSales,
     },
     {
       title: "GASTOS",
-      value: formatAR(config.kpis.gastos),
-      delta: config.kpis.deltaGastos,
+      value: formatAR(kpis?.gastos ?? 0),
+      delta: formatDelta(variacion?.gastos),
+      deltaVariant: "secondary" as const,
       icon: TrendingDown,
-      badge: "secondary" as const,
       visible: isAdmin,
     },
     {
       title: "INGRESOS NETOS",
-      value: formatAR(config.kpis.neto),
-      delta: config.kpis.deltaNeto,
+      value: formatAR(kpis?.neto ?? 0),
+      delta: formatDelta(variacion?.neto),
+      deltaVariant:
+        (variacion?.neto ?? 0) >= 0 ? ("success" as const) : ("destructive" as const),
       icon: DollarSign,
-      badge: "success" as const,
       visible: isAdmin,
     },
     {
       title: "MARGEN DE GANANCIA",
-      value: `${config.kpis.margenPct.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`,
+      value: formatPercent(kpis?.margenPct),
       delta: "del neto / ventas",
+      deltaVariant: "outline" as const,
       icon: TrendingUp,
-      badge: "outline" as const,
       visible: isAdmin,
     },
-  ].filter((kpi) => kpi.visible);
+  ].filter((card) => card.visible);
 
-  const totalPayments = payments.reduce((sum, item) => sum + item.amount, 0);
+  const payments = (data?.mediosPago ?? []).map((payment, index) => ({
+    ...payment,
+    color: paymentColor(index),
+  }));
+  const totalPayments = payments.reduce((sum, item) => sum + item.monto, 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Analíticas</h1>
           <p className="text-muted-foreground">
@@ -146,232 +173,302 @@ export function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canSeeSales && (
-            <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {periodOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {isAdmin && (
+          <Select
+            value={period}
+            onValueChange={(value) => setPeriod(value as Period)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {periodOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isAdmin && data && (
             <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
           )}
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>No se pudieron cargar las analíticas</CardTitle>
+            <CardDescription>{error}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              onClick={() => setReloadKey((value) => value + 1)}
+            >
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      ) : loading || !data ? (
         <AnalyticsSkeleton />
       ) : (
         <>
-      {kpis.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {kpis.map((kpi) => (
-            <Card key={kpi.title}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardDescription>{kpi.title}</CardDescription>
-                <kpi.icon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  <div className="text-2xl font-bold">{kpi.value}</div>
-                  <Badge variant={kpi.badge}>{kpi.delta}</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {config.label.toLowerCase()}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {canSeeSales && (
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
-          <CardHeader>
-            <CardTitle>Tendencias de ventas</CardTitle>
-            <CardDescription>
-              {isAdmin ? "Últimos 12 meses (ventas vs gastos)" : "Últimos 12 meses"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={tendencies}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="month" stroke="var(--color-muted-foreground)" />
-                <YAxis
-                  stroke="var(--color-muted-foreground)"
-                  tickFormatter={(value: number) => `$${Math.round(value / 1000)}k`}
-                />
-                <Tooltip
-                  formatter={(value) => formatAR(Number(value))}
-                  contentStyle={{
-                    backgroundColor: "var(--color-popover)",
-                    borderColor: "var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="ventas" name="Ventas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                {isAdmin && (
-                  <Bar dataKey="gastos" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {isAdmin && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ventas por método de pago</CardTitle>
-            <CardDescription>Distribución del período</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={payments}
-                  dataKey="amount"
-                  nameKey="method"
-                  innerRadius={50}
-                  outerRadius={85}
-                  paddingAngle={3}
-                  label={(props) => {
-                    const entry = props as unknown as {
-                      method: string;
-                      amount: number;
-                    };
-                    return `${entry.method} · ${Math.round(
-                      (entry.amount / totalPayments) * 100
-                    )}%`;
-                  }}
-                >
-                  {payments.map((entry) => (
-                    <Cell key={entry.method} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => formatAR(Number(value))}
-                  contentStyle={{
-                    backgroundColor: "var(--color-popover)",
-                    borderColor: "var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-2 space-y-2">
-              {payments.map((entry) => (
-                <div
-                  key={entry.method}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    {entry.method}
-                  </span>
-                  <span className="font-medium">
-                    {Math.round((entry.amount / totalPayments) * 100)}%
-                  </span>
-                </div>
+          {kpiCards.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {kpiCards.map((kpi) => (
+                <Card key={kpi.title}>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardDescription>{kpi.title}</CardDescription>
+                    <kpi.icon className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <div className="text-2xl font-bold">{kpi.value}</div>
+                      <Badge variant={kpi.deltaVariant}>{kpi.delta}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {periodLabel(data.periodo).toLowerCase()}
+                    </p>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          </CardContent>
-        </Card>
-        )}
-      </div>
-      )}
+          )}
 
-      {canSeeSales && (
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <HeatmapPanel data={buildHeatmap(config.factor)} />
-        </div>
-        <div className="lg:col-span-1">
-          <AovPanel
-            series={aovSeries}
-            currentAov={aovSeries[aovSeries.length - 1].aov}
-            currentUpt={aovSeries[aovSeries.length - 1].upt}
-          />
-        </div>
-      </div>
-      )}
+          {canSeeSales && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <Card className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
+                <CardHeader>
+                  <CardTitle>Tendencias de ventas</CardTitle>
+                  <CardDescription>
+                    {isAdmin
+                      ? "Ventas vs gastos del período"
+                      : "Ventas del período"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={data.tendencias}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--color-border)"
+                      />
+                      <XAxis
+                        dataKey="label"
+                        stroke="var(--color-muted-foreground)"
+                      />
+                      <YAxis
+                        stroke="var(--color-muted-foreground)"
+                        tickFormatter={(value: number) =>
+                          `$${Math.round(value / 1000)}k`
+                        }
+                      />
+                      <Tooltip
+                        formatter={(value) => formatAR(Number(value))}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Legend />
+                      <Bar
+                        dataKey="ventas"
+                        name="Ventas"
+                        fill="#3b82f6"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      {isAdmin && (
+                        <Bar
+                          dataKey="gastos"
+                          name="Gastos"
+                          fill="#f87171"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      )}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {canSeeSupply && (
-        <div className={canSeeSales ? "lg:col-span-2" : "lg:col-span-3"}>
-          <ImmobilizedInventory items={oldStock} />
-        </div>
-        )}
-        {canSeeSales && (
-        <div className={canSeeSupply ? "lg:col-span-1" : "lg:col-span-3"}>
-          <NewVsRecurrent series={recurrentSeries} />
-        </div>
-        )}
-      </div>
+              {isAdmin && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Ventas por método de pago</CardTitle>
+                    <CardDescription>Distribución del período</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {payments.length === 0 || totalPayments === 0 ? (
+                      <div className="flex h-[220px] items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                        No hay pagos aprobados en el período.
+                      </div>
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <PieChart>
+                            <Pie
+                              data={payments}
+                              dataKey="monto"
+                              nameKey="medioPago"
+                              innerRadius={50}
+                              outerRadius={85}
+                              paddingAngle={3}
+                              label={(props) => {
+                                const entry = props as unknown as {
+                                  medioPago: string;
+                                  monto: number;
+                                };
+                                return `${entry.medioPago} · ${Math.round(
+                                  (entry.monto / totalPayments) * 100
+                                )}%`;
+                              }}
+                            >
+                              {payments.map((entry) => (
+                                <Cell key={entry.id} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value) => formatAR(Number(value))}
+                              contentStyle={tooltipStyle}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="mt-2 space-y-2">
+                          {payments.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="flex items-center justify-between text-sm"
+                            >
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className="size-2.5 rounded-full"
+                                  style={{ backgroundColor: entry.color }}
+                                />
+                                {entry.medioPago}
+                              </span>
+                              <span className="font-medium">
+                                {Math.round((entry.monto / totalPayments) * 100)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className={canSeeSales ? "" : "lg:col-span-2"}>
-          <RankingsPanel products={products} />
-        </div>
-        {canSeeSales && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Clientes por facturación</CardTitle>
-            <CardDescription>Mayores compradores del período</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-right">Pedidos</TableHead>
-                  <TableHead className="text-right">Facturación</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {customers.map((customer, index) => (
-                  <TableRow key={customer.client}>
-                    <TableCell className="font-medium">{index + 1}</TableCell>
-                    <TableCell>{customer.client}</TableCell>
-                    <TableCell className="text-right">{customer.orders}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatAR(customer.amount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-        )}
-      </div>
+          {canSeeSales && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                {data.mapaCalor && <HeatmapPanel data={data.mapaCalor} />}
+              </div>
+              <div className="lg:col-span-1">
+                <AovPanel
+                  series={data.aovUpt}
+                  currentAov={data.aovUptActual?.aov ?? 0}
+                  currentUpt={data.aovUptActual?.upt ?? 0}
+                />
+              </div>
+            </div>
+          )}
 
-      {canSeeSupply && (
-        <ProviderDeliveryRankingPanel orders={purchaseOrders} />
-      )}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {canSeeSupply && (
+              <div className={canSeeSales ? "lg:col-span-2" : "lg:col-span-3"}>
+                <ImmobilizedInventory items={data.inventarioInmovilizado} />
+              </div>
+            )}
+            {canSeeSales && (
+              <div className={canSeeSupply ? "lg:col-span-1" : "lg:col-span-3"}>
+                <NewVsRecurrent series={data.nuevosRecurrentes} />
+              </div>
+            )}
+          </div>
+
+          {canSeeSales && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className={canSeeSupply ? "" : "lg:col-span-2"}>
+                <RankingsPanel products={data.rankingProductos} />
+              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Clientes por facturación</CardTitle>
+                  <CardDescription>
+                    Mayores compradores del período
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {data.rankingClientes.length === 0 ? (
+                    <div className="flex h-32 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                      No hay ventas registradas en el período.
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead className="text-right">Pedidos</TableHead>
+                          <TableHead className="text-right">Facturación</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.rankingClientes.map((customer, index) => (
+                          <TableRow key={customer.id}>
+                            <TableCell className="font-medium">
+                              {index + 1}
+                            </TableCell>
+                            <TableCell>{customer.nombre}</TableCell>
+                            <TableCell className="text-right">
+                              {customer.pedidos}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatAR(customer.facturacion)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {canSeeSupply && (
+            <ProviderDeliveryRankingPanel ranking={data.rankingProveedores} />
+          )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {canSeeSales && (
+              <div className={canSeeSupply ? "" : "lg:col-span-2"}>
+                <CategoryMarginPanel
+                  categories={data.margenCategorias}
+                  summary={{
+                    costoVentas: kpis?.costoVentas ?? null,
+                    margenBruto: kpis?.margenBruto ?? null,
+                    margenBrutoPct: kpis?.margenBrutoPct ?? null,
+                  }}
+                />
+              </div>
+            )}
+            {canSeeSupply && (
+              <div className={canSeeSales ? "" : "lg:col-span-2"}>
+                <PriceComparisonPanel comparisons={data.comparativaPrecios} />
+              </div>
+            )}
+          </div>
+
+          <DemandForecastPanel forecasts={data.prediccionDemanda} />
         </>
       )}
 
-      {isAdmin && (
+      {isAdmin && data && (
         <ReportPreviewDialog
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           title="Previsualización de reporte"
         >
-          <ExecutiveReportSheet period={period} />
+          <ExecutiveReportSheet period={period} data={data} />
         </ReportPreviewDialog>
       )}
     </div>

@@ -24,19 +24,32 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { formatAR, type OldStockItem } from "./analytics-data";
+
+import type { ImmobilizedItem } from "./analytics-api";
+import { formatAR, formatNumber } from "./analytics-data";
 
 const thresholdOptions = [30, 60, 90];
 
-export function ImmobilizedInventory({ items }: { items: OldStockItem[] }) {
+function isImmobilized(item: ImmobilizedItem, threshold: number): boolean {
+  return item.diasSinVenta === null || item.diasSinVenta >= threshold;
+}
+
+export function ImmobilizedInventory({ items }: { items: ImmobilizedItem[] }) {
   const [threshold, setThreshold] = useState(60);
 
   const filtered = items
-    .filter((item) => item.daysSinceSale >= threshold)
-    .sort((a, b) => b.daysSinceSale - a.daysSinceSale);
+    .filter((item) => isImmobilized(item, threshold))
+    .sort((a, b) => {
+      if (a.diasSinVenta === null && b.diasSinVenta === null) {
+        return a.nombre.localeCompare(b.nombre, "es");
+      }
+      if (a.diasSinVenta === null) return -1;
+      if (b.diasSinVenta === null) return 1;
+      return b.diasSinVenta - a.diasSinVenta;
+    });
 
   const immobilizedCapital = filtered.reduce(
-    (sum, item) => sum + item.stock * item.cost,
+    (sum, item) => sum + item.capital,
     0
   );
 
@@ -52,7 +65,10 @@ export function ImmobilizedInventory({ items }: { items: OldStockItem[] }) {
             Productos sin ventas que inmovilizan capital.
           </CardDescription>
         </div>
-        <Select value={String(threshold)} onValueChange={(value) => setThreshold(Number(value))}>
+        <Select
+          value={String(threshold)}
+          onValueChange={(value) => setThreshold(Number(value))}
+        >
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
@@ -96,23 +112,31 @@ export function ImmobilizedInventory({ items }: { items: OldStockItem[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((item) => (
-                <TableRow key={item.product}>
-                  <TableCell className="font-medium">{item.product}</TableCell>
-                  <TableCell className="text-right">{item.daysSinceSale}</TableCell>
-                  <TableCell className="text-right">{item.stock}</TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatAR(item.stock * item.cost)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {item.daysSinceSale >= threshold * 2 ? (
-                      <Badge variant="destructive">Liquidar</Badge>
-                    ) : (
-                      <Badge variant="warning">Revisar</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filtered.map((item) => {
+                const days = item.diasSinVenta;
+                const liquidate = days === null || days >= threshold * 2;
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.nombre}</TableCell>
+                    <TableCell className="text-right">
+                      {days === null ? "Nunca vendido" : days}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatNumber(item.stock, 3)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatAR(item.capital)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {liquidate ? (
+                        <Badge variant="destructive">Liquidar</Badge>
+                      ) : (
+                        <Badge variant="warning">Revisar</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

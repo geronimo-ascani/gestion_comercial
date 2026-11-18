@@ -6,13 +6,8 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 
-export interface HeatmapData {
-  days: string[];
-  hours: number[];
-  values: number[][];
-}
-
-const MAX_CELLS = 14;
+import type { HeatmapData } from "./analytics-api";
+import { formatAR, formatCompact, heatDayLabel } from "./analytics-data";
 
 function cellAlpha(value: number, max: number): number {
   if (max === 0) return 0.06;
@@ -20,20 +15,29 @@ function cellAlpha(value: number, max: number): number {
 }
 
 export function HeatmapPanel({ data }: { data: HeatmapData }) {
-  const max = Math.max(...data.values.map((row) => Math.max(...row)), 1);
+  const max = Math.max(
+    ...data.values.flatMap((row) => row),
+    1
+  );
+  const columns = data.hours.length;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle>Mapa de calor de horarios pico</CardTitle>
         <CardDescription>
-          Ventas por día y franja horaria. Más oscuro = más ventas.
+          Ventas por día y franja horaria. Más oscuro = más facturación.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
           <div className="min-w-[640px]">
-            <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${MAX_CELLS}, minmax(2.5rem, 1fr))` }}>
+            <div
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `auto repeat(${columns}, minmax(2.5rem, 1fr))`,
+              }}
+            >
               <div />
               {data.hours.map((hour) => (
                 <div
@@ -46,8 +50,8 @@ export function HeatmapPanel({ data }: { data: HeatmapData }) {
               {data.days.map((day, dayIndex) => (
                 <HeatmapRow
                   key={day}
-                  day={day}
-                  values={data.values[dayIndex]}
+                  day={heatDayLabel(day)}
+                  values={data.values[dayIndex] ?? []}
                   hours={data.hours}
                   max={max}
                 />
@@ -60,7 +64,9 @@ export function HeatmapPanel({ data }: { data: HeatmapData }) {
           <span>Menos</span>
           <div className="h-2.5 flex-1 rounded-full bg-gradient-to-r from-blue-500/10 to-blue-500" />
           <span>Más ventas</span>
-          <span className="ml-2 rounded border px-2 py-0.5">Máx: {max}</span>
+          <span className="ml-2 rounded border px-2 py-0.5">
+            Máx: {formatAR(max)}
+          </span>
         </div>
       </CardContent>
     </Card>
@@ -89,14 +95,14 @@ function HeatmapRow({
         return (
           <div
             key={`${day}-${index}`}
-            title={`${day} ${hours[index]}:00–${hours[index] + 1}:00 · ${value} ventas`}
-            className="flex aspect-square items-center justify-center rounded-md text-xs font-medium"
+            title={`${day} ${hours[index]}:00–${hours[index] + 1}:00 · ${formatAR(value)}`}
+            className="flex aspect-square items-center justify-center rounded-md text-[10px] font-medium"
             style={{
               backgroundColor: `rgba(59, 130, 246, ${alpha})`,
               color: strong ? "white" : "rgba(255,255,255,0.85)",
             }}
           >
-            {value}
+            {value === 0 ? "" : formatCompact(value)}
           </div>
         );
       })}

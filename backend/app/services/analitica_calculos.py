@@ -272,14 +272,22 @@ def rango_periodo(periodo: Periodo, referencia: date) -> tuple[date, date]:
 def calcular_kpis(
     ventas: Sequence[VentaAnalitica],
     compras: Sequence[CompraAnalitica],
+    compras_recibidas: Sequence[CompraAnalitica] | None = None,
 ) -> KpisAnalitica:
     """KPIs del período. Ventas con IVA; gastos son compras recibidas.
+
+    ``compras`` se imputa por fecha de pedido y ``compras_recibidas`` por
+    fecha de recepción. Si no se recibe la segunda lista, los gastos se
+    calculan sobre ``compras`` para conservar el comportamiento histórico.
 
     El margen bruto usa ventas netas (sin IVA) menos el costo actual de los
     productos vendidos, por lo que no debe compararse contra ``neto``.
     """
     ventas_vigentes = [venta for venta in ventas if _venta_vigente(venta)]
     compras_vigentes = [compra for compra in compras if _compra_vigente(compra)]
+    base_gastos = (
+        compras if compras_recibidas is None else compras_recibidas
+    )
 
     total_ventas = _importe(
         sum((venta["total"] for venta in ventas_vigentes), _CERO)
@@ -291,8 +299,8 @@ def calcular_kpis(
         sum(
             (
                 compra["total"]
-                for compra in compras_vigentes
-                if compra["estado"] == "recibida"
+                for compra in base_gastos
+                if _compra_vigente(compra) and compra["estado"] == "recibida"
             ),
             _CERO,
         )

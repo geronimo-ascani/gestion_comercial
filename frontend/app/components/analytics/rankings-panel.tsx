@@ -16,36 +16,23 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { formatAR, formatPercent } from "./analytics-data";
 
-export interface ProductRankRow {
-  product: string;
-  qty: number;
-  unitSale: number;
-  unitCost: number;
-}
+import type { ProductRanking } from "./analytics-api";
+import { formatAR, formatNumber, formatPercent } from "./analytics-data";
 
 type View = "volumen" | "rentabilidad";
 
-function unitMargin(product: ProductRankRow): number {
-  return product.unitSale - product.unitCost;
+function marginBadge(margenPct: number) {
+  const variant =
+    margenPct >= 20 ? "success" : margenPct >= 13 ? "warning" : "destructive";
+  return <Badge variant={variant}>{formatPercent(margenPct)}</Badge>;
 }
 
-function totalMargin(product: ProductRankRow): number {
-  return unitMargin(product) * product.qty;
-}
-
-function marginBadge(product: ProductRankRow) {
-  const pct = (unitMargin(product) / product.unitSale) * 100;
-  const variant = pct >= 20 ? "success" : pct >= 13 ? "warning" : "destructive";
-  return <Badge variant={variant}>{formatPercent(pct)}</Badge>;
-}
-
-export function RankingsPanel({ products }: { products: ProductRankRow[] }) {
+export function RankingsPanel({ products }: { products: ProductRanking[] }) {
   const [view, setView] = useState<View>("volumen");
 
-  const byVolume = [...products].sort((a, b) => b.qty - a.qty);
-  const byProfit = [...products].sort((a, b) => totalMargin(b) - totalMargin(a));
+  const byVolume = [...products].sort((a, b) => b.cantidad - a.cantidad);
+  const byProfit = [...products].sort((a, b) => b.margen - a.margen);
 
   return (
     <Card>
@@ -70,24 +57,28 @@ export function RankingsPanel({ products }: { products: ProductRankRow[] }) {
           </Button>
         </div>
 
-        {view === "volumen" ? (
+        {products.length === 0 ? (
+          <EmptyState />
+        ) : view === "volumen" ? (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Producto</TableHead>
                 <TableHead className="text-right">Cantidad</TableHead>
-                <TableHead className="text-right">Importe</TableHead>
+                <TableHead className="text-right">Venta neta</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {byVolume.map((product, index) => (
-                <TableRow key={product.product}>
+                <TableRow key={product.id}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{product.product}</TableCell>
-                  <TableCell className="text-right">{product.qty}</TableCell>
+                  <TableCell>{product.nombre}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatNumber(product.cantidad, 3)}
+                  </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatAR(product.qty * product.unitSale)}
+                    {formatAR(product.ventaNeta)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -99,24 +90,24 @@ export function RankingsPanel({ products }: { products: ProductRankRow[] }) {
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Producto</TableHead>
-                <TableHead className="text-right">Costo unit.</TableHead>
+                <TableHead className="text-right">Costo</TableHead>
                 <TableHead className="text-right">Margen neto</TableHead>
                 <TableHead className="text-right">Margen %</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {byProfit.map((product, index) => (
-                <TableRow key={product.product}>
+                <TableRow key={product.id}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{product.product}</TableCell>
+                  <TableCell>{product.nombre}</TableCell>
                   <TableCell className="text-right">
-                    {formatAR(product.unitCost)}
+                    {formatAR(product.costo)}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatAR(totalMargin(product))}
+                    {formatAR(product.margen)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {marginBadge(product)}
+                    {marginBadge(product.margenPct)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -125,5 +116,13 @@ export function RankingsPanel({ products }: { products: ProductRankRow[] }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex h-32 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+      No hay ventas registradas en el período.
+    </div>
   );
 }

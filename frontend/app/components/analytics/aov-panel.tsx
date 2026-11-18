@@ -16,7 +16,9 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { formatAR } from "./analytics-data";
+
+import type { AovUptPoint } from "./analytics-api";
+import { formatAR, formatNumber } from "./analytics-data";
 
 const tooltipStyle = {
   backgroundColor: "var(--color-popover)",
@@ -29,7 +31,7 @@ export function AovPanel({
   currentAov,
   currentUpt,
 }: {
-  series: { month: string; aov: number; upt: number }[];
+  series: AovUptPoint[];
   currentAov: number;
   currentUpt: number;
 }) {
@@ -49,13 +51,13 @@ export function AovPanel({
           </div>
           <div className="rounded-lg border bg-muted/40 px-3 py-2">
             <p className="text-xs text-muted-foreground">UPT (art./compra)</p>
-            <p className="text-lg font-bold">{currentUpt}</p>
+            <p className="text-lg font-bold">{formatNumber(currentUpt, 3)}</p>
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={series}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-            <XAxis dataKey="month" stroke="var(--color-muted-foreground)" />
+            <XAxis dataKey="label" stroke="var(--color-muted-foreground)" />
             <YAxis
               yAxisId="aov"
               stroke="var(--color-muted-foreground)"
@@ -64,12 +66,12 @@ export function AovPanel({
             <YAxis
               yAxisId="upt"
               orientation="right"
-              domain={[0, 4]}
+              domain={[0, "auto"]}
               stroke="var(--color-muted-foreground)"
             />
             <Tooltip
               formatter={(value, name) =>
-                name === "UPT" ? String(value) : formatAR(Number(value))
+                name === "UPT" ? formatNumber(Number(value), 3) : formatAR(Number(value))
               }
               contentStyle={tooltipStyle}
             />

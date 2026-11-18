@@ -14,87 +14,42 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-import type { PurchaseOrder } from "../purchases/purchases-types";
+import type { ProviderRanking } from "./analytics-api";
+import { formatAR, formatNumber } from "./analytics-data";
 
-interface ProviderDeliverySummary {
-  providerId: string;
-  provider: string;
-  totalDays: number;
-  orderCount: number;
-}
-
-function parseDate(value: string): number | null {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-  const timestamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
-  const parsed = new Date(timestamp);
-  if (
-    parsed.getUTCFullYear() !== Number(year) ||
-    parsed.getUTCMonth() !== Number(month) - 1 ||
-    parsed.getUTCDate() !== Number(day)
-  ) {
-    return null;
-  }
-
-  return timestamp;
-}
-
-function getDeliveryRanking(orders: PurchaseOrder[]) {
-  const totals = new Map<string, ProviderDeliverySummary>();
-
-  for (const order of orders) {
-    if (order.status !== "recibida" || !order.receivedDate) continue;
-
-    const orderedAt = parseDate(order.date);
-    const receivedAt = parseDate(order.receivedDate);
-    if (orderedAt === null || receivedAt === null || receivedAt < orderedAt) {
-      continue;
+function sortByDelivery(ranking: ProviderRanking[]): ProviderRanking[] {
+  return [...ranking].sort((first, second) => {
+    if (first.entregaPromedioDias === null && second.entregaPromedioDias === null) {
+      return first.nombre.localeCompare(second.nombre, "es");
     }
-
-    const current = totals.get(order.providerId) ?? {
-      providerId: order.providerId,
-      provider: order.provider,
-      totalDays: 0,
-      orderCount: 0,
-    };
-    current.totalDays += Math.round((receivedAt - orderedAt) / 86_400_000);
-    current.orderCount += 1;
-    totals.set(order.providerId, current);
-  }
-
-  return [...totals.values()]
-    .map((entry) => ({
-      ...entry,
-      averageDays: entry.totalDays / entry.orderCount,
-    }))
-    .sort(
-      (first, second) =>
-        first.averageDays - second.averageDays ||
-        first.provider.localeCompare(second.provider, "es")
+    if (first.entregaPromedioDias === null) return 1;
+    if (second.entregaPromedioDias === null) return -1;
+    return (
+      first.entregaPromedioDias - second.entregaPromedioDias ||
+      first.nombre.localeCompare(second.nombre, "es")
     );
+  });
 }
 
 export function ProviderDeliveryRankingPanel({
-  orders,
+  ranking,
 }: {
-  orders: PurchaseOrder[];
+  ranking: ProviderRanking[];
 }) {
-  const ranking = getDeliveryRanking(orders);
+  const ordered = sortByDelivery(ranking);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tiempo promedio de recepción por proveedor</CardTitle>
+        <CardTitle>Proveedores: entrega y volumen</CardTitle>
         <CardDescription>
           Días entre la fecha del pedido y la recepción de la mercadería.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {ranking.length === 0 ? (
+        {ordered.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No hay órdenes recibidas con fechas válidas.
+            No hay compras registradas en el período.
           </p>
         ) : (
           <Table>
@@ -102,22 +57,26 @@ export function ProviderDeliveryRankingPanel({
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Proveedor</TableHead>
-                <TableHead className="text-right">Promedio</TableHead>
-                <TableHead className="text-right">Órdenes recibidas</TableHead>
+                <TableHead className="text-right">Entrega promedio</TableHead>
+                <TableHead className="text-right">Pedidos</TableHead>
+                <TableHead className="text-right">Volumen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ranking.map((entry, index) => (
-                <TableRow key={entry.providerId}>
+              {ordered.map((entry, index) => (
+                <TableRow key={entry.id}>
                   <TableCell>{index + 1}</TableCell>
-                  <TableCell className="font-medium">{entry.provider}</TableCell>
+                  <TableCell className="font-medium">{entry.nombre}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {entry.averageDays.toLocaleString("es-AR", {
-                      maximumFractionDigits: 1,
-                    })} días
+                    {entry.entregaPromedioDias === null
+                      ? "—"
+                      : `${formatNumber(entry.entregaPromedioDias, 1)} días`}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {entry.orderCount}
+                    {entry.pedidos}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatAR(entry.volumenCompra)}
                   </TableCell>
                 </TableRow>
               ))}

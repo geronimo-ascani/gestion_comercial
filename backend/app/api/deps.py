@@ -4,6 +4,7 @@ from fastapi import Depends
 from psycopg import Connection
 
 from app.core.db import get_db
+from app.repositories.analitica_repository import AnaliticaRepository
 from app.repositories.auth_repository import AuthRepository
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.catalogo_repository import CatalogoRepository
@@ -16,6 +17,7 @@ from app.repositories.pedido_venta_repository import PedidoVentaRepository
 from app.repositories.producto_repository import ProductoRepository
 from app.repositories.proveedor_repository import ProveedorRepository
 from app.repositories.presupuesto_repository import PresupuestoRepository
+from app.services.analitica_service import AnaliticaService
 from app.services.cliente_service import ClienteService
 from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
@@ -31,6 +33,12 @@ def get_auth_service(
     db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
 ) -> AuthService:
     return AuthService(AuthRepository(db))
+
+
+def get_analitica_service(
+    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+) -> AnaliticaService:
+    return AnaliticaService(AnaliticaRepository(db))
 
 
 def get_categoria_service(

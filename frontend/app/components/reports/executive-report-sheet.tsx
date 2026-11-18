@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -15,26 +16,21 @@ import {
   YAxis,
 } from "recharts";
 
+import type { AnalyticsData, Period } from "../analytics/analytics-api";
 import {
-  aovSeries,
-  basePayments,
-  buildHeatmap,
   formatAR,
+  formatCompact,
   formatPercent,
-  oldStock,
-  periodConfigs,
-  recurrentSeries,
-  tendencies,
-  topCustomers,
-  topProducts,
-  type Period,
+  heatDayLabel,
+  paymentColor,
+  periodLabel,
 } from "../analytics/analytics-data";
 import { ReportPage } from "./report-page";
 
 const axisTick = { fontSize: 10, fill: "#64748b" };
 const legendStyle = { fontSize: 11 };
 
-function SectionTitle({ children }: { children: string }) {
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <h3 className="mb-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-wide text-slate-700">
       {children}
@@ -46,11 +42,12 @@ const tableHeadCls =
   "border-b-2 border-slate-300 bg-slate-100 px-1 py-1 text-left font-semibold text-slate-600";
 const tableCellCls = "px-1 py-1 text-slate-600";
 
-function scale(value: number, factor: number): number {
-  return Math.round(value * factor);
-}
-
 const RADIAN = Math.PI / 180;
+
+function variationLabel(value: number | null | undefined): string | null {
+  if (value == null) return null;
+  return `${value > 0 ? "+" : ""}${formatPercent(value)}`;
+}
 
 function renderSlicePercentLabel(props: {
   cx?: number;
@@ -86,41 +83,64 @@ function renderSlicePercentLabel(props: {
   );
 }
 
-export function ExecutiveReportSheet({ period }: { period: Period }) {
-  const config = periodConfigs[period];
-
+export function ExecutiveReportSheet({
+  period,
+  data,
+}: {
+  period: Period;
+  data: AnalyticsData;
+}) {
   const generatedAt = new Date().toLocaleString("es-AR", {
     dateStyle: "long",
     timeStyle: "short",
   });
 
-  const k = config.kpis;
+  const k = data.kpis;
   const kpis = [
-    { label: "Ventas totales", value: formatAR(k.ventas), delta: k.deltaVentas },
-    { label: "Gastos", value: formatAR(k.gastos), delta: k.deltaGastos },
-    { label: "Ingresos netos", value: formatAR(k.neto), delta: k.deltaNeto },
-    { label: "Margen de ganancia", value: formatPercent(k.margenPct), delta: null },
+    {
+      label: "Ventas totales",
+      value: formatAR(k?.ventas ?? 0),
+      delta: variationLabel(data.variacion?.ventas),
+    },
+    {
+      label: "Gastos",
+      value: formatAR(k?.gastos ?? 0),
+      delta: variationLabel(data.variacion?.gastos),
+    },
+    {
+      label: "Ingresos netos",
+      value: formatAR(k?.neto ?? 0),
+      delta: variationLabel(data.variacion?.neto),
+    },
+    {
+      label: "Margen de ganancia",
+      value: formatPercent(k?.margenPct),
+      delta: null,
+    },
   ];
 
-  const payments = basePayments.map((payment) => ({
+  const payments = data.mediosPago.map((payment, index) => ({
     ...payment,
-    amount: scale(payment.amount, config.factor),
+    color: paymentColor(index),
+  }));
+  const paymentsTotal = payments.reduce((sum, item) => sum + item.monto, 0);
+
+  const products = data.rankingProductos.map((product, index) => ({
+    rank: index + 1,
+    product: product.nombre,
+    qty: product.cantidad,
   }));
 
-  const products = topProducts.map((product) => ({
-    ...product,
-    qty: Math.max(1, scale(product.qty, Math.max(1, config.factor))),
+  const customers = data.rankingClientes.map((customer, index) => ({
+    rank: index + 1,
+    client: customer.nombre,
+    amount: customer.facturacion,
   }));
 
-  const customers = topCustomers.map((customer) => ({
-    ...customer,
-    orders: Math.max(1, scale(customer.orders, config.factor)),
-    amount: scale(customer.amount, config.factor),
-  }));
-
-  const paymentsTotal = payments.reduce((sum, p) => sum + p.amount, 0);
-  const heatmap = buildHeatmap(config.factor);
-  const heatLevels = [2, 4, 6, 8, 10];
+  const heatmap = data.mapaCalor;
+  const heatMax = heatmap
+    ? Math.max(...heatmap.values.flatMap((row) => row), 1)
+    : 1;
 
   return (
     <>
@@ -135,7 +155,9 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
             </p>
           </div>
           <div className="text-right text-xs leading-tight text-slate-500">
-            <p className="font-semibold text-slate-700">Período: {config.label}</p>
+            <p className="font-semibold text-slate-700">
+              Período: {periodLabel(period)}
+            </p>
             <p>Generado el {generatedAt}</p>
           </div>
         </header>
@@ -175,13 +197,15 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
         </section>
 
         <section className="mt-8 min-w-0">
-          <SectionTitle>Rendimiento financiero · Ventas vs Gastos (últimos 12 meses)</SectionTitle>
+          <SectionTitle>
+            Rendimiento financiero · Ventas vs Gastos ({periodLabel(period)})
+          </SectionTitle>
           <div className="h-[430px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tendencies}>
+              <BarChart data={data.tendencias}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis
-                  dataKey="month"
+                  dataKey="label"
                   tick={axisTick}
                   tickMargin={8}
                   interval={0}
@@ -232,17 +256,32 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
             <SectionTitle>Clientes nuevos vs recurrentes</SectionTitle>
             <div className="h-[300px] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={recurrentSeries}>
+                <AreaChart data={data.nuevosRecurrentes}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="month" tick={axisTick} tickMargin={6} />
+                  <XAxis dataKey="label" tick={axisTick} tickMargin={6} />
                   <YAxis
                     tick={axisTick}
                     tickMargin={4}
                     tickFormatter={(v: number) => `$${Math.round(v / 1000)}k`}
                   />
                   <Legend wrapperStyle={legendStyle} iconSize={10} />
-                  <Area stackId="1" dataKey="recurrentes" name="Recurrentes" stroke="#2563eb" fill="#2563eb" fillOpacity={0.65} />
-                  <Area stackId="1" dataKey="nuevos" name="Nuevos" stroke="#10b981" strokeDasharray="6 3" fill="#10b981" fillOpacity={0.55} />
+                  <Area
+                    stackId="1"
+                    dataKey="recurrentes"
+                    name="Recurrentes"
+                    stroke="#2563eb"
+                    fill="#2563eb"
+                    fillOpacity={0.65}
+                  />
+                  <Area
+                    stackId="1"
+                    dataKey="nuevos"
+                    name="Nuevos"
+                    stroke="#10b981"
+                    strokeDasharray="6 3"
+                    fill="#10b981"
+                    fillOpacity={0.55}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -250,56 +289,64 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
 
           <div className="flex min-w-0 flex-col">
             <SectionTitle>Métodos de pago</SectionTitle>
-            <div className="h-[180px] w-full min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={payments}
-                    dataKey="amount"
-                    nameKey="method"
-                    innerRadius={38}
-                    outerRadius={72}
-                    paddingAngle={3}
-                    label={renderSlicePercentLabel}
-                  >
-{payments.map((entry) => (
-                      <Cell key={entry.method} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {payments.map((entry) => (
-                <div
-                  key={entry.method}
-                  className="flex items-center justify-between text-xs text-slate-600"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="truncate">{entry.method}</span>
-                  </span>
-                  <span className="font-semibold text-slate-700">
-                    {Math.round((entry.amount / paymentsTotal) * 100)}%
-                  </span>
+            {payments.length === 0 || paymentsTotal === 0 ? (
+              <p className="text-[10px] text-slate-400">
+                Sin pagos aprobados en el período.
+              </p>
+            ) : (
+              <>
+                <div className="h-[180px] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={payments}
+                        dataKey="monto"
+                        nameKey="medioPago"
+                        innerRadius={38}
+                        outerRadius={72}
+                        paddingAngle={3}
+                        label={renderSlicePercentLabel}
+                      >
+                        {payments.map((entry) => (
+                          <Cell key={entry.id} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="mt-2 space-y-1.5">
+                  {payments.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between text-xs text-slate-600"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="truncate">{entry.medioPago}</span>
+                      </span>
+                      <span className="font-semibold text-slate-700">
+                        {Math.round((entry.monto / paymentsTotal) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </section>
 
         <section className="mt-8 min-w-0">
           <SectionTitle>
-            Ticket promedio (AOV) y UPT · evolución mensual
+            Ticket promedio (AOV) y UPT · evolución del período
           </SectionTitle>
           <div className="h-[300px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={aovSeries}>
+              <LineChart data={data.aovUpt}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" tick={axisTick} tickMargin={6} />
+                <XAxis dataKey="label" tick={axisTick} tickMargin={6} />
                 <YAxis
                   yAxisId="aov"
                   tick={axisTick}
@@ -309,14 +356,31 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
                 <YAxis
                   yAxisId="upt"
                   orientation="right"
-                  domain={[0, 4]}
+                  domain={[0, "auto"]}
                   tick={axisTick}
                   tickMargin={4}
                   width={30}
                 />
                 <Legend wrapperStyle={legendStyle} iconSize={10} />
-                <Line yAxisId="aov" type="monotone" dataKey="aov" name="AOV ($)" stroke="#2563eb" strokeWidth={2} dot={false} />
-                <Line yAxisId="upt" type="monotone" dataKey="upt" name="UPT (art.)" stroke="#10b981" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+                <Line
+                  yAxisId="aov"
+                  type="monotone"
+                  dataKey="aov"
+                  name="AOV ($)"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  yAxisId="upt"
+                  type="monotone"
+                  dataKey="upt"
+                  name="UPT (art.)"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -328,30 +392,37 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
 
         <section className="mt-5 min-w-0">
           <SectionTitle>Mapa de calor · Horarios pico de ventas</SectionTitle>
-          <div
-            className="grid gap-1"
-            style={{
-              gridTemplateColumns: "auto repeat(14, minmax(0, 1fr))",
-            }}
-          >
-            <span />
-            {heatmap.hours.map((hour) => (
-              <span
-                key={hour}
-                className="text-center text-[9px] text-slate-400"
-              >
-                {hour}h
-              </span>
-            ))}
-            {heatmap.values.map((row, dayIndex) => (
-              <HeatmapRow
-                key={heatmap.days[dayIndex]}
-                day={heatmap.days[dayIndex]}
-                row={row}
-                hours={heatmap.hours}
-              />
-            ))}
-          </div>
+          {heatmap ? (
+            <div
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `auto repeat(${heatmap.hours.length}, minmax(0, 1fr))`,
+              }}
+            >
+              <span />
+              {heatmap.hours.map((hour) => (
+                <span
+                  key={hour}
+                  className="text-center text-[9px] text-slate-400"
+                >
+                  {hour}h
+                </span>
+              ))}
+              {heatmap.values.map((row, dayIndex) => (
+                <HeatmapRow
+                  key={dayIndex}
+                  day={heatDayLabel(dayIndex)}
+                  row={row}
+                  hours={heatmap.hours}
+                  max={heatMax}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-slate-400">
+              Sin datos de horarios para el período.
+            </p>
+          )}
           <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-500">
             <span>Menos</span>
             <div className="h-2.5 flex-1 rounded-full bg-gradient-to-r from-blue-200 via-blue-400 to-blue-600" />
@@ -427,16 +498,16 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
                 </tr>
               </thead>
               <tbody>
-                {oldStock.map((item) => (
-                  <tr key={item.product} className="border-b border-slate-100">
+                {data.inventarioInmovilizado.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-100">
                     <td className={`${tableCellCls} max-w-0 truncate`}>
-                      {item.product}
+                      {item.nombre}
                     </td>
                     <td className={`${tableCellCls} text-right`}>
-                      {formatAR(item.stock * item.cost)}
+                      {formatAR(item.capital)}
                     </td>
                     <td className={`${tableCellCls} text-right`}>
-                      {item.daysSinceSale}
+                      {item.diasSinVenta === null ? "—" : item.diasSinVenta}
                     </td>
                   </tr>
                 ))}
@@ -447,28 +518,16 @@ export function ExecutiveReportSheet({ period }: { period: Period }) {
 
         <section className="mt-8">
           <SectionTitle>Escala de actividad por franja horaria</SectionTitle>
-          <div className="flex items-center gap-4">
-            {heatLevels.map((level) => (
+          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+            <span>Baja</span>
+            {[0.2, 0.4, 0.6, 0.8, 1].map((alpha) => (
               <span
-                key={level}
-                className="flex items-center gap-1.5 text-[10px] text-slate-500"
-              >
-                <span
-                  className={`inline-block h-4 w-7 rounded-sm ${
-                    level <= 2
-                      ? "bg-blue-200"
-                      : level <= 4
-                        ? "bg-blue-300"
-                        : level <= 6
-                          ? "bg-blue-400"
-                          : level <= 8
-                            ? "bg-blue-500"
-                            : "bg-blue-600"
-                  }`}
-                />
-                {level === 2 ? "Baja" : level === 10 ? "Alta" : `${level} ventas`}
-              </span>
+                key={alpha}
+                className="inline-block h-4 w-7 rounded-sm"
+                style={{ backgroundColor: `rgba(37, 99, 235, ${alpha})` }}
+              />
             ))}
+            <span>Alta</span>
           </div>
         </section>
       </ReportPage>
@@ -490,34 +549,34 @@ function HeatmapRow({
   day,
   row,
   hours,
+  max,
 }: {
   day: string;
   row: number[];
   hours: number[];
+  max: number;
 }) {
   return (
     <>
       <span className="flex items-center pr-2 text-[10px] font-medium text-slate-500">
         {day}
       </span>
-      {row.map((value, index) => (
-        <span
-          key={`${day}-${hours[index]}`}
-          className={`flex h-6 items-center justify-center rounded-[3px] text-[10px] font-medium ${
-            value <= 2
-              ? "bg-blue-200 text-blue-900"
-              : value <= 4
-                ? "bg-blue-300 text-blue-950"
-                : value <= 6
-                  ? "bg-blue-400 text-white"
-                  : value <= 8
-                    ? "bg-blue-500 text-white"
-                    : "bg-blue-600 text-white"
-          }`}
-        >
-          {value}
-        </span>
-      ))}
+      {row.map((value, index) => {
+        const alpha = max === 0 ? 0.08 : 0.12 + (value / max) * 0.88;
+        const strong = alpha > 0.55;
+        return (
+          <span
+            key={`${day}-${hours[index]}`}
+            className="flex h-6 items-center justify-center rounded-[3px] text-[8px] font-medium"
+            style={{
+              backgroundColor: `rgba(37, 99, 235, ${alpha})`,
+              color: strong ? "#ffffff" : "#1e3a8a",
+            }}
+          >
+            {value === 0 ? "" : formatCompact(value)}
+          </span>
+        );
+      })}
     </>
   );
 }
