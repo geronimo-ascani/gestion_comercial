@@ -111,6 +111,26 @@
 - Add focused tests for service rules, route permissions/status codes, rollback,
   idempotency, and inventory effects.
 
+## Analytics Calculation Rules
+
+- Pure calculations live in `backend/app/services/analitica_calculos.py`; they
+  take plain typed structures and return `Decimal` values, so they can be
+  reused by repositories, routes, and tests without database access.
+- Money is rounded to two decimals, quantities to three, and percentages to two
+  with `ROUND_HALF_UP`.
+- Sales KPIs use order totals including VAT. Purchases exclude canceled orders;
+  expenses (`gastos`) include only received purchases and are imputed on the
+  reception date for trends.
+- Gross margin uses net sales (without VAT) minus the product's current
+  `precio_compra` as unit cost. It is not the same as `neto`, which subtracts
+  received purchases from sales totals.
+- A customer counts as new when an order falls on the same date as their first
+  non-canceled purchase; otherwise the order is recurrent.
+- Demand forecasting is a simple linear regression over chronological,
+  equidistant periods, clamped at zero.
+- Analytics remain backend-owned: the frontend must not recompute these values
+  or trust client-supplied figures.
+
 ## Current Stage 2 Status
 
 - Customer/supplier CRUD and purchase-order backend/frontend flow are already
@@ -144,5 +164,11 @@
 - Frontend navigation, route guards, and analytics sections are filtered by role
   through `frontend/app/lib/permissions.ts`. The backend still enforces every
   permission; the frontend only hides inaccessible views and actions.
+- The analytics calculation core is implemented and unit-tested in
+  `backend/app/services/analitica_calculos.py` (KPIs, trends, AOV/UPT, new vs.
+  recurring, heatmap, rankings, price comparison, category margin, idle
+  inventory, payment methods, demand forecast, and percentage variation).
+  Repository queries, analytics endpoints, and replacement of the frontend demo
+  data are still pending.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.
