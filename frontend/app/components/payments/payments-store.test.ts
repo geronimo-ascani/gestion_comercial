@@ -27,6 +27,7 @@ function invoice(overrides: Partial<Invoice> = {}): Invoice {
     orderNumber: "PV-0001",
     clientId: "CLI-0001",
     client: "Ana Pérez",
+    clientEmail: "ana@example.com",
     date: "10/11/2026",
     amount: 100,
     paidAmount: 0,
@@ -125,17 +126,24 @@ describe("payments-store", () => {
     api.enviarComprobante.mockResolvedValue({
       id_envio: 1,
       destinatario: "ana@example.com",
+      cc: ["copia@example.com"],
+      bcc: [],
       estado: "enviado",
       error: null,
       enviado_en: "2026-11-10T12:00:00",
     });
 
-    const envio = await enviarComprobante("CPB-0001", "ana@example.com");
+    const envio = await enviarComprobante("CPB-0001", {
+      destinatario: "ana@example.com",
+      cc: ["copia@example.com"],
+      bcc: [],
+    });
 
-    expect(api.enviarComprobante).toHaveBeenCalledWith(
-      "CPB-0001",
-      "ana@example.com",
-    );
+    expect(api.enviarComprobante).toHaveBeenCalledWith("CPB-0001", {
+      destinatario: "ana@example.com",
+      cc: ["copia@example.com"],
+      bcc: [],
+    });
     expect(envio.estado).toBe("enviado");
   });
 });

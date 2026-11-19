@@ -1,12 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.base import SchemaBase
 from app.schemas.empresas import EmpresaRead
 from app.schemas.pagos import PagoRead
+from app.schemas.validaciones import normalizar_email
+
+_DireccionCopia = Annotated[str, Field(max_length=160)]
 
 
 class ComprobanteVentaCreate(SchemaBase):
@@ -15,6 +18,35 @@ class ComprobanteVentaCreate(SchemaBase):
 
 class ComprobanteEnvioInput(SchemaBase):
     destinatario: str | None = Field(default=None, max_length=160)
+    cc: list[_DireccionCopia] = Field(default_factory=list, max_length=5)
+    bcc: list[_DireccionCopia] = Field(default_factory=list, max_length=5)
+
+    @field_validator("destinatario")
+    @classmethod
+    def validar_destinatario(cls, valor: str | None) -> str | None:
+        return normalizar_email(valor) if valor else None
+
+    @field_validator("cc", "bcc")
+    @classmethod
+    def validar_copias(cls, valores: list[str]) -> list[str]:
+        return [normalizar_email(valor) for valor in valores]
+
+    @model_validator(mode="after")
+    def deduplicar_destinatarios(self) -> "ComprobanteEnvioInput":
+        vistos: set[str] = {self.destinatario} if self.destinatario else set()
+        cc: list[str] = []
+        for email in self.cc:
+            if email not in vistos:
+                cc.append(email)
+                vistos.add(email)
+        self.cc = cc
+        bcc: list[str] = []
+        for email in self.bcc:
+            if email not in vistos:
+                bcc.append(email)
+                vistos.add(email)
+        self.bcc = bcc
+        return self
 
 
 class ComprobanteClienteRead(SchemaBase):
@@ -53,6 +85,7 @@ class ComprobanteVentaResumen(SchemaBase):
     id_pedido_cliente: str
     cliente_nombre: str
     cliente_apellido: str
+    cliente_email: str
     id_empresa: str
     empresa_razon_social: str
 

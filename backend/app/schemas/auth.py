@@ -1,10 +1,10 @@
 from datetime import date, datetime
-import re
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 
 from .base import SchemaBase
+from .validaciones import normalizar_email
 
 
 class CredencialesLogin(SchemaBase):
@@ -14,7 +14,7 @@ class CredencialesLogin(SchemaBase):
     @field_validator("email")
     @classmethod
     def validar_email(cls, valor: str) -> str:
-        return _validar_email(valor)
+        return normalizar_email(valor)
 
 
 class RegistroEmpleado(SchemaBase):
@@ -30,7 +30,7 @@ class RegistroEmpleado(SchemaBase):
     @field_validator("email")
     @classmethod
     def validar_email(cls, valor: str) -> str:
-        return _validar_email(valor)
+        return normalizar_email(valor)
 
 
 class UsuarioRead(SchemaBase):
@@ -66,16 +66,10 @@ class SolicitudRecuperacion(SchemaBase):
     @field_validator("email")
     @classmethod
     def validar_email(cls, valor: str) -> str:
-        return _validar_email(valor)
+        return normalizar_email(valor)
 
 
 class RestablecerContrasena(SchemaBase):
     token: str = Field(min_length=32, max_length=256)
     password: SecretStr = Field(min_length=8, max_length=128)
 
-
-def _validar_email(valor: str) -> str:
-    email = valor.strip().lower()
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        raise ValueError("Debe ingresar un correo electrónico válido")
-    return email

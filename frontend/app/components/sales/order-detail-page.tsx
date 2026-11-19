@@ -60,13 +60,13 @@ import { useCurrentUser } from "../auth/session-store";
 import { invalidateProducts } from "../products/products-store";
 import {
   emitirComprobante,
-  enviarComprobante,
   loadPayments,
   useInvoiceForOrder,
 } from "../payments/payments-store";
 import type { Invoice } from "../payments/payments-types";
 import { InvoiceStatusBadge } from "../payments/payments-views";
 import { RecordPaymentDialog } from "../payments/record-payment-dialog";
+import { SendInvoiceDialog } from "../payments/send-invoice-dialog";
 
 const nextOrderStatus: Partial<
   Record<OrderStatus, "proceso" | "enviado" | "entregado">
@@ -86,6 +86,8 @@ export function OrderDetailPage() {
   const [saving, setSaving] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendFeedback, setSendFeedback] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [paymentsReady, setPaymentsReady] = useState(false);
@@ -192,21 +194,13 @@ export function OrderDetailPage() {
     }
   }
 
-  async function handleSendInvoice() {
-    if (!invoice) return;
-    setInvoiceBusy(true);
-    setInvoiceError(null);
-    try {
-      await enviarComprobante(invoice.id);
-    } catch (error) {
-      setInvoiceError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo enviar el comprobante.",
-      );
-    } finally {
-      setInvoiceBusy(false);
-    }
+  function openSendInvoice() {
+    setSendFeedback(null);
+    setSendOpen(true);
+  }
+
+  function handleInvoiceSent() {
+    setSendFeedback("Comprobante enviado por correo.");
   }
 
   async function retryLoad() {
@@ -273,6 +267,14 @@ export function OrderDetailPage() {
           <CustomerDetailsCard order={order} />
           <OrderItemsCard order={order} />
           <OrderSummaryCard order={order} />
+          {sendFeedback && (
+            <p
+              className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700"
+              role="status"
+            >
+              {sendFeedback}
+            </p>
+          )}
           <OrderInvoiceCard
             order={order}
             invoice={invoice}
@@ -281,7 +283,7 @@ export function OrderDetailPage() {
             error={invoiceError}
             canManage={canManage}
             onEmit={() => void handleEmitInvoice()}
-            onSend={() => void handleSendInvoice()}
+            onSend={openSendInvoice}
             onRecordPayment={() => setPaymentOpen(true)}
           />
           <OrderTimelineCard
@@ -323,6 +325,12 @@ export function OrderDetailPage() {
             invoice={invoice}
             open={paymentOpen}
             onOpenChange={setPaymentOpen}
+          />
+          <SendInvoiceDialog
+            invoice={invoice}
+            open={sendOpen}
+            onOpenChange={setSendOpen}
+            onSent={handleInvoiceSent}
           />
         </div>
       )}

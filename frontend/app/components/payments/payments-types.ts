@@ -11,6 +11,8 @@ export interface Invoice {
   orderNumber: string;
   clientId: string;
   client: string;
+  /** Email del cliente, usado como destinatario por defecto del envío. */
+  clientEmail: string;
   date: string;
   amount: number;
   paidAmount: number;

@@ -41,6 +41,8 @@ class EmailService:
         cuerpo: str,
         cuerpo_html: str | None = None,
         adjuntos: list[AdjuntoEmail] | None = None,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> None:
         if not self.configurado:
             raise EmailNoConfigurado(
@@ -51,6 +53,10 @@ class EmailService:
         mensaje["Subject"] = asunto
         mensaje["From"] = self._settings.smtp_sender
         mensaje["To"] = destinatario
+        if cc:
+            mensaje["Cc"] = ", ".join(cc)
+        if bcc:
+            mensaje["Bcc"] = ", ".join(bcc)
         mensaje.set_content(cuerpo)
         if cuerpo_html:
             mensaje.add_alternative(cuerpo_html, subtype="html")

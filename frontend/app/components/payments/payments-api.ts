@@ -41,6 +41,7 @@ interface ComprobanteResumenApi {
   id_pedido_cliente: string;
   cliente_nombre: string;
   cliente_apellido: string;
+  cliente_email: string;
   id_empresa: string;
   empresa_razon_social: string;
 }
@@ -88,9 +89,17 @@ export interface PagoListadoApi extends PagoApi {
 export interface EnvioApi {
   id_envio: number;
   destinatario: string;
+  cc: string[];
+  bcc: string[];
   estado: "enviado" | "fallido";
   error: string | null;
   enviado_en: string;
+}
+
+export interface EnvioComprobantePayload {
+  destinatario?: string;
+  cc?: string[];
+  bcc?: string[];
 }
 
 export interface PagoPayload {
@@ -142,6 +151,7 @@ function mapResumen(comprobante: ComprobanteResumenApi): Invoice {
       comprobante.cliente_nombre,
       comprobante.cliente_apellido,
     ),
+    clientEmail: comprobante.cliente_email ?? "",
     date: formatInputDate(comprobante.fecha_emision),
     amount: monto,
     paidAmount: monto - saldo,
@@ -160,6 +170,7 @@ function mapComprobante(comprobante: ComprobanteApi): Invoice {
   return {
     ...resumen,
     clientId: comprobante.cliente.id_cliente,
+    clientEmail: comprobante.cliente.email || resumen.clientEmail,
     method: ultimoPago?.id_medio_pago ?? "",
     paidAmount: Number(comprobante.total_pagado),
   };
@@ -250,13 +261,13 @@ export async function registrarPago(
 
 export async function enviarComprobante(
   idComprobante: string,
-  destinatario?: string,
+  payload: EnvioComprobantePayload = {},
 ): Promise<EnvioApi> {
   return apiRequest<EnvioApi>(
     `/ventas/comprobantes/${encodeURIComponent(idComprobante)}/envio`,
     {
       method: "POST",
-      body: JSON.stringify(destinatario ? { destinatario } : {}),
+      body: JSON.stringify(payload),
     },
   );
 }

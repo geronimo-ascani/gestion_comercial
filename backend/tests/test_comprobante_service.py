@@ -191,13 +191,17 @@ class FakeComprobanteRepository:
     def actualizar_saldo_pedido(self, _id_pedido, saldo):
         self.pedido_saldo = saldo
 
-    def registrar_envio(self, id_comprobante, destinatario, estado, error):
+    def registrar_envio(
+        self, id_comprobante, destinatario, estado, error, cc=None, bcc=None
+    ):
         self.envios = getattr(self, "envios", [])
         id_envio = len(self.envios) + 1
         self.envios.append(
             {
                 "id_envio": id_envio,
                 "destinatario": destinatario,
+                "cc": list(cc or []),
+                "bcc": list(bcc or []),
                 "estado": estado,
                 "error": error,
                 "enviado_en": datetime.now(timezone.utc),
@@ -470,6 +474,48 @@ def test_enviar_usa_destinatario_explicito() -> None:
 
     assert envio["destinatario"] == "otro@example.com"
     assert email.enviados[0]["destinatario"] == "otro@example.com"
+
+
+def test_enviar_reenvia_copias_y_las_registra() -> None:
+    email = FakeEmailService()
+    service, _pagos, repo, _pago_repo = _services(email=email)
+    comprobante = service.emitir(
+        "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
+    )
+
+    envio = service.enviar(
+        comprobante["id_comprobante_venta"],
+        "otro@example.com",
+        ["cc1@example.com", "cc2@example.com"],
+        ["bcc@example.com"],
+    )
+
+    assert envio["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert envio["bcc"] == ["bcc@example.com"]
+    assert email.enviados[0]["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert email.enviados[0]["bcc"] == ["bcc@example.com"]
+    assert repo.envios[0]["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert repo.envios[0]["bcc"] == ["bcc@example.com"]
+
+
+def test_enviar_registra_copias_en_intento_fallido() -> None:
+    email = FakeEmailService(error=ErrorEnvioEmail("timeout"))
+    service, _pagos, repo, _pago_repo = _services(email=email)
+    comprobante = service.emitir(
+        "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
+    )
+
+    with pytest.raises(ComprobanteEnvioFallido):
+        service.enviar(
+            comprobante["id_comprobante_venta"],
+            None,
+            ["cc@example.com"],
+            ["bcc@example.com"],
+        )
+
+    assert repo.envios[0]["estado"] == "fallido"
+    assert repo.envios[0]["cc"] == ["cc@example.com"]
+    assert repo.envios[0]["bcc"] == ["bcc@example.com"]
 
 
 def test_enviar_sin_destinatario_es_invalido() -> None:

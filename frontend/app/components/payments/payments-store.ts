@@ -7,6 +7,7 @@ import {
   listPagos,
   registrarPago as registrarPagoApi,
   type EnvioApi,
+  type EnvioComprobantePayload,
   type PagoPayload,
 } from "./payments-api";
 import type { Invoice, PaymentTransaction } from "./payments-types";
@@ -119,7 +120,7 @@ export async function registrarPago(
 
 export async function enviarComprobante(
   idComprobante: string,
-  destinatario?: string
+  payload: EnvioComprobantePayload = {}
 ): Promise<EnvioApi> {
-  return enviarComprobanteApi(idComprobante, destinatario);
+  return enviarComprobanteApi(idComprobante, payload);
 }

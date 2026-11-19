@@ -58,6 +58,8 @@ class PagoListadoRead(PagoRead):
 class ComprobanteEnvioRead(SchemaBase):
     id_envio: int
     destinatario: str
+    cc: list[str] = Field(default_factory=list)
+    bcc: list[str] = Field(default_factory=list)
     estado: Literal["enviado", "fallido"]
     error: str | None
     enviado_en: datetime

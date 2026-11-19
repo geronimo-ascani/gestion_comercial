@@ -300,17 +300,26 @@ class ComprobanteRepository:
         destinatario: str,
         estado: str,
         error: str | None,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> int:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 INSERT INTO comprobante_envio (
-                    id_comprobante_venta, destinatario, estado, error
+                    id_comprobante_venta, destinatario, estado, error, cc, bcc
                 )
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s::text[], %s::text[])
                 RETURNING id_envio
                 """,
-                (id_comprobante_venta, destinatario, estado, error),
+                (
+                    id_comprobante_venta,
+                    destinatario,
+                    estado,
+                    error,
+                    list(cc or []),
+                    list(bcc or []),
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -320,8 +329,8 @@ class ComprobanteRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT ce.id_envio, ce.destinatario, ce.estado, ce.error,
-                       ce.enviado_en
+                SELECT ce.id_envio, ce.destinatario, ce.cc, ce.bcc,
+                       ce.estado, ce.error, ce.enviado_en
                 FROM comprobante_envio ce
                 JOIN comprobante_venta cv
                   ON cv.id_comprobante_venta = ce.id_comprobante_venta
@@ -335,8 +344,8 @@ class ComprobanteRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT ce.id_envio, ce.destinatario, ce.estado, ce.error,
-                       ce.enviado_en
+                SELECT ce.id_envio, ce.destinatario, ce.cc, ce.bcc,
+                       ce.estado, ce.error, ce.enviado_en
                 FROM comprobante_envio ce
                 JOIN comprobante_venta cv
                   ON cv.id_comprobante_venta = ce.id_comprobante_venta

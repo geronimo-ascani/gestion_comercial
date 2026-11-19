@@ -120,6 +120,8 @@ class ComprobanteService:
         self,
         id_comprobante_venta: str,
         destinatario: str | None = None,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> dict[str, Any]:
         comprobante = self.obtener(id_comprobante_venta)
         destino = (destinatario or comprobante["cliente"]["email"] or "").strip()
@@ -128,6 +130,8 @@ class ComprobanteService:
                 "El cliente no tiene un correo configurado. "
                 "Indicá un destinatario para enviar el comprobante"
             )
+        copias = list(cc or [])
+        copias_ocultas = list(bcc or [])
 
         try:
             pdf = generar_pdf_comprobante(comprobante)
@@ -151,20 +155,37 @@ class ComprobanteService:
                         contenido=pdf,
                     )
                 ],
+                cc=copias,
+                bcc=copias_ocultas,
             )
         except EmailNoConfigurado as exc:
             self._registrar_envio(
-                id_comprobante_venta, destino, "fallido", str(exc)
+                id_comprobante_venta,
+                destino,
+                "fallido",
+                str(exc),
+                copias,
+                copias_ocultas,
             )
             raise ComprobanteEnvioNoConfigurado(str(exc)) from exc
         except EmailError as exc:
             self._registrar_envio(
-                id_comprobante_venta, destino, "fallido", str(exc)
+                id_comprobante_venta,
+                destino,
+                "fallido",
+                str(exc),
+                copias,
+                copias_ocultas,
             )
             raise ComprobanteEnvioFallido(str(exc)) from exc
 
         id_envio = self._registrar_envio(
-            id_comprobante_venta, destino, "enviado", None
+            id_comprobante_venta,
+            destino,
+            "enviado",
+            None,
+            copias,
+            copias_ocultas,
         )
         envio = self._repo.obtener_envio(id_envio)
         if envio is None:
@@ -179,10 +200,12 @@ class ComprobanteService:
         destinatario: str,
         estado: str,
         error: str | None,
+        cc: list[str],
+        bcc: list[str],
     ) -> int:
         with self._repo.transaction():
             return self._repo.registrar_envio(
-                id_comprobante_venta, destinatario, estado, error
+                id_comprobante_venta, destinatario, estado, error, cc, bcc
             )
 
     def _email_service(self) -> EmailService:

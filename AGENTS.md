@@ -15,7 +15,8 @@
 - Apply database migrations in order:
   `001_schema_completo.sql`, `002_auth_recovery.sql`,
   `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`,
-  `005_comprobantes_pagos.sql`, `006_multiempresa.sql`.
+  `005_comprobantes_pagos.sql`, `006_multiempresa.sql`,
+  `007_comprobante_envio_copias.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `python -m pytest -q` from `backend/`.
@@ -134,12 +135,23 @@
 - The backend generates the PDF with `fpdf2`. Sending by email attaches that
   PDF and records every attempt in `comprobante_envio` as `enviado` or
   `fallido`; a delivery failure is recorded before the API returns `502`.
+- `POST /ventas/comprobantes/{id}/envio` accepts `destinatario`, `cc` and `bcc`.
+  `destinatario` is optional and defaults to the customer's email; each copy
+  list allows at most 5 addresses. Addresses are normalized and duplicated
+  addresses are removed, including any copy equal to the main recipient. The
+  email sets `To`, `Cc` and `Bcc`. Every attempt, successful or failed, stores
+  the recipient and the copy lists in `comprobante_envio`, which is also
+  returned by `GET /ventas/comprobantes/{id}/envios`. Invalid emails or more
+  than 5 copies return `422`. The UI opens a reusable dialog on both Payments
+  and the sales-order detail to edit these addresses before sending.
 - Payment methods are per-company catalog rows. Only administrators create them
   through `POST /medios-pago`; administrators and sales register payments and
   send comprobantes.
 - Migration `005_comprobantes_pagos.sql` adds `empresa`,
   `comprobante_secuencia`, `comprobante_envio`, the new comprobante columns,
-  and `pago.creado_en`.
+  and `pago.creado_en`. Migration `007_comprobante_envio_copias.sql` adds the
+  `cc` and `bcc` columns to `comprobante_envio` (empty arrays for existing
+  rows).
 
 ### Sales budgets
 

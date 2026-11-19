@@ -250,11 +250,14 @@ def enviar_comprobante(
     _: Usuario,
     datos: ComprobanteEnvioInput | None = None,
 ) -> ComprobanteEnvioRead:
+    solicitud = datos or ComprobanteEnvioInput()
     try:
         return ComprobanteEnvioRead.model_validate(
             service.enviar(
                 id_comprobante_venta,
-                (datos or ComprobanteEnvioInput()).destinatario,
+                solicitud.destinatario,
+                solicitud.cc,
+                solicitud.bcc,
             )
         )
     except ComprobanteError as exc:

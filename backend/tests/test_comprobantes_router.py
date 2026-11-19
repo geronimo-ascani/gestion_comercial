@@ -96,6 +96,7 @@ _COMPROBANTE = {
     "empresa_razon_social": "Empresa de prueba",
     "cliente_nombre": "Cliente",
     "cliente_apellido": "Prueba",
+    "cliente_email": "cliente@example.com",
     "empresa": _EMPRESA,
     "cliente": _CLIENTE,
     "items": [_ITEM],
@@ -117,6 +118,7 @@ _RESUMEN = {
         "id_pedido_cliente",
         "cliente_nombre",
         "cliente_apellido",
+        "cliente_email",
         "id_empresa",
         "empresa_razon_social",
     )
@@ -136,10 +138,12 @@ class FakeComprobanteService:
     def listar(self, _estado, _q, _limit, _offset):
         return [_RESUMEN]
 
-    def enviar(self, _id_comprobante, destinatario=None):
+    def enviar(self, _id_comprobante, destinatario=None, cc=None, bcc=None):
         return {
             "id_envio": 1,
             "destinatario": destinatario or "cliente@example.com",
+            "cc": list(cc or []),
+            "bcc": list(bcc or []),
             "estado": "enviado",
             "error": None,
             "enviado_en": datetime(2026, 11, 18, tzinfo=timezone.utc),
@@ -189,12 +193,12 @@ class PagoInvalidoService(FakePagoService):
 
 
 class EnvioNoConfiguradoService(FakeComprobanteService):
-    def enviar(self, _id_comprobante, destinatario=None):
+    def enviar(self, _id_comprobante, destinatario=None, cc=None, bcc=None):
         raise ComprobanteEnvioNoConfigurado("sin smtp")
 
 
 class EnvioFallidoService(FakeComprobanteService):
-    def enviar(self, _id_comprobante, destinatario=None):
+    def enviar(self, _id_comprobante, destinatario=None, cc=None, bcc=None):
         raise ComprobanteEnvioFallido("timeout")
 
 
@@ -298,6 +302,63 @@ def test_send_comprobante_returns_envio() -> None:
     assert response.status_code == 200
     assert response.json()["estado"] == "enviado"
     assert response.json()["destinatario"] == "otro@example.com"
+
+
+def test_send_comprobante_with_cc_and_bcc() -> None:
+    with _client("ventas") as client:
+        response = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/envio",
+            json={
+                "destinatario": "otro@example.com",
+                "cc": ["cc1@example.com", "cc2@example.com"],
+                "bcc": ["bcc1@example.com"],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert response.json()["bcc"] == ["bcc1@example.com"]
+
+
+def test_send_comprobante_normaliza_y_deduplica_copias() -> None:
+    with _client("ventas") as client:
+        response = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/envio",
+            json={
+                "destinatario": "Cliente@Example.com",
+                "cc": [
+                    "cliente@example.com",
+                    "CC@Example.com",
+                    "otro@example.com",
+                ],
+                "bcc": ["cc@example.com", "BCC@example.com"],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["destinatario"] == "cliente@example.com"
+    assert response.json()["cc"] == ["cc@example.com", "otro@example.com"]
+    assert response.json()["bcc"] == ["bcc@example.com"]
+
+
+def test_send_comprobante_rechaza_email_invalido() -> None:
+    with _client("ventas") as client:
+        response = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/envio",
+            json={"cc": ["no-es-un-email"]},
+        )
+
+    assert response.status_code == 422
+
+
+def test_send_comprobante_rechaza_mas_de_cinco_copias() -> None:
+    with _client("ventas") as client:
+        response = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/envio",
+            json={"bcc": [f"copia{indice}@example.com" for indice in range(6)]},
+        )
+
+    assert response.status_code == 422
 
 
 def test_send_without_smtp_is_conflict() -> None:

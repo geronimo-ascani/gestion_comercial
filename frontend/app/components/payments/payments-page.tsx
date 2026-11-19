@@ -4,7 +4,6 @@ import {
   Clock,
   Download,
   FileText,
-  Loader2,
   Plus,
   Search,
   Send,
@@ -47,7 +46,6 @@ import { compareByDateDesc } from "~/lib/utils";
 import { useCurrentUser } from "../auth/session-store";
 import type { Invoice, PaymentTransaction } from "./payments-types";
 import {
-  enviarComprobante,
   loadPayments,
   useInvoices,
   usePayments,
@@ -60,6 +58,7 @@ import {
   PaymentStatusBadge,
 } from "./payments-views";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { SendInvoiceDialog } from "./send-invoice-dialog";
 
 type PaymentTab = "cobros" | "reportes";
 
@@ -106,7 +105,8 @@ export function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState("all");
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [sendBusyId, setSendBusyId] = useState<string | null>(null);
+  const [sendTarget, setSendTarget] = useState<Invoice | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query);
@@ -209,26 +209,17 @@ export function PaymentsPage() {
     setPaymentOpen(true);
   }
 
-  async function handleSend(invoice: Invoice) {
-    setSendBusyId(invoice.id);
+  function openSend(invoice: Invoice) {
     setFeedback(null);
-    try {
-      await enviarComprobante(invoice.id);
-      setFeedback({
-        type: "success",
-        text: `Comprobante ${invoice.number} enviado por correo.`,
-      });
-    } catch (error) {
-      setFeedback({
-        type: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : "No se pudo enviar el comprobante.",
-      });
-    } finally {
-      setSendBusyId(null);
-    }
+    setSendTarget(invoice);
+    setSendOpen(true);
+  }
+
+  function handleSent() {
+    setFeedback({
+      type: "success",
+      text: `Comprobante ${sendTarget?.number ?? ""} enviado por correo.`.trim(),
+    });
   }
 
   async function retryLoad() {
@@ -401,9 +392,8 @@ export function PaymentsPage() {
               ) : (
                 <InvoicesTable
                   invoices={filteredInvoices}
-                  sendBusyId={sendBusyId}
                   onRecordPayment={openPayment}
-                  onSend={handleSend}
+                  onSend={openSend}
                 />
               )}
             </CardContent>
@@ -494,18 +484,23 @@ export function PaymentsPage() {
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
       />
+
+      <SendInvoiceDialog
+        invoice={sendTarget}
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        onSent={handleSent}
+      />
     </div>
   );
 }
 
 function InvoicesTable({
   invoices,
-  sendBusyId,
   onRecordPayment,
   onSend,
 }: {
   invoices: Invoice[];
-  sendBusyId: string | null;
   onRecordPayment: (invoice: Invoice) => void;
   onSend: (invoice: Invoice) => void;
 }) {
@@ -575,14 +570,9 @@ function InvoicesTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={sendBusyId === invoice.id}
                     onClick={() => onSend(invoice)}
                   >
-                    {sendBusyId === invoice.id ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Send />
-                    )}
+                    <Send />
                     Enviar
                   </Button>
                 </div>
