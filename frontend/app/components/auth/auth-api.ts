@@ -10,6 +10,8 @@ export interface UsuarioApi {
   fecha_ingreso: string;
   fecha_modificacion: string | null;
   id_empleado: string;
+  id_empresa: string;
+  empresa_razon_social?: string;
   nombre: string;
   puesto: string;
   rol: EmployeeRole;
@@ -49,6 +51,8 @@ export type EmployeeUpdatePayload = Partial<
 export function mapUsuario(usuario: UsuarioApi): Employee {
   return {
     id: usuario.id_empleado,
+    idEmpresa: usuario.id_empresa,
+    empresaRazonSocial: usuario.empresa_razon_social ?? "",
     firstName: usuario.nombre,
     lastName: usuario.apellido,
     cuil: usuario.dni_cuil,

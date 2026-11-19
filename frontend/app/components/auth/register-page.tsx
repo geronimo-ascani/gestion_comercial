@@ -109,7 +109,7 @@ export function RegisterPage() {
       if (response.access_token) {
         const user = mapUsuario(response.user);
         acceptRegisteredSession(response.access_token, user);
-        navigate(defaultRouteForRole(user.role));
+        navigate("/company");
       } else {
         await refreshEmployees();
         navigate("/employees");
@@ -145,7 +145,7 @@ export function RegisterPage() {
       subtitle={
         creatingEmployee
           ? "El empleado podrá iniciar sesión con estas credenciales."
-          : "El primer registro será el administrador de la organización."
+          : "Creá tu cuenta y tu empresa. Después vas a poder completar los datos fiscales."
       }
       footer={
         creatingEmployee ? (

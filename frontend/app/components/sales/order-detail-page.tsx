@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, User } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Loader2,
+  Send,
+  User,
+  Wallet,
+} from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { cn } from "~/lib/utils";
@@ -51,6 +58,15 @@ import {
 import { OrderStatusBadge } from "./sales-views";
 import { useCurrentUser } from "../auth/session-store";
 import { invalidateProducts } from "../products/products-store";
+import {
+  emitirComprobante,
+  enviarComprobante,
+  loadPayments,
+  useInvoiceForOrder,
+} from "../payments/payments-store";
+import type { Invoice } from "../payments/payments-types";
+import { InvoiceStatusBadge } from "../payments/payments-views";
+import { RecordPaymentDialog } from "../payments/record-payment-dialog";
 
 const nextOrderStatus: Partial<
   Record<OrderStatus, "proceso" | "enviado" | "entregado">
@@ -69,7 +85,12 @@ export function OrderDetailPage() {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [paymentsReady, setPaymentsReady] = useState(false);
   const order = orders.find((item) => item.number === number);
+  const invoice = useInvoiceForOrder(number);
   const canManage = ["administrador", "ventas"].includes(
     currentUser?.role ?? "",
   );
@@ -101,6 +122,27 @@ export function OrderDetailPage() {
     };
   }, [number]);
 
+  useEffect(() => {
+    let active = true;
+    void loadPayments()
+      .catch((error: unknown) => {
+        if (active) {
+          setInvoiceError(
+            error instanceof Error
+              ? error.message
+              : "No se pudo cargar el comprobante.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setPaymentsReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function handleAdvance(next: "proceso" | "enviado" | "entregado") {
     if (!order) return;
     setSaving(true);
@@ -130,6 +172,40 @@ export function OrderDetailPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleEmitInvoice() {
+    if (!order) return;
+    setInvoiceBusy(true);
+    setInvoiceError(null);
+    try {
+      await emitirComprobante(order.number);
+    } catch (error) {
+      setInvoiceError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo emitir el comprobante.",
+      );
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+
+  async function handleSendInvoice() {
+    if (!invoice) return;
+    setInvoiceBusy(true);
+    setInvoiceError(null);
+    try {
+      await enviarComprobante(invoice.id);
+    } catch (error) {
+      setInvoiceError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar el comprobante.",
+      );
+    } finally {
+      setInvoiceBusy(false);
     }
   }
 
@@ -197,6 +273,17 @@ export function OrderDetailPage() {
           <CustomerDetailsCard order={order} />
           <OrderItemsCard order={order} />
           <OrderSummaryCard order={order} />
+          <OrderInvoiceCard
+            order={order}
+            invoice={invoice}
+            loading={!paymentsReady}
+            busy={invoiceBusy}
+            error={invoiceError}
+            canManage={canManage}
+            onEmit={() => void handleEmitInvoice()}
+            onSend={() => void handleSendInvoice()}
+            onRecordPayment={() => setPaymentOpen(true)}
+          />
           <OrderTimelineCard
             order={order}
             canManage={canManage}
@@ -232,6 +319,11 @@ export function OrderDetailPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <RecordPaymentDialog
+            invoice={invoice}
+            open={paymentOpen}
+            onOpenChange={setPaymentOpen}
+          />
         </div>
       )}
     </div>
@@ -559,6 +651,98 @@ function OrderSummaryCard({ order }: { order: SalesOrder }) {
           <span className="font-semibold">Total</span>
           <span className="text-xl font-bold">{order.total}</span>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrderInvoiceCard({
+  order,
+  invoice,
+  loading,
+  busy,
+  error,
+  canManage,
+  onEmit,
+  onSend,
+  onRecordPayment,
+}: {
+  order: SalesOrder;
+  invoice: Invoice | null;
+  loading: boolean;
+  busy: boolean;
+  error: string | null;
+  canManage: boolean;
+  onEmit: () => void;
+  onSend: () => void;
+  onRecordPayment: () => void;
+}) {
+  const canEmit = order.status !== "cancelado";
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
+          Comprobante
+        </CardTitle>
+        {invoice && <InvoiceStatusBadge status={invoice.status} />}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Cargando comprobante…</p>
+        ) : invoice ? (
+          <>
+            <dl className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailRow label="Número" value={invoice.number} />
+              <DetailRow label="Tipo" value={`Tipo ${invoice.type}`} />
+              <DetailRow label="Fecha de emisión" value={invoice.date} />
+              <DetailRow label="Total" value={formatMoney(invoice.amount)} />
+              <DetailRow label="Cobrado" value={formatMoney(invoice.paidAmount)} />
+              <DetailRow label="Saldo pendiente" value={formatMoney(invoice.balance)} />
+            </dl>
+            {canManage && (
+              <div className="flex flex-wrap gap-2">
+                {invoice.balance > 0 && invoice.status !== "rechazada" && (
+                  <Button variant="outline" disabled={busy} onClick={onRecordPayment}>
+                    <Wallet />
+                    Registrar cobro
+                  </Button>
+                )}
+                <Button variant="outline" disabled={busy} onClick={onSend}>
+                  {busy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send />
+                  )}
+                  Enviar por email
+                </Button>
+              </div>
+            )}
+          </>
+        ) : canEmit ? (
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Todavía no se emitió el comprobante de este pedido.
+            </p>
+            {canManage && (
+              <Button disabled={busy} onClick={onEmit}>
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                Emitir comprobante
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No se puede emitir el comprobante de un pedido cancelado.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

@@ -49,21 +49,45 @@ describe("permissions", () => {
     expect(canAccessRoute("abastecimiento", "/customers")).toBe(false);
   });
 
-  it("mantiene analíticas y catálogo para los tres roles", () => {
+  it("mantiene analíticas, catálogo y mi empresa para los tres roles", () => {
     for (const role of ROLES) {
       expect(canAccessRoute(role, "/analytics")).toBe(true);
       expect(canAccessRoute(role, "/products")).toBe(true);
+      expect(canAccessRoute(role, "/company")).toBe(true);
     }
+  });
+
+  it("permite cobrar a ventas pero reserva los medios de pago al administrador", () => {
+    expect(canAccessRoute("ventas", "/payments")).toBe(true);
+    expect(canAccessRoute("administrador", "/payments")).toBe(true);
+    expect(canAccessRoute("abastecimiento", "/payments")).toBe(false);
+
+    expect(canAccessRoute("administrador", "/payments/new-method")).toBe(true);
+    expect(canAccessRoute("ventas", "/payments/new-method")).toBe(false);
+    expect(canAccessRoute("abastecimiento", "/payments/new-method")).toBe(false);
   });
 
   it("filtra la navegación lateral según el rol", () => {
     expect(
       navItemsForRole(navItems, "ventas").map((item) => item.to)
-    ).toEqual(["/products", "/sales", "/customers", "/payments", "/analytics"]);
+    ).toEqual([
+      "/products",
+      "/sales",
+      "/customers",
+      "/payments",
+      "/analytics",
+      "/company",
+    ]);
 
     expect(
       navItemsForRole(navItems, "abastecimiento").map((item) => item.to)
-    ).toEqual(["/products", "/purchases", "/providers", "/analytics"]);
+    ).toEqual([
+      "/products",
+      "/purchases",
+      "/providers",
+      "/analytics",
+      "/company",
+    ]);
 
     expect(navItemsForRole(navItems, "administrador")).toHaveLength(
       navItems.length

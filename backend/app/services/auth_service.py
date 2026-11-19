@@ -1,8 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import token_urlsafe
-from smtplib import SMTP, SMTPException, SMTP_SSL
-from email.message import EmailMessage
 from typing import Any
 
 import jwt
@@ -13,9 +11,13 @@ from psycopg import errors
 from app.core.config import Settings, get_settings
 from app.repositories.auth_repository import (
     AuthRepository,
-    RegistroCerrado,
     RegistroDuplicado,
-    RegistroNoAutorizado,
+)
+from app.repositories.empresa_repository import EmpresaRepository
+from app.services.email_service import (
+    EmailNoConfigurado as EmailNoConfiguradoBase,
+    EmailService,
+    ErrorEnvioEmail as ErrorEnvioEmailBase,
 )
 
 _password_hash = PasswordHash.recommended()
@@ -66,10 +68,21 @@ class ErrorEnvioEmail(AuthError):
     pass
 
 
+def _razon_social_inicial(nombre: str, apellido: str) -> str:
+    return f"Empresa de {nombre} {apellido}".strip()[:160]
+
+
 class AuthService:
-    def __init__(self, repo: AuthRepository, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        repo: AuthRepository,
+        settings: Settings | None = None,
+        empresa_repo: EmpresaRepository | None = None,
+    ) -> None:
         self._repo = repo
         self._settings = settings or get_settings()
+        self._email = EmailService(self._settings)
+        self._empresas = empresa_repo
 
     def autenticar(self, email: str, password: SecretStr) -> tuple[str, dict[str, Any]]:
         usuario = self._repo.buscar_por_email(email)
@@ -83,35 +96,83 @@ class AuthService:
             raise CredencialesInvalidas
         return self._crear_token(usuario["id_empleado"]), self._usuario_publico(usuario)
 
-    def registrar(
-        self,
-        datos: dict[str, Any],
-        administrador_id: str | None,
-    ) -> tuple[str | None, dict[str, Any]]:
+    def registrar_publico(
+        self, datos: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]]:
+        """Registra un administrador y su empresa.
+
+        El primer usuario del sistema se asigna a la empresa inicial existente;
+        los siguientes obtienen una empresa nueva y aislada.
+        """
+        if self._empresas is None:
+            raise RegistroBloqueado("No se puede crear la empresa")
         try:
-            usuario, primer_usuario = self._repo.registrar(
-                datos,
-                _password_hash.hash(datos["password"].get_secret_value()),
-                administrador_id,
-            )
-        except RegistroCerrado as exc:
-            raise RegistroBloqueado from exc
-        except RegistroNoAutorizado as exc:
-            raise RegistroBloqueado from exc
+            with self._repo.transaction():
+                self._repo.bloquear_registro()
+                hay_usuarios = self._repo.contar() > 0
+                if hay_usuarios:
+                    id_empresa = self._empresas.crear_placeholder(
+                        _razon_social_inicial(
+                            datos["nombre"], datos["apellido"]
+                        )
+                    )
+                else:
+                    primera = self._empresas.obtener_primera()
+                    id_empresa = (
+                        primera["id_empresa"]
+                        if primera is not None
+                        else self._empresas.crear_placeholder(
+                            _razon_social_inicial(
+                                datos["nombre"], datos["apellido"]
+                            )
+                        )
+                    )
+                usuario = self._repo.registrar(
+                    datos,
+                    _password_hash.hash(
+                        datos["password"].get_secret_value()
+                    ),
+                    id_empresa,
+                    "administrador",
+                )
         except (RegistroDuplicado, errors.UniqueViolation) as exc:
             raise AuthDatosDuplicados from exc
-        token = self._crear_token(usuario["id_empleado"]) if primer_usuario else None
-        return token, usuario
+        return self._crear_token(usuario["id_empleado"]), self._usuario_publico(
+            usuario
+        )
+
+    def registrar_empleado(
+        self, datos: dict[str, Any], id_empresa: str
+    ) -> dict[str, Any]:
+        try:
+            usuario = self._repo.registrar(
+                datos,
+                _password_hash.hash(datos["password"].get_secret_value()),
+                id_empresa,
+                datos["rol"],
+            )
+        except (RegistroDuplicado, errors.UniqueViolation) as exc:
+            raise AuthDatosDuplicados from exc
+        return self._usuario_publico(usuario)
 
     def obtener_usuario(self, id_empleado: str) -> dict[str, Any] | None:
         usuario = self._repo.obtener(id_empleado)
         return self._usuario_publico(usuario) if usuario else None
 
-    def listar_usuarios(self) -> list[dict[str, Any]]:
-        return [self._usuario_publico(row) for row in self._repo.listar()]
+    def obtener_empleado(
+        self, id_empleado: str, id_empresa: str
+    ) -> dict[str, Any] | None:
+        usuario = self._repo.obtener_de_empresa(id_empleado, id_empresa)
+        return self._usuario_publico(usuario) if usuario else None
+
+    def listar_usuarios(self, id_empresa: str) -> list[dict[str, Any]]:
+        return [
+            self._usuario_publico(row)
+            for row in self._repo.listar(id_empresa)
+        ]
 
     def actualizar_usuario(
-        self, id_empleado: str, datos: dict[str, Any]
+        self, id_empleado: str, datos: dict[str, Any], id_empresa: str
     ) -> dict[str, Any]:
         cambios = {
             campo: valor
@@ -121,7 +182,7 @@ class AuthService:
         if not cambios:
             raise EmpleadoSinCambios
         try:
-            empleado = self._repo.actualizar(id_empleado, cambios)
+            empleado = self._repo.actualizar(id_empleado, cambios, id_empresa)
         except (RegistroDuplicado, errors.UniqueViolation) as exc:
             raise AuthDatosDuplicados from exc
         if empleado is None:
@@ -129,18 +190,19 @@ class AuthService:
         return self._usuario_publico(empleado)
 
     def actualizar_contrasena_empleado(
-        self, id_empleado: str, password: SecretStr
+        self, id_empleado: str, password: SecretStr, id_empresa: str
     ) -> None:
         actualizado = self._repo.actualizar_contrasena(
             id_empleado,
             _password_hash.hash(password.get_secret_value()),
+            id_empresa,
         )
         if not actualizado:
             raise EmpleadoNoEncontrado(id_empleado)
 
-    def eliminar_usuario(self, id_empleado: str) -> None:
+    def eliminar_usuario(self, id_empleado: str, id_empresa: str) -> None:
         try:
-            eliminado = self._repo.eliminar(id_empleado)
+            eliminado = self._repo.eliminar(id_empleado, id_empresa)
         except (errors.ForeignKeyViolation, errors.RestrictViolation) as exc:
             raise EmpleadoEnUso(id_empleado) from exc
         if not eliminado:
@@ -181,7 +243,7 @@ class AuthService:
         )
 
     def solicitar_recuperacion(self, email: str) -> None:
-        if not self._settings.smtp_host or not self._settings.smtp_sender:
+        if not self._email.configurado:
             raise EmailNoConfigurado
 
         usuario = self._repo.buscar_por_email(email)
@@ -200,35 +262,23 @@ class AuthService:
             f"{self._settings.frontend_base_url.rstrip('/')}"
             f"/reset-password?token={token}"
         )
-        mensaje = EmailMessage()
-        mensaje["Subject"] = "Restablecer contraseña"
-        mensaje["From"] = self._settings.smtp_sender
-        mensaje["To"] = usuario["email"]
-        mensaje.set_content(
-            "Recibimos una solicitud para restablecer tu contraseña.\n\n"
-            f"Usá este enlace dentro de "
-            f"{self._settings.password_reset_token_minutes} minutos:\n{url}\n\n"
-            "Si no solicitaste el cambio, ignorá este correo."
-        )
 
         try:
-            smtp_class = SMTP_SSL if self._settings.smtp_use_ssl else SMTP
-            with smtp_class(
-                self._settings.smtp_host,
-                self._settings.smtp_port,
-                timeout=10,
-            ) as smtp:
-                if (
-                    not self._settings.smtp_use_ssl
-                    and self._settings.smtp_starttls
-                ):
-                    smtp.starttls()
-                username = self._settings.smtp_username
-                password = self._settings.smtp_password
-                if username and password:
-                    smtp.login(username, password.get_secret_value())
-                smtp.send_message(mensaje)
-        except (OSError, SMTPException) as exc:
+            self._email.enviar(
+                destinatario=usuario["email"],
+                asunto="Restablecer contraseña",
+                cuerpo=(
+                    "Recibimos una solicitud para restablecer tu contraseña.\n\n"
+                    f"Usá este enlace dentro de "
+                    f"{self._settings.password_reset_token_minutes} minutos:"
+                    f"\n{url}\n\n"
+                    "Si no solicitaste el cambio, ignorá este correo."
+                ),
+            )
+        except EmailNoConfiguradoBase as exc:
+            self._repo.invalidar_token_recuperacion(token_hash)
+            raise EmailNoConfigurado from exc
+        except ErrorEnvioEmailBase as exc:
             self._repo.invalidar_token_recuperacion(token_hash)
             raise ErrorEnvioEmail from exc
 

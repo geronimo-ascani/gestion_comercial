@@ -46,8 +46,9 @@ JOIN producto p ON p.id_producto = d.id_producto
 
 
 class PedidoVentaRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -55,8 +56,13 @@ class PedidoVentaRepository:
     def cliente_existe(self, id_cliente: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "SELECT EXISTS (SELECT 1 FROM cliente WHERE id_cliente = %s) AS existe",
-                (id_cliente,),
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM cliente
+                    WHERE id_cliente = %s AND id_empresa = %s
+                ) AS existe
+                """,
+                (id_cliente, self._id_empresa),
             )
             row = cur.fetchone()
             return bool(row and row["existe"])
@@ -66,20 +72,21 @@ class PedidoVentaRepository:
             cur.execute(
                 """
                 INSERT INTO pedido_cliente (
-                    descuento_compra, entrega_altura, entrega_calle, entrega_cp,
-                    entrega_depto, entrega_localidad, entrega_provincia,
-                    estado_envio, saldo_pendiente, total, id_cliente,
-                    id_presupuesto_cliente
+                    id_empresa, descuento_compra, entrega_altura, entrega_calle,
+                    entrega_cp, entrega_depto, entrega_localidad,
+                    entrega_provincia, estado_envio, saldo_pendiente, total,
+                    id_cliente, id_presupuesto_cliente
                 )
                 VALUES (
-                    %(descuento_compra)s, %(entrega_altura)s, %(entrega_calle)s,
-                    %(entrega_cp)s, %(entrega_depto)s, %(entrega_localidad)s,
-                    %(entrega_provincia)s, 'pendiente', %(saldo_pendiente)s,
-                    %(total)s, %(id_cliente)s, %(id_presupuesto_cliente)s
+                    %(id_empresa)s, %(descuento_compra)s, %(entrega_altura)s,
+                    %(entrega_calle)s, %(entrega_cp)s, %(entrega_depto)s,
+                    %(entrega_localidad)s, %(entrega_provincia)s, 'pendiente',
+                    %(saldo_pendiente)s, %(total)s, %(id_cliente)s,
+                    %(id_presupuesto_cliente)s
                 )
                 RETURNING id_pedido_cliente
                 """,
-                datos,
+                {**datos, "id_empresa": self._id_empresa},
             )
             row = cur.fetchone()
             assert row is not None
@@ -117,10 +124,16 @@ class PedidoVentaRepository:
             cur.execute(
                 """
                 SELECT id_producto, iva, neto, precio_unitario, tipo_iva
-                FROM detalle_presupuesto_cliente
+                FROM detalle_presupuesto_cliente d
                 WHERE id_presupuesto_cliente = %s
+                  AND EXISTS (
+                      SELECT 1 FROM presupuesto_cliente p
+                      WHERE p.id_presupuesto_cliente =
+                            d.id_presupuesto_cliente
+                        AND p.id_empresa = %s
+                  )
                 """,
-                (id_presupuesto_cliente,),
+                (id_presupuesto_cliente, self._id_empresa),
             )
             return cur.fetchall()
 
@@ -146,8 +159,13 @@ class PedidoVentaRepository:
                     id_cliente = %(id_cliente)s,
                     id_presupuesto_cliente = %(id_presupuesto_cliente)s
                 WHERE id_pedido_cliente = %(id_pedido_cliente)s
+                  AND id_empresa = %(id_empresa)s
                 """,
-                {**datos, "id_pedido_cliente": id_pedido_cliente},
+                {
+                    **datos,
+                    "id_pedido_cliente": id_pedido_cliente,
+                    "id_empresa": self._id_empresa,
+                },
             )
             cur.execute(
                 "DELETE FROM detalle_pedido_cliente WHERE id_pedido_cliente = %s",
@@ -158,11 +176,11 @@ class PedidoVentaRepository:
     def obtener(
         self, id_pedido_cliente: str, bloquear: bool = False
     ) -> PedidoVentaRow | None:
-        query = f"{_SELECT_PEDIDO} WHERE pv.id_pedido_cliente = %s"
+        query = f"{_SELECT_PEDIDO} WHERE pv.id_pedido_cliente = %s AND pv.id_empresa = %s"
         if bloquear:
             query += " FOR UPDATE OF pv"
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(query, (id_pedido_cliente,))
+            cur.execute(query, (id_pedido_cliente, self._id_empresa))
             pedido = cur.fetchone()
         if pedido is None:
             return None
@@ -191,7 +209,8 @@ class PedidoVentaRepository:
             cur.execute(
                 f"""
                 {_SELECT_PEDIDO}
-                WHERE (%(estado)s::text IS NULL OR pv.estado_envio = %(estado)s)
+                WHERE pv.id_empresa = %(id_empresa)s
+                  AND (%(estado)s::text IS NULL OR pv.estado_envio = %(estado)s)
                   AND (
                       %(q)s::text IS NULL
                       OR pv.id_pedido_cliente ILIKE %(q)s
@@ -203,6 +222,7 @@ class PedidoVentaRepository:
                 LIMIT %(limit)s OFFSET %(offset)s
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "estado": estado_envio,
                     "q": pattern,
                     "limit": limit,
@@ -243,9 +263,15 @@ class PedidoVentaRepository:
                 UPDATE pedido_cliente
                 SET estado_envio = %s
                 WHERE id_pedido_cliente = %s AND estado_envio = %s
+                  AND id_empresa = %s
                 RETURNING id_pedido_cliente
                 """,
-                (estado_nuevo, id_pedido_cliente, estado_actual),
+                (
+                    estado_nuevo,
+                    id_pedido_cliente,
+                    estado_actual,
+                    self._id_empresa,
+                ),
             )
             return cur.fetchone() is not None
 
@@ -256,9 +282,10 @@ class PedidoVentaRepository:
                 UPDATE pedido_cliente
                 SET estado_envio = 'cancelado'
                 WHERE id_pedido_cliente = %s
+                  AND id_empresa = %s
                   AND estado_envio IN ('pendiente', 'proceso', 'enviado')
                 RETURNING id_pedido_cliente
                 """,
-                (id_pedido_cliente,),
+                (id_pedido_cliente, self._id_empresa),
             )
             return cur.fetchone() is not None

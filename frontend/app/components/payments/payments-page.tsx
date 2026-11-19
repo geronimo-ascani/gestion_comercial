@@ -1,5 +1,15 @@
-import { useMemo, useState } from "react";
-import { CheckCheck, Download, Pencil, Plus, Search, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  Clock,
+  Download,
+  FileText,
+  Loader2,
+  Plus,
+  Search,
+  Send,
+  Wallet,
+} from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -35,25 +45,28 @@ import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney } from "~/lib/currency";
 import { compareByDateDesc } from "~/lib/utils";
 import { useCurrentUser } from "../auth/session-store";
-import type { PaymentMethod, PaymentTransaction } from "./payments-types";
+import type { Invoice, PaymentTransaction } from "./payments-types";
 import {
-  getPaymentMethodLabel,
-  usePaymentMethods,
-} from "./payment-methods-store";
-import {
-  reconcilePayments,
+  enviarComprobante,
+  loadPayments,
   useInvoices,
   usePayments,
-  type ReconciliationSummary,
+  usePaymentsLoading,
 } from "./payments-store";
 import {
-  ConciliationBadge,
   InvoiceStatusBadge,
+  InvoiceTypeBadge,
   MethodBadge,
+  PaymentStatusBadge,
 } from "./payments-views";
-import { ReconcilePaymentDialog } from "./reconcile-payment-dialog";
+import { RecordPaymentDialog } from "./record-payment-dialog";
 
-type PaymentTab = "cobros" | "conciliacion" | "reportes";
+type PaymentTab = "cobros" | "reportes";
+
+interface Feedback {
+  type: "success" | "error";
+  text: string;
+}
 
 function downloadCsv(filename: string, rows: (string | number)[][]) {
   const csv = rows
@@ -77,88 +90,158 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 export function PaymentsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab");
   const user = useCurrentUser();
   const isAdmin = user?.role === "administrador";
-  const loading = useInitialLoading();
+  const initialLoading = useInitialLoading();
+  const storeLoading = usePaymentsLoading();
+  const loading = initialLoading || storeLoading;
   const invoices = useInvoices();
   const payments = usePayments();
-  const paymentMethods = usePaymentMethods();
 
+  const requestedTab = searchParams.get("tab");
   const activeTab: PaymentTab =
-    requestedTab === "conciliacion" && isAdmin
-      ? "conciliacion"
-      : requestedTab === "reportes" && isAdmin
-        ? "reportes"
-        : "cobros";
+    requestedTab === "reportes" ? "reportes" : "cobros";
 
   const [query, setQuery] = useState("");
-  const [methodFilter, setMethodFilter] = useState<"all" | PaymentMethod>("all");
-  const [conciliationFilter, setConciliationFilter] = useState<
-    "all" | "conciliado" | "pendiente"
-  >("all");
-  const [summary, setSummary] = useState<ReconciliationSummary | null>(null);
-  const [reconcileTarget, setReconcileTarget] =
-    useState<PaymentTransaction | null>(null);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [methodFilter, setMethodFilter] = useState("all");
+  const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [sendBusyId, setSendBusyId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query);
 
-  const filteredPayments = payments.filter((payment) => {
-    const haystack =
-      `${payment.id} ${payment.client} ${payment.invoiceNumber} ${payment.orderNumber} ${payment.gatewayReference ?? ""}`.toLowerCase();
-    const matchesQuery = haystack.includes(debouncedQuery.trim().toLowerCase());
-    const matchesMethod =
-      methodFilter === "all" || payment.method === methodFilter;
-    const matchesConciliation =
-      conciliationFilter === "all" ||
-      payment.conciliationStatus === conciliationFilter;
-    return matchesQuery && matchesMethod && matchesConciliation;
-  });
+  useEffect(() => {
+    void loadPayments().catch((error: unknown) => {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar los comprobantes y pagos."
+      );
+    });
+  }, []);
+
+  const normalizedQuery = debouncedQuery.trim().toLowerCase();
+
+  const filteredInvoices = useMemo(() => {
+    return [...invoices]
+      .filter((invoice) => {
+        if (!normalizedQuery) return true;
+        return `${invoice.number} ${invoice.type} ${invoice.orderNumber} ${invoice.client}`
+          .toLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort((a, b) => {
+        const dateDiff = compareByDateDesc(a.date, b.date);
+        if (dateDiff !== 0) return dateDiff;
+        return b.number.localeCompare(a.number);
+      });
+  }, [invoices, normalizedQuery]);
+
+  const methodOptions = useMemo(() => {
+    const entries = new Map<string, string>();
+    for (const payment of payments) {
+      entries.set(payment.method, payment.methodLabel);
+    }
+    return [...entries.entries()].map(([id, label]) => ({ id, label }));
+  }, [payments]);
+
+  const methodFilterItems = useMemo(() => {
+    const items: Record<string, string> = { all: "Todos" };
+    for (const method of methodOptions) {
+      items[method.id] = method.label;
+    }
+    return items;
+  }, [methodOptions]);
+
+  const filteredPayments = useMemo(() => {
+    return [...payments]
+      .filter((payment) => {
+        const haystack =
+          `${payment.id} ${payment.client} ${payment.invoiceNumber} ${payment.orderNumber} ${payment.reference ?? ""} ${payment.methodLabel}`.toLowerCase();
+        const matchesQuery =
+          !normalizedQuery || haystack.includes(normalizedQuery);
+        const matchesMethod =
+          methodFilter === "all" || payment.method === methodFilter;
+        return matchesQuery && matchesMethod;
+      })
+      .sort((a, b) => {
+        const dateDiff = compareByDateDesc(a.date, b.date);
+        if (dateDiff !== 0) return dateDiff;
+        return b.id.localeCompare(a.id);
+      });
+  }, [payments, normalizedQuery, methodFilter]);
 
   const totals = useMemo(() => {
     const collected = payments
       .filter((payment) => payment.status === "aprobado")
       .reduce((sum, payment) => sum + payment.amount, 0);
     const pending = invoices
-      .filter((invoice) => invoice.status !== "pagada")
-      .reduce((sum, invoice) => sum + invoice.amount, 0);
-    const byMethod = paymentMethods.map((method) => ({
-      method: method.id,
-      amount: payments
-        .filter(
-          (payment) =>
-            payment.status === "aprobado" && payment.method === method.id
-        )
-        .reduce((sum, payment) => sum + payment.amount, 0),
-    }));
-    return { collected, pending, byMethod };
-  }, [payments, invoices, paymentMethods]);
-
-  const pendingVirtual = payments.filter(
-    (payment) =>
-      payment.conciliationStatus === "pendiente" && payment.status === "aprobado"
-  );
-  const pendingInvoices = useMemo(() => {
-    return [...invoices]
-      .filter((invoice) => invoice.status === "emitida" || invoice.status === "aprobada")
-      .sort((a, b) => {
-        const dateDiff = compareByDateDesc(a.date, b.date);
-        if (dateDiff !== 0) return dateDiff;
-        return b.number.localeCompare(a.number);
-      });
-  }, [invoices]);
+      .filter((invoice) => invoice.status !== "rechazada")
+      .reduce((sum, invoice) => sum + invoice.balance, 0);
+    const byMethod = new Map<string, { label: string; amount: number }>();
+    for (const payment of payments) {
+      if (payment.status !== "aprobado") continue;
+      const entry = byMethod.get(payment.method) ?? {
+        label: payment.methodLabel,
+        amount: 0,
+      };
+      entry.amount += payment.amount;
+      byMethod.set(payment.method, entry);
+    }
+    return {
+      collected,
+      pending,
+      byMethod: [...byMethod.entries()].map(([id, value]) => ({
+        id,
+        ...value,
+      })),
+    };
+  }, [payments, invoices]);
 
   function setTab(tab: PaymentTab) {
     setSearchParams({ tab }, { replace: true });
   }
 
-  function handleReconcile() {
-    setSummary(reconcilePayments());
+  function openPayment(invoice: Invoice) {
+    setFeedback(null);
+    setPaymentTarget(invoice);
+    setPaymentOpen(true);
   }
 
-  function openReconcile(payment: PaymentTransaction) {
-    setReconcileTarget(payment);
-    setReconcileOpen(true);
+  async function handleSend(invoice: Invoice) {
+    setSendBusyId(invoice.id);
+    setFeedback(null);
+    try {
+      await enviarComprobante(invoice.id);
+      setFeedback({
+        type: "success",
+        text: `Comprobante ${invoice.number} enviado por correo.`,
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "No se pudo enviar el comprobante.",
+      });
+    } finally {
+      setSendBusyId(null);
+    }
+  }
+
+  async function retryLoad() {
+    setLoadError(null);
+    try {
+      await loadPayments(true);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar los comprobantes y pagos."
+      );
+    }
   }
 
   function handleExport() {
@@ -167,147 +250,183 @@ export function PaymentsPage() {
         "ID",
         "Fecha",
         "Cliente",
+        "Comprobante",
         "Pedido",
         "Método",
         "Monto",
-        "Conciliación",
+        "Estado",
         "Referencia",
       ],
       ...filteredPayments.map((payment) => [
         payment.id,
         payment.date,
         payment.client,
+        payment.invoiceNumber,
         payment.orderNumber,
-        getPaymentMethodLabel(payment.method),
+        payment.methodLabel,
         payment.amount,
-        payment.conciliationStatus,
-        payment.gatewayReference ?? "",
+        payment.status,
+        payment.reference ?? "",
       ]),
     ]);
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold">Pagos</h1>
           <p className="text-muted-foreground">
-            Cobros, conciliación de facturas y reportes.
+            Comprobantes emitidos, cobros registrados y reportes.
           </p>
         </div>
-        <Button onClick={() => navigate("/payments/new-method")}>
-          <Plus />
-          Nuevo medio de pago
+        {isAdmin && (
+          <Button onClick={() => navigate("/payments/new-method")}>
+            <Plus />
+            Nuevo medio de pago
+          </Button>
+        )}
+      </div>
+
+      <div className="flex w-full gap-2 lg:w-fit">
+        <Button
+          variant={activeTab === "cobros" ? "default" : "outline"}
+          className="flex-1 px-6"
+          onClick={() => setTab("cobros")}
+        >
+          Cobros
+        </Button>
+        <Button
+          variant={activeTab === "reportes" ? "default" : "outline"}
+          className="flex-1 px-6"
+          onClick={() => setTab("reportes")}
+        >
+          Reportes
         </Button>
       </div>
 
-      {isAdmin && (
-        <div className="flex w-full gap-2 lg:w-fit">
-          <Button
-            variant={activeTab === "conciliacion" ? "default" : "outline"}
-            className="flex-1 px-4"
-            onClick={() =>
-              setTab(activeTab === "conciliacion" ? "cobros" : "conciliacion")
-            }
-          >
-            Conciliación
-          </Button>
-          <Button
-            variant={activeTab === "reportes" ? "default" : "outline"}
-            className="flex-1 px-4"
-            onClick={() =>
-              setTab(activeTab === "reportes" ? "cobros" : "reportes")
-            }
-          >
-            Reportes
-          </Button>
-        </div>
+      {feedback && (
+        <p
+          className={
+            feedback.type === "error"
+              ? "rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              : "rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700"
+          }
+          role={feedback.type === "error" ? "alert" : "status"}
+        >
+          {feedback.text}
+        </p>
       )}
 
-      {activeTab !== "conciliacion" && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <KpiCard label="Total cobrado" value={formatMoney(totals.collected)} />
-          <KpiCard
-            label="Pendiente de cobro"
-            value={formatMoney(totals.pending)}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          icon={<Wallet className="size-4" />}
+          label="Total cobrado"
+          value={formatMoney(totals.collected)}
+        />
+        <KpiCard
+          icon={<Clock className="size-4" />}
+          label="Pendiente de cobro"
+          value={formatMoney(totals.pending)}
+        />
+        <KpiCard
+          icon={<FileText className="size-4" />}
+          label="Comprobantes"
+          value={String(invoices.length)}
+        />
+        <KpiCard
+          icon={<CheckCircle2 className="size-4" />}
+          label="Pagos registrados"
+          value={String(payments.length)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-10 w-full bg-card pl-10 shadow-sm"
+            placeholder="Buscar por cliente, comprobante o pedido..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="payment-method-filter">Medio de pago</Label>
+          <Select
+            value={methodFilter}
+            items={methodFilterItems}
+            onValueChange={(value) => setMethodFilter(value ?? "all")}
+          >
+            <SelectTrigger id="payment-method-filter" className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {methodOptions.map((method) => (
+                <SelectItem key={method.id} value={method.id}>
+                  {method.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {loadError && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-6 text-center">
+            <p className="text-destructive" role="alert">
+              {loadError}
+            </p>
+            <Button variant="outline" onClick={() => void retryLoad()}>
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {activeTab === "cobros" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-10 w-full bg-card pl-10 shadow-sm"
-                placeholder="Buscar por cliente, venta o referencia..."
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="space-y-2">
-                <Label htmlFor="payment-method-filter">Método</Label>
-                <Select
-                  items={{ all: "Todos" }}
-                  value={methodFilter}
-                  onValueChange={(value) =>
-                    setMethodFilter(value as "all" | PaymentMethod)
-                  }
-                >
-                  <SelectTrigger id="payment-method-filter" className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    {paymentMethods.map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
-                        {method.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment-conciliation-filter">Conciliación</Label>
-                <Select
-                  items={{ all: "Todos" }}
-                  value={conciliationFilter}
-                  onValueChange={(value) =>
-                    setConciliationFilter(
-                      value as "all" | "conciliado" | "pendiente"
-                    )
-                  }
-                >
-                  <SelectTrigger
-                    id="payment-conciliation-filter"
-                    className="w-40"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="conciliado">Conciliado</SelectItem>
-                    <SelectItem value="pendiente">Pendiente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Pagos registrados</CardTitle>
-              <Badge variant="secondary">{payments.length} pagos</Badge>
+              <CardTitle>Comprobantes emitidos</CardTitle>
+              <Badge variant="secondary">
+                {filteredInvoices.length} comprobantes
+              </Badge>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <TableSkeleton rows={6} columns={8} />
               ) : (
+                <InvoicesTable
+                  invoices={filteredInvoices}
+                  sendBusyId={sendBusyId}
+                  onRecordPayment={openPayment}
+                  onSend={handleSend}
+                />
+              )}
+            </CardContent>
+            <CardFooter className="text-sm text-muted-foreground">
+              Los comprobantes se emiten desde el detalle de un pedido enviado
+              o entregado.
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Pagos registrados</CardTitle>
+              <Badge variant="secondary">
+                {filteredPayments.length} pagos
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <TableSkeleton rows={6} columns={7} />
+              ) : (
                 <PaymentsTable
                   payments={filteredPayments}
-                  onReconcile={openReconcile}
+                  emptyText="No se encontraron pagos."
                 />
               )}
             </CardContent>
@@ -320,112 +439,14 @@ export function PaymentsPage() {
         </section>
       )}
 
-      {activeTab === "conciliacion" && isAdmin && (
-        <section className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Conciliación automática</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Empareja los cobros virtuales con las ventas pendientes por
-                  cliente y monto.
-                </p>
-              </div>
-              <Button onClick={handleReconcile}>
-                <CheckCheck />
-                Conciliar pagos
-              </Button>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-3">
-              <KpiCard
-                label="Pagos por conciliar"
-                value={String(pendingVirtual.length)}
-              />
-              <KpiCard
-                label="Ventas pendientes"
-                value={String(pendingInvoices.length)}
-              />
-              <KpiCard
-                label="Última conciliación"
-                value={summary ? `${summary.matched} pagos` : "—"}
-              />
-            </CardContent>
-            {summary && (
-              <CardFooter className="text-sm text-muted-foreground">
-                Se conciliaron {summary.matched} pagos por{" "}
-                {formatMoney(summary.matchedAmount)}. Quedan {summary.remaining}{" "}
-                pagos sin conciliar.
-              </CardFooter>
-            )}
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Cobros virtuales pendientes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PaymentsTable
-                payments={pendingVirtual}
-                onReconcile={openReconcile}
-                emptyText="No hay cobros pendientes de conciliar."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Ventas pendientes de pago</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pendingInvoices.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No hay ventas pendientes.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Pedido</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead className="text-right">Monto</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingInvoices.map((invoice) => (
-                      <TableRow key={invoice.number}>
-                        <TableCell className="font-mono text-xs">
-                          {invoice.orderNumber}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {invoice.client}
-                        </TableCell>
-                        <TableCell>{invoice.date}</TableCell>
-                        <TableCell className="text-right">
-                          {formatMoney(invoice.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <InvoiceStatusBadge status={invoice.status} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      {activeTab === "reportes" && isAdmin && (
+      {activeTab === "reportes" && (
         <section className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Reportes de cobros y pagos</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Totales por método de pago y exportación de la lista filtrada.
+                  Totales por medio de pago y exportación de la lista filtrada.
                 </p>
               </div>
               <Button variant="outline" onClick={handleExport}>
@@ -433,15 +454,17 @@ export function PaymentsPage() {
                 Exportar CSV
               </Button>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-4">
+            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <KpiCard
+                icon={<Wallet className="size-4" />}
                 label="Total cobrado"
                 value={formatMoney(totals.collected)}
               />
               {totals.byMethod.map((entry) => (
                 <KpiCard
-                  key={entry.method}
-                  label={getPaymentMethodLabel(entry.method)}
+                  key={entry.id}
+                  icon={<Wallet className="size-4" />}
+                  label={entry.label}
                   value={formatMoney(entry.amount)}
                 />
               ))}
@@ -453,97 +476,117 @@ export function PaymentsPage() {
               <CardTitle>Detalle de pagos</CardTitle>
             </CardHeader>
             <CardContent>
-              <PaymentsTable
-                payments={payments}
-                emptyText="No hay pagos registrados."
-              />
+              {loading ? (
+                <TableSkeleton rows={8} columns={7} />
+              ) : (
+                <PaymentsTable
+                  payments={filteredPayments}
+                  emptyText="No hay pagos registrados."
+                />
+              )}
             </CardContent>
           </Card>
         </section>
       )}
 
-      <ReconcilePaymentDialog
-        payment={reconcileTarget}
-        open={reconcileOpen}
-        onOpenChange={setReconcileOpen}
+      <RecordPaymentDialog
+        invoice={paymentTarget}
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
       />
     </div>
   );
 }
 
-function PaymentsTable({
-  payments,
-  onReconcile,
-  emptyText = "No se encontraron pagos.",
+function InvoicesTable({
+  invoices,
+  sendBusyId,
+  onRecordPayment,
+  onSend,
 }: {
-  payments: ReturnType<typeof usePayments>;
-  onReconcile?: (payment: PaymentTransaction) => void;
-  emptyText?: string;
+  invoices: Invoice[];
+  sendBusyId: string | null;
+  onRecordPayment: (invoice: Invoice) => void;
+  onSend: (invoice: Invoice) => void;
 }) {
-  const ordered = useMemo(() => {
-    return [...payments].sort((a, b) => {
-      const dateDiff = compareByDateDesc(a.date, b.date);
-      if (dateDiff !== 0) return dateDiff;
-      return b.id.localeCompare(a.id);
-    });
-  }, [payments]);
-
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>ID</TableHead>
-          <TableHead>Fecha</TableHead>
-          <TableHead>Cliente</TableHead>
+          <TableHead>Comprobante</TableHead>
           <TableHead>Pedido</TableHead>
-          <TableHead>Método</TableHead>
-          <TableHead className="text-right">Monto</TableHead>
-          <TableHead>Conciliación</TableHead>
-          {onReconcile && <TableHead className="text-right">Acciones</TableHead>}
+          <TableHead>Cliente</TableHead>
+          <TableHead>Fecha</TableHead>
+          <TableHead className="text-right">Total</TableHead>
+          <TableHead className="text-right">Cobrado</TableHead>
+          <TableHead className="text-right">Saldo</TableHead>
+          <TableHead>Estado</TableHead>
+          <TableHead className="text-right">Acciones</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {ordered.length === 0 ? (
+        {invoices.length === 0 ? (
           <TableRow>
             <TableCell
-              colSpan={onReconcile ? 8 : 7}
+              colSpan={9}
               className="h-24 text-center text-muted-foreground"
             >
-              {emptyText}
+              No hay comprobantes emitidos.
             </TableCell>
           </TableRow>
         ) : (
-          ordered.map((payment) => (
-            <TableRow key={payment.id}>
-              <TableCell className="font-mono text-xs">{payment.id}</TableCell>
-              <TableCell>{payment.date}</TableCell>
-              <TableCell className="font-medium">{payment.client}</TableCell>
-              <TableCell className="font-mono text-xs">
-                {payment.orderNumber}
-              </TableCell>
+          invoices.map((invoice) => (
+            <TableRow key={invoice.id}>
               <TableCell>
-                <MethodBadge method={payment.method} />
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs">{invoice.number}</span>
+                  <InvoiceTypeBadge type={invoice.type} />
+                </div>
+              </TableCell>
+              <TableCell className="font-mono text-xs">
+                {invoice.orderNumber}
+              </TableCell>
+              <TableCell className="font-medium">{invoice.client}</TableCell>
+              <TableCell>{invoice.date}</TableCell>
+              <TableCell className="text-right">
+                {formatMoney(invoice.amount)}
+              </TableCell>
+              <TableCell className="text-right">
+                {formatMoney(invoice.paidAmount)}
               </TableCell>
               <TableCell className="text-right font-medium">
-                {formatMoney(payment.amount)}
+                {formatMoney(invoice.balance)}
               </TableCell>
               <TableCell>
-                <ConciliationBadge status={payment.conciliationStatus} />
+                <InvoiceStatusBadge status={invoice.status} />
               </TableCell>
-              {onReconcile && (
-                <TableCell className="text-right">
-                  {payment.conciliationStatus === "pendiente" && (
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  {invoice.balance > 0 && invoice.status !== "rechazada" && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onReconcile(payment)}
+                      onClick={() => onRecordPayment(invoice)}
                     >
-                      <Pencil />
-                      Modificar
+                      <Wallet />
+                      Cobrar
                     </Button>
                   )}
-                </TableCell>
-              )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sendBusyId === invoice.id}
+                    onClick={() => onSend(invoice)}
+                  >
+                    {sendBusyId === invoice.id ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Send />
+                    )}
+                    Enviar
+                  </Button>
+                </div>
+              </TableCell>
             </TableRow>
           ))
         )}
@@ -552,11 +595,83 @@ function PaymentsTable({
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+function PaymentsTable({
+  payments,
+  emptyText = "No se encontraron pagos.",
+}: {
+  payments: PaymentTransaction[];
+  emptyText?: string;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>Fecha</TableHead>
+          <TableHead>Cliente</TableHead>
+          <TableHead>Comprobante</TableHead>
+          <TableHead>Pedido</TableHead>
+          <TableHead>Método</TableHead>
+          <TableHead className="text-right">Monto</TableHead>
+          <TableHead>Estado</TableHead>
+          <TableHead>Referencia</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {payments.length === 0 ? (
+          <TableRow>
+            <TableCell
+              colSpan={9}
+              className="h-24 text-center text-muted-foreground"
+            >
+              {emptyText}
+            </TableCell>
+          </TableRow>
+        ) : (
+          payments.map((payment) => (
+            <TableRow key={payment.id}>
+              <TableCell className="font-mono text-xs">{payment.id}</TableCell>
+              <TableCell>{payment.date}</TableCell>
+              <TableCell className="font-medium">{payment.client}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {payment.invoiceNumber}
+              </TableCell>
+              <TableCell className="font-mono text-xs">
+                {payment.orderNumber}
+              </TableCell>
+              <TableCell>
+                <MethodBadge label={payment.methodLabel} />
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {formatMoney(payment.amount)}
+              </TableCell>
+              <TableCell>
+                <PaymentStatusBadge status={payment.status} />
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {payment.reference || "—"}
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
+function KpiCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Wallet className="size-4" />
+        {icon}
         {label}
       </div>
       <p className="mt-2 text-2xl font-bold">{value}</p>

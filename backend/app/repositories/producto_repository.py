@@ -41,7 +41,8 @@ SELECT
 """
 
 _WHERE_PRODUCTO = """
-WHERE (%(q)s::text IS NULL OR p.id_producto ILIKE %(q)s OR p.nombre ILIKE %(q)s
+WHERE p.id_empresa = %(id_empresa)s
+  AND (%(q)s::text IS NULL OR p.id_producto ILIKE %(q)s OR p.nombre ILIKE %(q)s
        OR p.descripcion ILIKE %(q)s OR c.nombre ILIKE %(q)s)
   AND (%(id_categoria)s::text IS NULL OR p.id_categoria = %(id_categoria)s)
   AND (%(id_alicuota_iva)s::text IS NULL OR p.id_alicuota_iva = %(id_alicuota_iva)s)
@@ -75,8 +76,9 @@ _COLUMNAS_ACTUALIZABLES = {
 
 
 class ProductoRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -84,7 +86,12 @@ class ProductoRepository:
     def listar(
         self, filtros: dict[str, Any], limit: int, offset: int
     ) -> list[ProductoRow]:
-        parametros = {**filtros, "limit": limit, "offset": offset}
+        parametros = {
+            **filtros,
+            "id_empresa": self._id_empresa,
+            "limit": limit,
+            "offset": offset,
+        }
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"{_SELECT_PRODUCTO} {_WHERE_PRODUCTO} "
@@ -97,7 +104,7 @@ class ProductoRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"SELECT COUNT(*) AS total {_FROM_PRODUCTO} {_WHERE_PRODUCTO}",
-                filtros,
+                {**filtros, "id_empresa": self._id_empresa},
             )
             fila = cur.fetchone()
             return int(fila["total"]) if fila is not None else 0
@@ -110,9 +117,10 @@ class ProductoRepository:
                 f"""
                 {_SELECT_PRODUCTO}
                 WHERE p.id_producto = %s
+                  AND p.id_empresa = %s
                   AND (%s OR p.estado = TRUE)
                 """,
-                (id_producto, incluir_dados_de_baja),
+                (id_producto, self._id_empresa, incluir_dados_de_baja),
             )
             return cur.fetchone()
 
@@ -121,10 +129,11 @@ class ProductoRepository:
             cur.execute(
                 f"""
                 {_SELECT_PRODUCTO}
-                WHERE p.id_producto = %s AND p.estado = TRUE
+                WHERE p.id_producto = %s AND p.id_empresa = %s
+                  AND p.estado = TRUE
                 FOR SHARE OF p
                 """,
-                (id_producto,),
+                (id_producto, self._id_empresa),
             )
             return cur.fetchone()
 
@@ -136,27 +145,33 @@ class ProductoRepository:
                 f"""
                 {_SELECT_PRODUCTO}
                 WHERE p.id_producto = %s
+                  AND p.id_empresa = %s
                   AND (%s OR p.estado = TRUE)
                 FOR UPDATE OF p
                 """,
-                (id_producto, incluir_dados_de_baja),
+                (id_producto, self._id_empresa, incluir_dados_de_baja),
             )
             return cur.fetchone()
 
     def crear(self, datos: dict[str, Any], precio_venta: Decimal) -> ProductoRow:
-        parametros = {**datos, "precio_venta": precio_venta}
+        parametros = {
+            **datos,
+            "precio_venta": precio_venta,
+            "id_empresa": self._id_empresa,
+        }
         with self._conn.cursor(row_factory=dict_row) as cur:
             if datos.get("id_producto") is None:
                 cur.execute(
                     """
                     INSERT INTO producto (
-                        nombre, descripcion, estado, imagen, margen,
+                        id_empresa, nombre, descripcion, estado, imagen, margen,
                         precio_compra, precio_venta, stock_actual, stock_minimo,
                         id_alicuota_iva, id_categoria, id_unidad
                     )
                     VALUES (
-                        %(nombre)s, %(descripcion)s, %(estado)s, %(imagen)s, %(margen)s,
-                        %(precio_compra)s, %(precio_venta)s, %(stock_actual)s, %(stock_minimo)s,
+                        %(id_empresa)s, %(nombre)s, %(descripcion)s, %(estado)s,
+                        %(imagen)s, %(margen)s, %(precio_compra)s,
+                        %(precio_venta)s, %(stock_actual)s, %(stock_minimo)s,
                         %(id_alicuota_iva)s, %(id_categoria)s, %(id_unidad)s
                     )
                     RETURNING id_producto
@@ -167,15 +182,16 @@ class ProductoRepository:
                 cur.execute(
                     """
                     INSERT INTO producto (
-                        id_producto, nombre, descripcion, estado, imagen, margen,
-                        precio_compra, precio_venta, stock_actual, stock_minimo,
-                        id_alicuota_iva, id_categoria, id_unidad
+                        id_empresa, id_producto, nombre, descripcion, estado,
+                        imagen, margen, precio_compra, precio_venta, stock_actual,
+                        stock_minimo, id_alicuota_iva, id_categoria, id_unidad
                     )
                     VALUES (
-                        %(id_producto)s, %(nombre)s, %(descripcion)s, %(estado)s,
-                        %(imagen)s, %(margen)s, %(precio_compra)s, %(precio_venta)s,
-                        %(stock_actual)s, %(stock_minimo)s, %(id_alicuota_iva)s,
-                        %(id_categoria)s, %(id_unidad)s
+                        %(id_empresa)s, %(id_producto)s, %(nombre)s,
+                        %(descripcion)s, %(estado)s, %(imagen)s, %(margen)s,
+                        %(precio_compra)s, %(precio_venta)s, %(stock_actual)s,
+                        %(stock_minimo)s, %(id_alicuota_iva)s, %(id_categoria)s,
+                        %(id_unidad)s
                     )
                     RETURNING id_producto
                     """,
@@ -202,10 +218,12 @@ class ProductoRepository:
             id_producto = str(fila["id_producto"])
             cur.execute(
                 """
-                INSERT INTO reserva_codigo_producto (id_producto, estado)
-                VALUES (%s, 'reservado')
+                INSERT INTO reserva_codigo_producto (
+                    id_producto, id_empresa, estado
+                )
+                VALUES (%s, %s, 'reservado')
                 """,
-                (id_producto,),
+                (id_producto, self._id_empresa),
             )
             return id_producto
 
@@ -215,13 +233,14 @@ class ProductoRepository:
                 """
                 UPDATE reserva_codigo_producto
                 SET estado = 'anulado', fecha_actualizacion = now()
-                WHERE id_producto = %s AND estado = 'reservado'
+                WHERE id_producto = %s AND id_empresa = %s
+                  AND estado = 'reservado'
                   AND NOT EXISTS (
                       SELECT 1 FROM producto WHERE producto.id_producto = %s
                   )
                 RETURNING id_producto
                 """,
-                (id_producto, id_producto),
+                (id_producto, self._id_empresa, id_producto),
             )
             return cur.fetchone() is not None
 
@@ -231,10 +250,11 @@ class ProductoRepository:
                 """
                 UPDATE reserva_codigo_producto
                 SET estado = 'usado', fecha_actualizacion = now()
-                WHERE id_producto = %s AND estado = 'reservado'
+                WHERE id_producto = %s AND id_empresa = %s
+                  AND estado = 'reservado'
                 RETURNING id_producto
                 """,
-                (id_producto,),
+                (id_producto, self._id_empresa),
             )
             return cur.fetchone() is not None
 
@@ -244,9 +264,9 @@ class ProductoRepository:
                 """
                 SELECT estado
                 FROM reserva_codigo_producto
-                WHERE id_producto = %s
+                WHERE id_producto = %s AND id_empresa = %s
                 """,
-                (id_producto,),
+                (id_producto, self._id_empresa),
             )
             row = cur.fetchone()
             return row["estado"] if row is not None else None
@@ -266,14 +286,24 @@ class ProductoRepository:
             for columna in campos
         ]
         consulta = sql.SQL(
-            "UPDATE producto SET {} WHERE id_producto = {} RETURNING id_producto"
+            "UPDATE producto SET {} "
+            "WHERE id_producto = {} AND id_empresa = {} "
+            "RETURNING id_producto"
         ).format(
             sql.SQL(", ").join(asignaciones),
             sql.Placeholder("id_producto"),
+            sql.Placeholder("id_empresa"),
         )
 
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(consulta, {**campos, "id_producto": id_producto})
+            cur.execute(
+                consulta,
+                {
+                    **campos,
+                    "id_producto": id_producto,
+                    "id_empresa": self._id_empresa,
+                },
+            )
             fila = cur.fetchone()
 
         if fila is None:
@@ -289,11 +319,16 @@ class ProductoRepository:
                 UPDATE producto
                 SET stock_actual = stock_actual + %(delta)s
                 WHERE id_producto = %(id_producto)s
+                  AND id_empresa = %(id_empresa)s
                   AND estado = TRUE
                   AND stock_actual + %(delta)s >= 0
                 RETURNING id_producto
                 """,
-                {"id_producto": id_producto, "delta": delta},
+                {
+                    "id_producto": id_producto,
+                    "id_empresa": self._id_empresa,
+                    "delta": delta,
+                },
             )
             fila = cur.fetchone()
         if fila is None:
@@ -309,10 +344,15 @@ class ProductoRepository:
                 UPDATE producto
                 SET stock_actual = stock_actual + %(delta)s
                 WHERE id_producto = %(id_producto)s
+                  AND id_empresa = %(id_empresa)s
                   AND stock_actual + %(delta)s >= 0
                 RETURNING id_producto
                 """,
-                {"id_producto": id_producto, "delta": delta},
+                {
+                    "id_producto": id_producto,
+                    "id_empresa": self._id_empresa,
+                    "delta": delta,
+                },
             )
             row = cur.fetchone()
         if row is None:
@@ -322,8 +362,12 @@ class ProductoRepository:
     def eliminar(self, id_producto: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM producto WHERE id_producto = %s RETURNING id_producto",
-                (id_producto,),
+                """
+                DELETE FROM producto
+                WHERE id_producto = %s AND id_empresa = %s
+                RETURNING id_producto
+                """,
+                (id_producto, self._id_empresa),
             )
             return cur.fetchone() is not None
 
@@ -365,14 +409,15 @@ class ProductoRepository:
             return fila["id_unidad"] if fila is not None else None
 
     def existe_categoria(self, id_categoria: str) -> bool:
-        with self._conn.cursor() as cur:
+        with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT EXISTS (
-                    SELECT 1 FROM categoria WHERE id_categoria = %s
+                    SELECT 1 FROM categoria
+                    WHERE id_categoria = %s AND id_empresa = %s
                 ) AS existe
                 """,
-                (id_categoria,),
+                (id_categoria, self._id_empresa),
             )
             fila = cur.fetchone()
             return bool(fila and fila["existe"])

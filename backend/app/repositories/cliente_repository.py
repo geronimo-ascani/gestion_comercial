@@ -34,8 +34,9 @@ _FIELDS = {
 
 
 class ClienteRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -46,7 +47,8 @@ class ClienteRepository:
             cur.execute(
                 f"""
                 {_SELECT}
-                WHERE (%(q)s::text IS NULL
+                WHERE c.id_empresa = %(id_empresa)s
+                  AND (%(q)s::text IS NULL
                     OR c.nombre ILIKE %(q)s
                     OR c.apellido ILIKE %(q)s
                     OR c.dni_cuit ILIKE %(q)s
@@ -55,13 +57,21 @@ class ClienteRepository:
                 ORDER BY c.apellido, c.nombre
                 LIMIT %(limit)s OFFSET %(offset)s
                 """,
-                {"q": pattern, "limit": limit, "offset": offset},
+                {
+                    "id_empresa": self._id_empresa,
+                    "q": pattern,
+                    "limit": limit,
+                    "offset": offset,
+                },
             )
             return cur.fetchall()
 
     def obtener(self, id_cliente: str) -> ClienteRow | None:
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(f"{_SELECT} WHERE c.id_cliente = %s", (id_cliente,))
+            cur.execute(
+                f"{_SELECT} WHERE c.id_cliente = %s AND c.id_empresa = %s",
+                (id_cliente, self._id_empresa),
+            )
             return cur.fetchone()
 
     def condicion_iva_existe(self, id_condicion_iva: str) -> bool:
@@ -86,11 +96,12 @@ class ClienteRepository:
                 SELECT EXISTS (
                     SELECT 1
                     FROM cliente
-                    WHERE regexp_replace(dni_cuit, '[^0-9]', '', 'g') = %s
+                    WHERE id_empresa = %s
+                      AND regexp_replace(dni_cuit, '[^0-9]', '', 'g') = %s
                       AND (%s::text IS NULL OR id_cliente <> %s)
                 ) AS existe
                 """,
-                (dni_cuit, excluir_id, excluir_id),
+                (self._id_empresa, dni_cuit, excluir_id, excluir_id),
             )
             row = cur.fetchone()
             return bool(row and row["existe"])
@@ -101,15 +112,16 @@ class ClienteRepository:
             cur.execute(
                 """
                 INSERT INTO cliente (
-                    apellido, dni_cuit, email, nombre, telefono, id_condicion_iva
+                    id_empresa, apellido, dni_cuit, email, nombre, telefono,
+                    id_condicion_iva
                 )
                 VALUES (
-                    %(apellido)s, %(dni_cuit)s, %(email)s, %(nombre)s,
-                    %(telefono)s, %(id_condicion_iva)s
+                    %(id_empresa)s, %(apellido)s, %(dni_cuit)s, %(email)s,
+                    %(nombre)s, %(telefono)s, %(id_condicion_iva)s
                 )
                 RETURNING id_cliente
                 """,
-                values,
+                {**values, "id_empresa": self._id_empresa},
             )
             row = cur.fetchone()
             assert row is not None
@@ -127,14 +139,32 @@ class ClienteRepository:
         assignments = ", ".join(f"{field} = %({field})s" for field in campos)
         with self._conn.cursor() as cur:
             cur.execute(
-                f"UPDATE cliente SET {assignments} WHERE id_cliente = %(id)s",
-                {**campos, "id": id_cliente},
+                f"""
+                UPDATE cliente
+                SET {assignments}
+                WHERE id_cliente = %(id)s AND id_empresa = %(id_empresa)s
+                """,
+                {
+                    **campos,
+                    "id": id_cliente,
+                    "id_empresa": self._id_empresa,
+                },
             )
             return cur.rowcount == 1
 
     def guardar_direccion(self, id_cliente: str, direccion: dict[str, str]) -> None:
         with self._conn.cursor() as cur:
-            cur.execute("DELETE FROM direccion WHERE id_cliente = %s", (id_cliente,))
+            cur.execute(
+                """
+                DELETE FROM direccion
+                WHERE id_cliente = %s
+                  AND EXISTS (
+                      SELECT 1 FROM cliente
+                      WHERE id_cliente = %s AND id_empresa = %s
+                  )
+                """,
+                (id_cliente, id_cliente, self._id_empresa),
+            )
             cur.execute(
                 """
                 INSERT INTO direccion (
@@ -151,7 +181,11 @@ class ClienteRepository:
     def eliminar(self, id_cliente: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM cliente WHERE id_cliente = %s RETURNING id_cliente",
-                (id_cliente,),
+                """
+                DELETE FROM cliente
+                WHERE id_cliente = %s AND id_empresa = %s
+                RETURNING id_cliente
+                """,
+                (id_cliente, self._id_empresa),
             )
             return cur.fetchone() is not None

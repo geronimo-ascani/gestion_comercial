@@ -14,6 +14,7 @@ from app.services.auth_service import (
 
 _EMPLEADO = {
     "id_empleado": "EMP-0001",
+    "id_empresa": "EMP-0001",
     "apellido": "Pérez",
     "dni_cuil": "20123456789",
     "email": "ana@example.com",
@@ -28,41 +29,47 @@ _EMPLEADO = {
 
 
 class FakeAuthService:
-    def registrar(self, _datos, _administrador_id):
-        return None, dict(_EMPLEADO)
+    def registrar_empleado(self, _datos, _id_empresa):
+        return dict(_EMPLEADO)
 
-    def listar_usuarios(self):
+    def listar_usuarios(self, _id_empresa):
         return [dict(_EMPLEADO)]
 
-    def obtener_usuario(self, id_empleado):
+    def obtener_empleado(self, id_empleado, _id_empresa):
         return dict(_EMPLEADO) if id_empleado == "EMP-0001" else None
 
-    def actualizar_usuario(self, _id_empleado, _datos):
+    def actualizar_usuario(self, _id_empleado, _datos, _id_empresa):
         raise AuthDatosDuplicados
 
-    def actualizar_contrasena_empleado(self, _id_empleado, _password):
+    def actualizar_contrasena_empleado(
+        self, _id_empleado, _password, _id_empresa
+    ):
         return None
 
-    def eliminar_usuario(self, _id_empleado):
+    def eliminar_usuario(self, _id_empleado, _id_empresa):
         raise EmpleadoEnUso
 
 
 class SuccessfulDeleteAuthService(FakeAuthService):
-    def eliminar_usuario(self, _id_empleado):
+    def eliminar_usuario(self, _id_empleado, _id_empresa):
         return None
 
 
 class CapturingAuthService(FakeAuthService):
     def __init__(self) -> None:
         self.datos = None
+        self.id_empresa = None
 
-    def registrar(self, datos, _administrador_id):
+    def registrar_empleado(self, datos, id_empresa):
         self.datos = datos
-        return None, dict(_EMPLEADO)
+        self.id_empresa = id_empresa
+        return dict(_EMPLEADO)
 
 
 class MissingEmployeeAuthService(FakeAuthService):
-    def actualizar_contrasena_empleado(self, _id_empleado, _password):
+    def actualizar_contrasena_empleado(
+        self, _id_empleado, _password, _id_empresa
+    ):
         raise EmpleadoNoEncontrado
 
 
@@ -75,6 +82,7 @@ def _client(
     app.dependency_overrides[get_current_user] = lambda: {
         "id_empleado": "EMP-ADMIN",
         "rol": role,
+        "id_empresa": "EMP-0001",
     }
     app.dependency_overrides[get_auth_service] = service_factory
     return TestClient(app, raise_server_exceptions=False)
@@ -101,6 +109,7 @@ def test_admin_puede_crear_listar_y_consultar_empleados() -> None:
 
     assert creado.status_code == 201
     assert creado.json()["email"] == "ana@example.com"
+    assert creado.json()["id_empresa"] == "EMP-0001"
     assert "password" not in creado.json()
     assert listado.status_code == 200
     assert detalle.status_code == 200
@@ -133,6 +142,7 @@ def test_alta_normaliza_dni_cuil_antes_de_persistir() -> None:
 
     assert response.status_code == 201
     assert service.datos["dni_cuil"] == "20123456786"
+    assert service.id_empresa == "EMP-0001"
 
 
 def test_actualizacion_duplicada_y_baja_referenciada_responden_conflicto() -> None:

@@ -32,8 +32,9 @@ _FIELDS = {
 
 
 class ProveedorRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -46,7 +47,8 @@ class ProveedorRepository:
             cur.execute(
                 f"""
                 {_SELECT}
-                WHERE (%(q)s::text IS NULL
+                WHERE p.id_empresa = %(id_empresa)s
+                  AND (%(q)s::text IS NULL
                     OR p.razon_social ILIKE %(q)s
                     OR p.cuit ILIKE %(q)s
                     OR p.email ILIKE %(q)s
@@ -55,13 +57,21 @@ class ProveedorRepository:
                 ORDER BY p.razon_social
                 LIMIT %(limit)s OFFSET %(offset)s
                 """,
-                {"q": pattern, "limit": limit, "offset": offset},
+                {
+                    "id_empresa": self._id_empresa,
+                    "q": pattern,
+                    "limit": limit,
+                    "offset": offset,
+                },
             )
             return cur.fetchall()
 
     def obtener(self, id_proveedor: str) -> ProveedorRow | None:
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(f"{_SELECT} WHERE p.id_proveedor = %s", (id_proveedor,))
+            cur.execute(
+                f"{_SELECT} WHERE p.id_proveedor = %s AND p.id_empresa = %s",
+                (id_proveedor, self._id_empresa),
+            )
             return cur.fetchone()
 
     def cuit_existe(self, cuit: str, excluir_id: str | None = None) -> bool:
@@ -71,11 +81,12 @@ class ProveedorRepository:
                 SELECT EXISTS (
                     SELECT 1
                     FROM proveedor
-                    WHERE regexp_replace(cuit, '[^0-9]', '', 'g') = %s
+                    WHERE id_empresa = %s
+                      AND regexp_replace(cuit, '[^0-9]', '', 'g') = %s
                       AND (%s::text IS NULL OR id_proveedor <> %s)
                 ) AS existe
                 """,
-                (cuit, excluir_id, excluir_id),
+                (self._id_empresa, cuit, excluir_id, excluir_id),
             )
             row = cur.fetchone()
             return bool(row and row["existe"])
@@ -86,15 +97,16 @@ class ProveedorRepository:
             cur.execute(
                 """
                 INSERT INTO proveedor (
-                    banco, cuenta, cuit, email, razon_social, telefono
+                    id_empresa, banco, cuenta, cuit, email, razon_social,
+                    telefono
                 )
                 VALUES (
-                    %(banco)s, %(cuenta)s, %(cuit)s, %(email)s,
-                    %(razon_social)s, %(telefono)s
+                    %(id_empresa)s, %(banco)s, %(cuenta)s, %(cuit)s,
+                    %(email)s, %(razon_social)s, %(telefono)s
                 )
                 RETURNING id_proveedor
                 """,
-                values,
+                {**values, "id_empresa": self._id_empresa},
             )
             row = cur.fetchone()
             assert row is not None
@@ -112,8 +124,16 @@ class ProveedorRepository:
         assignments = ", ".join(f"{field} = %({field})s" for field in campos)
         with self._conn.cursor() as cur:
             cur.execute(
-                f"UPDATE proveedor SET {assignments} WHERE id_proveedor = %(id)s",
-                {**campos, "id": id_proveedor},
+                f"""
+                UPDATE proveedor
+                SET {assignments}
+                WHERE id_proveedor = %(id)s AND id_empresa = %(id_empresa)s
+                """,
+                {
+                    **campos,
+                    "id": id_proveedor,
+                    "id_empresa": self._id_empresa,
+                },
             )
             return cur.rowcount == 1
 
@@ -121,7 +141,17 @@ class ProveedorRepository:
         self, id_proveedor: str, direccion: dict[str, str]
     ) -> None:
         with self._conn.cursor() as cur:
-            cur.execute("DELETE FROM direccion WHERE id_proveedor = %s", (id_proveedor,))
+            cur.execute(
+                """
+                DELETE FROM direccion
+                WHERE id_proveedor = %s
+                  AND EXISTS (
+                      SELECT 1 FROM proveedor
+                      WHERE id_proveedor = %s AND id_empresa = %s
+                  )
+                """,
+                (id_proveedor, id_proveedor, self._id_empresa),
+            )
             cur.execute(
                 """
                 INSERT INTO direccion (
@@ -138,7 +168,11 @@ class ProveedorRepository:
     def eliminar(self, id_proveedor: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM proveedor WHERE id_proveedor = %s RETURNING id_proveedor",
-                (id_proveedor,),
+                """
+                DELETE FROM proveedor
+                WHERE id_proveedor = %s AND id_empresa = %s
+                RETURNING id_proveedor
+                """,
+                (id_proveedor, self._id_empresa),
             )
             return cur.fetchone() is not None

@@ -39,6 +39,7 @@ class EmpleadoRead(SchemaBase):
     fecha_ingreso: date
     fecha_modificacion: datetime | None
     id_empleado: str
+    id_empresa: str
     nombre: str
     puesto: str
     rol: EmpleadoRol

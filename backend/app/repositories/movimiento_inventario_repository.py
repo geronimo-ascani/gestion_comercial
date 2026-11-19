@@ -9,8 +9,9 @@ MovimientoRow = dict[str, Any]
 
 
 class MovimientoInventarioRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def crear_ajuste(
         self, id_producto: str, tipo: str, cantidad: Decimal
@@ -20,12 +21,12 @@ class MovimientoInventarioRepository:
                 """
                 WITH movimiento AS (
                     INSERT INTO movimiento_inventario (
-                        cantidad, fecha_movimiento, motivo, tipo,
+                        id_empresa, cantidad, fecha_movimiento, motivo, tipo,
                         id_pedido_cliente, id_pedido_proveedor, id_producto
                     )
                     VALUES (
-                        %(cantidad)s, now(), 'ajuste', %(tipo)s::tipo_movimiento,
-                        NULL, NULL, %(id_producto)s
+                        %(id_empresa)s, %(cantidad)s, now(), 'ajuste',
+                        %(tipo)s::tipo_movimiento, NULL, NULL, %(id_producto)s
                     )
                     RETURNING id_movimiento, cantidad, fecha_movimiento, motivo, tipo,
                               id_pedido_cliente, id_pedido_proveedor, id_producto
@@ -44,6 +45,7 @@ class MovimientoInventarioRepository:
                 JOIN producto p ON p.id_producto = m.id_producto
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "cantidad": cantidad,
                     "tipo": tipo,
                     "id_producto": id_producto,
@@ -64,12 +66,13 @@ class MovimientoInventarioRepository:
                 """
                 WITH movimiento AS (
                     INSERT INTO movimiento_inventario (
-                        cantidad, fecha_movimiento, motivo, tipo,
+                        id_empresa, cantidad, fecha_movimiento, motivo, tipo,
                         id_pedido_cliente, id_pedido_proveedor, id_producto
                     )
                     VALUES (
-                        %(cantidad)s, now(), 'compra', 'entrada',
-                        NULL, %(id_pedido_proveedor)s, %(id_producto)s
+                        %(id_empresa)s, %(cantidad)s, now(), 'compra',
+                        'entrada', NULL, %(id_pedido_proveedor)s,
+                        %(id_producto)s
                     )
                     RETURNING id_movimiento, cantidad, fecha_movimiento, motivo, tipo,
                               id_pedido_cliente, id_pedido_proveedor, id_producto
@@ -81,6 +84,7 @@ class MovimientoInventarioRepository:
                 JOIN producto p ON p.id_producto = m.id_producto
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "cantidad": cantidad,
                     "id_pedido_proveedor": id_pedido_proveedor,
                     "id_producto": id_producto,
@@ -123,11 +127,12 @@ class MovimientoInventarioRepository:
                 """
                 WITH movimiento AS (
                     INSERT INTO movimiento_inventario (
-                        cantidad, fecha_movimiento, motivo, tipo,
+                        id_empresa, cantidad, fecha_movimiento, motivo, tipo,
                         id_pedido_cliente, id_pedido_proveedor, id_producto
                     )
                     VALUES (
-                        %(cantidad)s, now(), %(motivo)s::motivo_movimiento,
+                        %(id_empresa)s, %(cantidad)s, now(),
+                        %(motivo)s::motivo_movimiento,
                         %(tipo)s::tipo_movimiento, %(id_pedido_cliente)s,
                         NULL, %(id_producto)s
                     )
@@ -141,6 +146,7 @@ class MovimientoInventarioRepository:
                 JOIN producto p ON p.id_producto = m.id_producto
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "cantidad": cantidad,
                     "motivo": motivo,
                     "tipo": tipo,
@@ -178,6 +184,7 @@ class MovimientoInventarioRepository:
                 FROM movimiento_inventario m
                 JOIN producto p ON p.id_producto = m.id_producto
                 WHERE m.id_producto = %(id_producto)s
+                  AND m.id_empresa = %(id_empresa)s
                   AND (%(desde)s::timestamptz IS NULL OR m.fecha_movimiento >= %(desde)s)
                   AND (%(hasta)s::timestamptz IS NULL OR m.fecha_movimiento <= %(hasta)s)
                   AND (%(tipo)s::text IS NULL OR m.tipo = %(tipo)s::tipo_movimiento)
@@ -187,6 +194,7 @@ class MovimientoInventarioRepository:
                 """,
                 {
                     "id_producto": id_producto,
+                    "id_empresa": self._id_empresa,
                     "desde": desde,
                     "hasta": hasta,
                     "tipo": tipo,

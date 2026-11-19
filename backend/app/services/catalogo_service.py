@@ -1,3 +1,5 @@
+from psycopg import errors
+
 from app.repositories.catalogo_repository import (
     AlicuotaRow,
     CondicionIVARow,
@@ -5,6 +7,15 @@ from app.repositories.catalogo_repository import (
     MedioPagoRow,
     UnidadRow,
 )
+from app.schemas.pagos import MedioPagoCreate
+
+
+class CatalogoError(Exception):
+    pass
+
+
+class MedioPagoDuplicado(CatalogoError):
+    pass
 
 
 class CatalogoService:
@@ -22,3 +33,14 @@ class CatalogoService:
 
     def listar_medios_pago(self) -> list[MedioPagoRow]:
         return self._repo.listar_medios_pago()
+
+    def crear_medio_pago(self, datos: MedioPagoCreate) -> MedioPagoRow:
+        try:
+            with self._repo.transaction():
+                return self._repo.crear_medio_pago(
+                    datos.medio_pago, datos.tipo_cobro
+                )
+        except errors.UniqueViolation as exc:
+            raise MedioPagoDuplicado(
+                "Ya existe un medio de pago con ese nombre"
+            ) from exc

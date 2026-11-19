@@ -14,13 +14,54 @@
 
 - Apply database migrations in order:
   `001_schema_completo.sql`, `002_auth_recovery.sql`,
-  `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`.
+  `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`,
+  `005_comprobantes_pagos.sql`, `006_multiempresa.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `python -m pytest -q` from `backend/`.
 - Frontend tests: `npm test`; typecheck: `npm run typecheck`; production build:
   `npm run build`, from `frontend/`.
 - Do not commit `.env`, credentials, or database test data.
+
+## Multi-tenant Isolation
+
+- Every business record belongs to one company through `id_empresa`:
+  products and stock, categories, customers, suppliers, sales orders, sales
+  budgets, purchase orders, comprobantes, payments, and payment methods.
+- The company is always derived from the authenticated employee. Never accept
+  an `id_empresa` from the request body for scoping or emission. Repositories
+  receive `id_empresa` per request through dependency injection; services and
+  routes pass it explicitly where needed (`AuthService` and `AuthRepository`
+  are unscoped because login is global).
+- Registration at `POST /auth/register` is public and self-service: it creates a
+  new company with empty fiscal data plus its administrator user. There is no
+  superadmin. Each administrator manages only their own company and employees.
+- The first registered user is assigned to `EMP-0001`; later registrations
+  create a new company. Data that existed before migration
+  `006_multiempresa.sql` belongs to `EMP-0001`.
+- Employees always belong to the company of the administrator who creates them;
+  there is no company selector when creating an employee. Employee email is
+  global because it is the login. Customer DNI/CUIT and supplier CUIT are unique
+  within a company, not globally.
+- Company fiscal data lives in `empresa`: razón social, nombre de fantasía,
+  CUIT, IVA condition, domicilio, punto de venta, email, teléfono, ingresos
+  brutos, inicio de actividades, código postal, localidad, provincia, and
+  `activa`. The CUIT is required to have 11 digits when saving through the API;
+  placeholder companies may keep it empty until the administrator completes it.
+- Company endpoints: `GET /empresas` is administrator-only and returns the
+  caller's company, `GET /empresas/actual` is available to every role, and
+  `PUT /empresas/{id}` is administrator-only and restricted to the caller's own
+  company. There is no `POST /empresas`: companies are created only by
+  registration.
+- The frontend "Mi empresa" screen (`/company`) is visible to all roles and
+  editable only by administrators. It warns when fiscal data is incomplete.
+- Emitting a comprobante returns `409 Conflict` when the company is inactive or
+  its CUIT does not have 11 digits. The comprobante issuer is always the
+  authenticated employee's company.
+- VAT conditions, VAT rates, and units are global catalogs. Categories and
+  payment methods are per company and are seeded for each new company.
+- Migration `006_multiempresa.sql` adds the company fiscal columns, per-company
+  `id_empresa` columns and unique indexes, and the catalog seeding trigger.
 
 ## Roles and Existing Business Rules
 
@@ -29,12 +70,13 @@
   create and manage suppliers, including inline creation. Administrators can
   manage both.
 - Customer DNI/CUIT, supplier CUIT, and employee DNI/CUIL are normalized to
-  digits for duplicate checks.
+  digits for duplicate checks. Customer and supplier uniqueness is per company.
   Deleting a referenced customer or supplier returns `409 Conflict`.
-- Employee management is administrator-only. Employee deletion is physical;
-  PostgreSQL references from purchase orders and audit logs restrict deletion
-  and the API returns `409 Conflict`. Do not add a self-deletion or
-  last-administrator policy until that business rule is defined.
+- Employee management is administrator-only and scoped to the administrator's
+  company. Employee deletion is physical; PostgreSQL references from purchase
+  orders and audit logs restrict deletion and the API returns `409 Conflict`. Do
+  not add a self-deletion or last-administrator policy until that business rule
+  is defined.
 - Product deactivation is a soft delete. Operational stock changes must be
   atomic and recorded in `movimiento_inventario`; stock cannot go negative.
 - Reserved product codes can be annulled only before use and are not reused.
@@ -42,7 +84,7 @@
   and VAT rate. For sales orders, always use the current catalog price; never
   trust a client-supplied unit price.
 
-## Stage 2 Transaction Rules
+## Transaction Rules
 
 ### Sales orders
 
@@ -59,8 +101,45 @@
   idempotent; arbitrary backward transitions are not allowed.
 - Cancellation is allowed before delivery. Restore reserved stock once, mark
   the order `cancelado`, and do not permit reopening a canceled order.
-- Payment methods, invoices, and payment records belong to the later payment
-  stage. Do not require or persist a sales-order payment method in Stage 2.
+- Payment methods, invoices, and payment records belong to the payment stage.
+  Do not require or persist a payment method on the sales order itself;
+  payments attach to the emitted comprobante.
+
+### Comprobantes and payments
+
+- A comprobante can be issued as soon as the order is created (`pendiente`)
+  and while it is not canceled. Emitting is idempotent: repeating the request
+  returns the existing comprobante with `200`, and one order can have only one
+  comprobante.
+- The issuer is configured per company in the `empresa` table (razón social,
+  CUIT, IVA condition, domicilio, punto de venta, email, teléfono, `activa`,
+  plus the fiscal fields added by migration `006_multiempresa.sql`). Company
+  data never comes from environment variables. Administrators manage their own
+  company through `/empresas`; every role can read it through
+  `/empresas/actual`.
+- Comprobante type: a monotributista or exento issuer produces type C; a
+  responsable inscripto issuer produces type A for responsable inscripto or
+  monotributista customers and type B otherwise. Type E is reserved for the
+  future fiscal/export stage.
+- Numbering is consecutive per `(id_empresa, punto_venta, tipo_comprobante)`
+  through `comprobante_secuencia`; numbers are never reused.
+- Comprobantes are internal for now. Fiscal fields for ARCA are prepared but
+  not transmitted.
+- `estado_pago` derives from approved payments: `emitida` without payments,
+  `aprobada` with a partial payment, `pagada` at zero balance. Pending or
+  rejected payments are stored but do not affect the balance; the committed
+  amount cannot exceed the comprobante total. Partial payments are allowed.
+- Approved payments update the comprobante balance and
+  `pedido_cliente.saldo_pendiente` atomically.
+- The backend generates the PDF with `fpdf2`. Sending by email attaches that
+  PDF and records every attempt in `comprobante_envio` as `enviado` or
+  `fallido`; a delivery failure is recorded before the API returns `502`.
+- Payment methods are per-company catalog rows. Only administrators create them
+  through `POST /medios-pago`; administrators and sales register payments and
+  send comprobantes.
+- Migration `005_comprobantes_pagos.sql` adds `empresa`,
+  `comprobante_secuencia`, `comprobante_envio`, the new comprobante columns,
+  and `pago.creado_en`.
 
 ### Sales budgets
 
@@ -131,7 +210,7 @@
 - Analytics remain backend-owned: the frontend must not recompute these values
   or trust client-supplied figures.
 
-## Current Stage 2 Status
+## Current Status
 
 - Customer/supplier CRUD and purchase-order backend/frontend flow are already
   implemented.
@@ -159,8 +238,8 @@
   delivery address capture, stock reservation, and inventory movements are
   implemented in the backend and integrated with the sales frontend.
 - Employee listing, creation, detail, editing, and physical deletion are
-  integrated with the employee frontend; referenced accounts cannot be
-  deleted.
+  integrated with the employee frontend, scoped to the administrator's company;
+  referenced accounts cannot be deleted.
 - Frontend navigation, route guards, and analytics sections are filtered by role
   through `frontend/app/lib/permissions.ts`. The backend still enforces every
   permission; the frontend only hides inaccessible views and actions.
@@ -178,5 +257,41 @@
 - The analytics frontend now consumes the real endpoint through
   `frontend/app/components/analytics/analytics-api.ts`; the executive report
   prints the same backend data. The main dashboard is still a placeholder.
+- Comprobante API: `POST/GET /ventas/pedidos/{id}/comprobante` (emit and read
+  by order), `GET /ventas/comprobantes`, `GET /ventas/comprobantes/{id}`,
+  `GET/POST /ventas/comprobantes/{id}/pagos`,
+  `POST /ventas/comprobantes/{id}/envio`, and
+  `GET /ventas/comprobantes/{id}/envios`. Global payment listing is
+  `GET /ventas/pagos`. Payment methods use `GET/POST /medios-pago`, and
+  company configuration uses `GET /empresas` (administrator),
+  `GET /empresas/actual` (all roles), and `PUT /empresas/{id}` (administrator,
+  own company only).
+- Comprobante and payment endpoints are restricted to `administrador` and
+  `ventas`; creating payment methods and managing companies is restricted to
+  `administrador`. Focused service and route tests cover emission idempotency,
+  type selection, numbering, payments, balances, sending, and role permissions.
+  The PostgreSQL emission/payment probe was run with temporary data and rolled
+  back.
+- The payments frontend uses the real API through
+  `frontend/app/components/payments/payments-api.ts`. Comprobantes are emitted,
+  collected, and sent from the order detail page and the payments page; the
+  backend PDF replaces the former client-side PDF, and the simulated gateway
+  and reconciliation flows were removed.
+- SMTP delivery is centralized in `backend/app/services/email_service.py` and
+  shared by comprobante sending and password recovery. Sending requires SMTP
+  configuration; without it the API returns `409`, and a failed delivery
+  returns `502`.
+- Multi-tenant isolation is implemented across products and stock, categories,
+  customers, suppliers, sales orders, budgets, purchase orders, comprobantes,
+  payments, and payment methods. Migration `006_multiempresa.sql` adds the
+  company fiscal columns, per-company `id_empresa` columns and uniqueness, and
+  the catalog seeding trigger. Existing data is assigned to `EMP-0001`.
+- Public self-service registration creates a new company with empty fiscal data
+  plus its administrator. `GET /empresas/actual` and `PUT /empresas/{id}` are
+  scoped to the authenticated employee's company, and the "Mi empresa" frontend
+  screen (`/company`) is available to all roles, editable by administrators.
+- Comprobante emission uses the authenticated employee's company as issuer and
+  is blocked with `409 Conflict` when the company is inactive or lacks a
+  11-digit CUIT.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

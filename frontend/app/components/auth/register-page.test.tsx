@@ -68,6 +68,7 @@ describe("RegisterPage", () => {
       token_type: "bearer",
       user: {
         id_empleado: "EMP-0001",
+        id_empresa: "EMP-0001",
         nombre: "Ana",
         apellido: "López",
         dni_cuil: "20-12345678-9",
@@ -91,7 +92,7 @@ describe("RegisterPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("location")).toHaveTextContent("/dashboard");
+      expect(screen.getByTestId("location")).toHaveTextContent("/company");
     });
     expect(api.registrarUsuario).toHaveBeenCalledWith(
       expect.objectContaining({ rol: "ventas", email: "ana@empresa.com" })

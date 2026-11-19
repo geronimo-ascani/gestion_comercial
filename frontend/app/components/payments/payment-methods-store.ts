@@ -1,19 +1,21 @@
 import { useSyncExternalStore } from "react";
 
+import {
+  crearMedioPago,
+  listMediosPago,
+  type MedioPagoApi,
+} from "./payments-api";
+
 export interface PaymentMethodOption {
   id: string;
   label: string;
-  /** Si es true, el cobro se procesa con la pasarela simulada. */
-  gateway: boolean;
+  tipoCobro: string;
 }
 
-const defaultPaymentMethods: PaymentMethodOption[] = [
-  { id: "efectivo", label: "Efectivo", gateway: false },
-  { id: "tarjeta", label: "Tarjeta", gateway: true },
-  { id: "mercadopago", label: "MercadoPago", gateway: true },
-];
-
-let methods: PaymentMethodOption[] = [...defaultPaymentMethods];
+let methods: PaymentMethodOption[] = [];
+let loading = false;
+let loaded = false;
+let loadPromise: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -32,8 +34,53 @@ function getSnapshot(): PaymentMethodOption[] {
   return methods;
 }
 
+function getLoadingSnapshot(): boolean {
+  return loading;
+}
+
+function mapMedio(medio: MedioPagoApi): PaymentMethodOption {
+  return {
+    id: medio.id_medio_pago,
+    label: medio.medio_pago,
+    tipoCobro: medio.tipo_cobro,
+  };
+}
+
+function sortMethods(items: PaymentMethodOption[]): PaymentMethodOption[] {
+  return [...items].sort((a, b) => a.label.localeCompare(b.label, "es"));
+}
+
 export function usePaymentMethods(): PaymentMethodOption[] {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+export function usePaymentMethodsLoading(): boolean {
+  return useSyncExternalStore(subscribe, getLoadingSnapshot, () => false);
+}
+
+export async function loadPaymentMethods(force = false): Promise<void> {
+  if (loaded && !force) return;
+  if (loadPromise) {
+    await loadPromise;
+    if (!force) return;
+  }
+
+  loading = true;
+  emit();
+
+  loadPromise = (async () => {
+    try {
+      const medios = await listMediosPago();
+      methods = sortMethods(medios.map(mapMedio));
+      loaded = true;
+    } finally {
+      loading = false;
+      loadPromise = null;
+      emit();
+    }
+  })();
+
+  return loadPromise;
 }
 
 export function getPaymentMethodsSnapshot(): PaymentMethodOption[] {
@@ -48,10 +95,6 @@ export function getPaymentMethodLabel(id: string): string {
   return getPaymentMethod(id)?.label ?? id;
 }
 
-export function isGatewayPaymentMethod(id: string): boolean {
-  return getPaymentMethod(id)?.gateway ?? false;
-}
-
 export function isPaymentMethodLabelTaken(
   label: string,
   excludeId?: string
@@ -63,35 +106,21 @@ export function isPaymentMethodLabelTaken(
   );
 }
 
-function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function buildUniqueId(base: string): string {
-  const normalized = base || "medio";
-  if (!methods.some((method) => method.id === normalized)) return normalized;
-  let counter = 2;
-  while (methods.some((method) => method.id === `${normalized}-${counter}`)) {
-    counter += 1;
-  }
-  return `${normalized}-${counter}`;
-}
-
-export function addPaymentMethod(input: {
+export async function addPaymentMethod(input: {
   label: string;
-  gateway: boolean;
-}): PaymentMethodOption {
-  const method: PaymentMethodOption = {
-    id: buildUniqueId(slugify(input.label)),
-    label: input.label.trim(),
-    gateway: input.gateway,
-  };
-  methods = [...methods, method];
+  tipoCobro: string;
+}): Promise<PaymentMethodOption> {
+  const created = mapMedio(
+    await crearMedioPago({
+      medio_pago: input.label.trim(),
+      tipo_cobro: input.tipoCobro,
+    })
+  );
+  methods = sortMethods([
+    ...methods.filter((method) => method.id !== created.id),
+    created,
+  ]);
+  loaded = true;
   emit();
-  return method;
+  return created;
 }

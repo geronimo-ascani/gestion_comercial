@@ -41,11 +41,12 @@ const routeRules: readonly RouteRule[] = [
   { pattern: "/customers", roles: ["administrador", "ventas"] },
   { pattern: "/customers/new", roles: ["administrador", "ventas"] },
   { pattern: "/payments", roles: ["administrador", "ventas"] },
-  { pattern: "/payments/new-method", roles: ["administrador", "ventas"] },
+  { pattern: "/payments/new-method", roles: ["administrador"] },
   { pattern: "/employees", roles: ["administrador"] },
   { pattern: "/employees/new", roles: ["administrador"] },
   { pattern: "/employees/:id/edit", roles: ["administrador"] },
   { pattern: "/analytics", roles: ALL_ROLES },
+  { pattern: "/company", roles: ALL_ROLES },
 ];
 
 function normalizePath(pathname: string): string {

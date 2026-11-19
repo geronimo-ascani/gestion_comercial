@@ -41,6 +41,8 @@ class UsuarioRead(SchemaBase):
     fecha_ingreso: date
     fecha_modificacion: datetime | None
     id_empleado: str
+    id_empresa: str
+    empresa_razon_social: str
     nombre: str
     puesto: str
     rol: Literal["ventas", "abastecimiento", "administrador"]

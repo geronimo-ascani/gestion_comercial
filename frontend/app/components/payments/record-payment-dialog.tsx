@@ -21,122 +21,134 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 
-import { parseNumberInput } from "~/lib/currency";
-import type { PaymentMethod, SalesOrder } from "../sales/sales-types";
-import { updateOrder } from "../sales/sales-store";
-import { usePaymentMethods } from "./payment-methods-store";
-import { simulateGatewayPayment } from "./payment-gateway";
+import { formatMoney, parseNumberInput } from "~/lib/currency";
 import {
-  createInvoiceFromOrder,
-  isGatewayMethod,
-  registerPayment,
-} from "./payments-store";
+  loadPaymentMethods,
+  usePaymentMethods,
+  usePaymentMethodsLoading,
+} from "./payment-methods-store";
+import { registrarPago } from "./payments-store";
+import type { Invoice } from "./payments-types";
 
 interface RecordPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  order: SalesOrder | null;
+  invoice: Invoice | null;
+}
+
+function formatAmountInput(value: number): string {
+  return value.toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function RecordPaymentDialog({
   open,
   onOpenChange,
-  order,
+  invoice,
 }: RecordPaymentDialogProps) {
-  const [method, setMethod] = useState<PaymentMethod>("efectivo");
+  const [method, setMethod] = useState("");
   const [amount, setAmount] = useState("");
-  const [processing, setProcessing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [reference, setReference] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const paymentMethods = usePaymentMethods();
+  const methodsLoading = usePaymentMethodsLoading();
+  const methodItems = Object.fromEntries(
+    paymentMethods.map((paymentMethod) => [
+      paymentMethod.id,
+      paymentMethod.label,
+    ])
+  );
   const submittingRef = useRef(false);
 
   useEffect(() => {
-    if (!open || !order) return;
-    setMethod(order.payment);
-    setAmount(String(parseNumberInput(order.total)));
-    setMessage(null);
-    setProcessing(false);
+    if (!open || !invoice) return;
+    setAmount(formatAmountInput(invoice.balance));
+    setReference("");
+    setError(null);
+    setSubmitting(false);
     submittingRef.current = false;
+    void loadPaymentMethods().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, order?.number]);
+  }, [open, invoice?.id]);
+
+  useEffect(() => {
+    if (!open || method) return;
+    if (paymentMethods.length === 0) return;
+    setMethod(paymentMethods[0].id);
+  }, [open, method, paymentMethods]);
 
   async function handleConfirm() {
-    if (!order) return;
-    if (submittingRef.current || order.paymentStatus === "pagado") return;
+    if (!invoice) return;
+    if (submittingRef.current || invoice.balance <= 0) return;
 
-    const parsedAmount = parseNumberInput(amount);
+    if (!method) {
+      setError("Seleccione un medio de pago.");
+      return;
+    }
+
+    const parsedAmount =
+      Math.round(parseNumberInput(amount) * 100) / 100;
     if (parsedAmount <= 0) {
-      setMessage("Ingrese un monto válido.");
+      setError("Ingrese un monto válido.");
+      return;
+    }
+    if (parsedAmount > invoice.balance + 0.001) {
+      setError(
+        `El monto no puede superar el saldo pendiente (${formatMoney(
+          invoice.balance
+        )}).`
+      );
       return;
     }
 
     submittingRef.current = true;
-
-    let invoiceNumber = order.invoiceNumber;
-    if (!invoiceNumber) {
-      invoiceNumber = createInvoiceFromOrder(order);
-      updateOrder(order.number, { invoiceNumber });
-    }
-
-    if (!isGatewayMethod(method)) {
-      registerPayment({
-        invoiceNumber,
-        orderNumber: order.number,
-        clientId: order.clientId ?? "",
-        client: order.client,
-        method,
-        amount: parsedAmount,
-        status: "aprobado",
+    setSubmitting(true);
+    setError(null);
+    try {
+      await registrarPago(invoice.id, {
+        id_medio_pago: method,
+        monto: parsedAmount.toFixed(2),
+        referencia: reference.trim(),
       });
-      updateOrder(order.number, { paymentStatus: "pagado" });
       onOpenChange(false);
-      return;
-    }
-
-    setProcessing(true);
-    setMessage("Procesando pago con la pasarela…");
-    const result = await simulateGatewayPayment(method);
-    setProcessing(false);
-
-    if (result.status === "rechazado") {
+    } catch (submitError) {
       submittingRef.current = false;
-      setMessage("El pago fue rechazado. Puede intentar nuevamente.");
-      return;
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "No se pudo registrar el cobro."
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    registerPayment({
-      invoiceNumber,
-      orderNumber: order.number,
-      clientId: order.clientId ?? "",
-      client: order.client,
-      method,
-      amount: parsedAmount,
-      status: result.status,
-      gatewayReference: result.reference,
-    });
-    updateOrder(order.number, { paymentStatus: "pagado" });
-    onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Registrar pago</DialogTitle>
+          <DialogTitle>Registrar cobro</DialogTitle>
           <DialogDescription>
-            {order
-              ? `Pedido ${order.number} · ${order.client} · ${order.total}`
-              : "Seleccione un pedido."}
+            {invoice
+              ? `Comprobante ${invoice.number} · ${invoice.client} · Saldo ${formatMoney(
+                  invoice.balance
+                )}`
+              : "Seleccione un comprobante."}
           </DialogDescription>
         </DialogHeader>
 
-        {order && (
+        {invoice && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="payment-method">Método de pago</Label>
+              <Label htmlFor="payment-method">Medio de pago</Label>
               <Select
                 value={method}
-                onValueChange={(value) => setMethod(value as PaymentMethod)}
+                items={methodItems}
+                onValueChange={(value) => setMethod(value ?? "")}
+                disabled={methodsLoading || submitting}
               >
                 <SelectTrigger id="payment-method" className="w-full">
                   <SelectValue />
@@ -149,6 +161,11 @@ export function RecordPaymentDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {!methodsLoading && paymentMethods.length === 0 && (
+                <p className="text-xs text-destructive">
+                  No hay medios de pago disponibles. Cree uno desde Pagos.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -157,30 +174,48 @@ export function RecordPaymentDialog({
                 id="payment-amount"
                 inputMode="decimal"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="$ 0"
+                disabled={submitting}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setError(null);
+                }}
+                placeholder="$ 0,00"
               />
               <p className="text-xs text-muted-foreground">
-                Total sugerido: {order.total}
+                Saldo pendiente: {formatMoney(invoice.balance)}. Se permiten
+                cobros parciales.
               </p>
             </div>
 
-            {message && (
-              <p className="rounded-lg bg-muted px-3 py-2 text-sm">{message}</p>
+            <div className="space-y-2">
+              <Label htmlFor="payment-reference">Referencia (opcional)</Label>
+              <Input
+                id="payment-reference"
+                value={reference}
+                disabled={submitting}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="Ej. transferencia 1234"
+              />
+            </div>
+
+            {error && (
+              <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                {error}
+              </p>
             )}
           </div>
         )}
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
+          <DialogClose render={<Button variant="outline" disabled={submitting} />}>
             Cancelar
           </DialogClose>
           <Button
-            onClick={handleConfirm}
-            disabled={processing || !order || order.paymentStatus === "pagado"}
+            onClick={() => void handleConfirm()}
+            disabled={submitting || !invoice || invoice.balance <= 0}
           >
-            {processing && <Loader2 className="size-4 animate-spin" />}
-            {isGatewayMethod(method) ? "Pagar" : "Registrar cobro"}
+            {submitting && <Loader2 className="size-4 animate-spin" />}
+            Registrar cobro
           </Button>
         </DialogFooter>
       </DialogContent>

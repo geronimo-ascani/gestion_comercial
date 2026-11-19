@@ -1,12 +1,10 @@
 import { Badge } from "~/components/ui/badge";
 
-import {
-  type ConciliationStatus,
-  type InvoiceStatus,
-  type PaymentMethod,
-  type PaymentStatus,
+import type {
+  InvoiceStatus,
+  InvoiceType,
+  PaymentStatus,
 } from "./payments-types";
-import { getPaymentMethodLabel } from "./payment-methods-store";
 
 type BadgeVariant =
   | "success"
@@ -29,7 +27,7 @@ export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const config: Record<InvoiceStatus, { label: string; variant: BadgeVariant }> = {
     emitida: { label: "Emitida", variant: "info" },
-    aprobada: { label: "Aprobada", variant: "success" },
+    aprobada: { label: "Pago parcial", variant: "warning" },
     pagada: { label: "Pagada", variant: "success" },
     rechazada: { label: "Rechazada", variant: "destructive" },
   };
@@ -37,23 +35,11 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-export function InvoiceSendBadge({ sendCount }: { sendCount?: number }) {
-  return (sendCount ?? 0) > 0 ? (
-    <Badge variant="success">Enviado</Badge>
-  ) : (
-    <Badge variant="warning">Pendiente</Badge>
-  );
+export function InvoiceTypeBadge({ type }: { type: InvoiceType }) {
+  const variant: BadgeVariant = type === "A" ? "info" : "secondary";
+  return <Badge variant={variant}>Tipo {type}</Badge>;
 }
 
-export function ConciliationBadge({ status }: { status: ConciliationStatus }) {
-  return status === "conciliado" ? (
-    <Badge variant="success">Conciliado</Badge>
-  ) : (
-    <Badge variant="warning">Pendiente</Badge>
-  );
-}
-
-export function MethodBadge({ method }: { method: PaymentMethod }) {
-  const variant: BadgeVariant = method === "mercadopago" ? "info" : "secondary";
-  return <Badge variant={variant}>{getPaymentMethodLabel(method)}</Badge>;
+export function MethodBadge({ label }: { label: string }) {
+  return <Badge variant="secondary">{label}</Badge>;
 }

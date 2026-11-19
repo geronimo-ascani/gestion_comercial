@@ -3,12 +3,15 @@ from typing import Annotated, Any
 from fastapi import Depends
 from psycopg import Connection
 
+from app.api.security import CurrentUser, get_auth_service
 from app.core.db import get_db
 from app.repositories.analitica_repository import AnaliticaRepository
-from app.repositories.auth_repository import AuthRepository
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.catalogo_repository import CatalogoRepository
 from app.repositories.categoria_repository import CategoriaRepository
+from app.repositories.comprobante_repository import ComprobanteRepository
+from app.repositories.empresa_repository import EmpresaRepository
+from app.repositories.pago_repository import PagoRepository
 from app.repositories.movimiento_inventario_repository import (
     MovimientoInventarioRepository,
 )
@@ -21,6 +24,9 @@ from app.services.analitica_service import AnaliticaService
 from app.services.cliente_service import ClienteService
 from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
+from app.services.comprobante_service import ComprobanteService
+from app.services.empresa_service import EmpresaService
+from app.services.pago_service import PagoService
 from app.services.auth_service import AuthService
 from app.services.producto_service import ProductoService
 from app.services.proveedor_service import ProveedorService
@@ -28,78 +34,133 @@ from app.services.presupuesto_service import PresupuestoService
 from app.services.pedido_compra_service import PedidoCompraService
 from app.services.pedido_venta_service import PedidoVentaService
 
+__all__ = [
+    "get_auth_service",
+    "get_analitica_service",
+    "get_categoria_service",
+    "get_producto_service",
+    "get_catalogo_service",
+    "get_cliente_service",
+    "get_proveedor_service",
+    "get_pedido_compra_service",
+    "get_pedido_venta_service",
+    "get_presupuesto_service",
+    "get_empresa_service",
+    "get_comprobante_service",
+    "get_pago_service",
+]
 
-def get_auth_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
-) -> AuthService:
-    return AuthService(AuthRepository(db))
+DbDep = Annotated[Connection[dict[str, Any]], Depends(get_db)]
 
 
 def get_analitica_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> AnaliticaService:
-    return AnaliticaService(AnaliticaRepository(db))
+    return AnaliticaService(
+        AnaliticaRepository(db, usuario["id_empresa"])
+    )
 
 
 def get_categoria_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> CategoriaService:
-    return CategoriaService(CategoriaRepository(db))
+    return CategoriaService(
+        CategoriaRepository(db, usuario["id_empresa"])
+    )
 
 
 def get_producto_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> ProductoService:
     return ProductoService(
-        ProductoRepository(db),
-        MovimientoInventarioRepository(db),
+        ProductoRepository(db, usuario["id_empresa"]),
+        MovimientoInventarioRepository(db, usuario["id_empresa"]),
     )
 
 
 def get_catalogo_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> CatalogoService:
-    return CatalogoService(CatalogoRepository(db))
+    return CatalogoService(
+        CatalogoRepository(db, usuario["id_empresa"])
+    )
 
 
 def get_cliente_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> ClienteService:
-    return ClienteService(ClienteRepository(db))
+    return ClienteService(ClienteRepository(db, usuario["id_empresa"]))
 
 
 def get_proveedor_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> ProveedorService:
-    return ProveedorService(ProveedorRepository(db))
+    return ProveedorService(ProveedorRepository(db, usuario["id_empresa"]))
 
 
 def get_pedido_compra_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> PedidoCompraService:
     return PedidoCompraService(
-        PedidoCompraRepository(db),
-        ProductoRepository(db),
-        MovimientoInventarioRepository(db),
+        PedidoCompraRepository(db, usuario["id_empresa"]),
+        ProductoRepository(db, usuario["id_empresa"]),
+        MovimientoInventarioRepository(db, usuario["id_empresa"]),
     )
 
 
 def get_pedido_venta_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> PedidoVentaService:
     return PedidoVentaService(
-        PedidoVentaRepository(db),
-        ProductoRepository(db),
-        MovimientoInventarioRepository(db),
+        PedidoVentaRepository(db, usuario["id_empresa"]),
+        ProductoRepository(db, usuario["id_empresa"]),
+        MovimientoInventarioRepository(db, usuario["id_empresa"]),
     )
 
 
 def get_presupuesto_service(
-    db: Annotated[Connection[dict[str, Any]], Depends(get_db)],
+    db: DbDep,
+    usuario: CurrentUser,
 ) -> PresupuestoService:
     return PresupuestoService(
-        PresupuestoRepository(db),
-        PedidoVentaRepository(db),
-        ProductoRepository(db),
-        MovimientoInventarioRepository(db),
+        PresupuestoRepository(db, usuario["id_empresa"]),
+        PedidoVentaRepository(db, usuario["id_empresa"]),
+        ProductoRepository(db, usuario["id_empresa"]),
+        MovimientoInventarioRepository(db, usuario["id_empresa"]),
+    )
+
+
+def get_empresa_service(
+    db: DbDep,
+) -> EmpresaService:
+    return EmpresaService(EmpresaRepository(db))
+
+
+def get_comprobante_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> ComprobanteService:
+    return ComprobanteService(
+        ComprobanteRepository(db, usuario["id_empresa"]),
+        PagoRepository(db, usuario["id_empresa"]),
+        EmpresaService(EmpresaRepository(db)),
+        id_empresa=usuario["id_empresa"],
+    )
+
+
+def get_pago_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> PagoService:
+    return PagoService(
+        ComprobanteRepository(db, usuario["id_empresa"]),
+        PagoRepository(db, usuario["id_empresa"]),
     )

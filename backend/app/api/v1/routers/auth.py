@@ -1,6 +1,5 @@
-from typing import Annotated, Any
+from typing import Annotated
 
-import jwt
 from fastapi import (
     APIRouter,
     Depends,
@@ -10,8 +9,13 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.api.deps import get_auth_service
+
+from app.api.security import (
+    CurrentUser,
+    ServiceDep,
+    get_current_user,
+    require_roles,
+)
 from app.schemas.auth import (
     CredencialesLogin,
     RegistroEmpleado,
@@ -29,7 +33,6 @@ from app.schemas.empleados import (
 )
 from app.services.auth_service import (
     AuthDatosDuplicados,
-    AuthService,
     CredencialesInvalidas,
     EmpleadoEnUso,
     EmpleadoNoEncontrado,
@@ -37,86 +40,15 @@ from app.services.auth_service import (
     EmailNoConfigurado,
     ErrorEnvioEmail,
     LimiteIntentosExcedido,
-    RegistroBloqueado,
     TokenRecuperacionInvalido,
 )
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
-_bearer = HTTPBearer(auto_error=False)
-ServiceDep = Annotated[AuthService, Depends(get_auth_service)]
-
-
-def get_current_user(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(_bearer)
-    ],
-    service: ServiceDep,
-) -> dict[str, Any]:
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Se requiere autenticación",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    try:
-        id_empleado = service.decodificar_token(credentials.credentials)
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="La sesión no es válida o expiró",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-    usuario = service.obtener_usuario(id_empleado)
-    if usuario is None or not service.token_vigente(
-        credentials.credentials, usuario
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="La sesión no es válida o expiró",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return usuario
-
-
-def _usuario_opcional(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(_bearer)
-    ],
-    service: ServiceDep,
-) -> dict[str, Any] | None:
-    if credentials is None:
-        return None
-    try:
-        id_empleado = service.decodificar_token(credentials.credentials)
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="La sesión no es válida o expiró",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-    usuario = service.obtener_usuario(id_empleado)
-    if usuario is None or not service.token_vigente(
-        credentials.credentials, usuario
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="La sesión no es válida o expiró",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return usuario
-
-
-def _administrador(usuario: dict[str, Any]) -> None:
-    if usuario["rol"] != "administrador":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Se requiere el rol administrador",
-        )
-
-
-CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
-OptionalUser = Annotated[dict[str, Any] | None, Depends(_usuario_opcional)]
 EmpleadoId = Annotated[str, Path(min_length=1, max_length=20)]
+SoloAdministrador = Annotated[
+    dict,
+    Depends(require_roles("administrador")),
+]
 
 
 @router.post("/login", response_model=TokenRead)
@@ -152,7 +84,6 @@ def iniciar_sesion(
 def registrar(
     datos: RegistroEmpleado,
     service: ServiceDep,
-    usuario_actual: OptionalUser,
     request: Request,
 ) -> RegistroResponse:
     try:
@@ -167,20 +98,8 @@ def registrar(
             detail="Se alcanzó el límite de registros. Volvé a intentarlo más tarde.",
             headers={"Retry-After": "3600"},
         ) from exc
-    administrador_id: str | None = None
-    if usuario_actual is not None:
-        _administrador(usuario_actual)
-        administrador_id = usuario_actual["id_empleado"]
     try:
-        token, usuario = service.registrar(
-            datos.model_dump(),
-            administrador_id,
-        )
-    except RegistroBloqueado as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="El registro inicial ya se completó; se requiere un administrador.",
-        ) from exc
+        token, usuario = service.registrar_publico(datos.model_dump())
     except AuthDatosDuplicados as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -197,35 +116,28 @@ def obtener_sesion(usuario_actual: CurrentUser) -> UsuarioRead:
     return UsuarioRead.model_validate(usuario_actual)
 
 
-@router.get("/employees", response_model=list[UsuarioRead])
+@router.get("/employees", response_model=list[EmpleadoRead])
 def listar_empleados(
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
-) -> list[UsuarioRead]:
-    _administrador(usuario_actual)
+) -> list[EmpleadoRead]:
     return [
-        UsuarioRead.model_validate(usuario)
-        for usuario in service.listar_usuarios()
+        EmpleadoRead.model_validate(usuario)
+        for usuario in service.listar_usuarios(usuario_actual["id_empresa"])
     ]
 
 
 @router.post("/employees", response_model=EmpleadoRead, status_code=201)
 def crear_empleado(
     datos: EmpleadoCreate,
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
 ) -> EmpleadoRead:
-    _administrador(usuario_actual)
     try:
-        _, empleado = service.registrar(
+        empleado = service.registrar_empleado(
             datos.model_dump(),
-            usuario_actual["id_empleado"],
+            usuario_actual["id_empresa"],
         )
-    except RegistroBloqueado as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tenés permisos para crear este empleado.",
-        ) from exc
     except AuthDatosDuplicados as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -237,11 +149,12 @@ def crear_empleado(
 @router.get("/employees/{id_empleado}", response_model=EmpleadoRead)
 def obtener_empleado(
     id_empleado: EmpleadoId,
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
 ) -> EmpleadoRead:
-    _administrador(usuario_actual)
-    empleado = service.obtener_usuario(id_empleado)
+    empleado = service.obtener_empleado(
+        id_empleado, usuario_actual["id_empresa"]
+    )
     if empleado is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -254,14 +167,14 @@ def obtener_empleado(
 def actualizar_empleado(
     datos: EmpleadoUpdate,
     id_empleado: EmpleadoId,
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
 ) -> EmpleadoRead:
-    _administrador(usuario_actual)
     try:
         empleado = service.actualizar_usuario(
             id_empleado,
             datos.model_dump(exclude_unset=True),
+            usuario_actual["id_empresa"],
         )
     except EmpleadoNoEncontrado as exc:
         raise HTTPException(
@@ -288,12 +201,15 @@ def actualizar_empleado(
 def actualizar_contrasena_empleado(
     datos: EmpleadoPasswordUpdate,
     id_empleado: EmpleadoId,
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
 ) -> Response:
-    _administrador(usuario_actual)
     try:
-        service.actualizar_contrasena_empleado(id_empleado, datos.password)
+        service.actualizar_contrasena_empleado(
+            id_empleado,
+            datos.password,
+            usuario_actual["id_empresa"],
+        )
     except EmpleadoNoEncontrado as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -305,12 +221,13 @@ def actualizar_contrasena_empleado(
 @router.delete("/employees/{id_empleado}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_empleado(
     id_empleado: EmpleadoId,
-    usuario_actual: CurrentUser,
+    usuario_actual: SoloAdministrador,
     service: ServiceDep,
 ) -> Response:
-    _administrador(usuario_actual)
     try:
-        service.eliminar_usuario(id_empleado)
+        service.eliminar_usuario(
+            id_empleado, usuario_actual["id_empresa"]
+        )
     except EmpleadoNoEncontrado as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -376,13 +293,5 @@ def restablecer_contrasena(
         ) from exc
 
 
-def require_roles(*roles: str):
-    def check_role(usuario: CurrentUser) -> dict[str, Any]:
-        if usuario["rol"] not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tenés permisos para realizar esta operación.",
-            )
-        return usuario
-
-    return check_role
+# Reexportado para los routers que todavía importan desde este módulo.
+__all__ = ["router", "get_current_user", "require_roles"]

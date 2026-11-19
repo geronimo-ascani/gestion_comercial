@@ -8,6 +8,8 @@ export type EmployeeRole = keyof typeof employeeRoleLabels;
 
 export interface Employee {
   id: string;
+  idEmpresa: string;
+  empresaRazonSocial: string;
   firstName: string;
   lastName: string;
   cuil: string;

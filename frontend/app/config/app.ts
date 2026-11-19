@@ -8,6 +8,7 @@ import {
   UsersRound,
   Receipt,
   BarChart3,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,4 +36,5 @@ export const navItems: NavItem[] = [
   { to: "/payments", label: "Pagos", icon: Receipt, roles: ["administrador", "ventas"] },
   { to: "/employees", label: "Empleados", icon: UsersRound, roles: ["administrador"] },
   { to: "/analytics", label: "Analíticas", icon: BarChart3, roles: ALL_ROLES },
+  { to: "/company", label: "Mi empresa", icon: Building2, roles: ALL_ROLES },
 ];

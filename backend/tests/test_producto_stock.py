@@ -41,7 +41,7 @@ def test_actualizar_producto_devuelve_producto_dado_de_baja() -> None:
         def execute(self, query, params) -> None:
             if "UPDATE producto" in str(query):
                 self.row = {"id_producto": "PRD-0001"}
-            elif params == ("PRD-0001", True):
+            elif params == ("PRD-0001", "EMP-0001", True):
                 self.row = producto_inactivo
 
         def fetchone(self):
@@ -51,9 +51,9 @@ def test_actualizar_producto_devuelve_producto_dado_de_baja() -> None:
         def cursor(self, **_kwargs):
             return FakeCursor(self)
 
-    producto = ProductoRepository(FakeConnection()).actualizar(
-        "PRD-0001", {"estado": False}
-    )
+    producto = ProductoRepository(
+        FakeConnection(), "EMP-0001"
+    ).actualizar("PRD-0001", {"estado": False})
 
     assert producto == producto_inactivo
 

@@ -93,6 +93,8 @@ describe("LoginPage", () => {
     });
     vi.mocked(api.obtenerUsuarioActual).mockResolvedValue({
       id: "EMP-0001",
+      idEmpresa: "EMP-0001",
+      empresaRazonSocial: "Empresa de prueba",
       firstName: "Ana",
       lastName: "Pérez",
       cuil: "20-12345678-9",
@@ -127,6 +129,8 @@ describe("LoginPage", () => {
     });
     vi.mocked(api.obtenerUsuarioActual).mockResolvedValue({
       id: "EMP-0002",
+      idEmpresa: "EMP-0002",
+      empresaRazonSocial: "Empresa de prueba",
       firstName: "Vera",
       lastName: "Ventas",
       cuil: "20123456786",

@@ -34,8 +34,9 @@ JOIN producto p ON p.id_producto = d.id_producto
 
 
 class PedidoCompraRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -43,20 +44,30 @@ class PedidoCompraRepository:
     def proveedor_existe(self, id_proveedor: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "SELECT EXISTS (SELECT 1 FROM proveedor WHERE id_proveedor = %s)",
-                (id_proveedor,),
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM proveedor
+                    WHERE id_proveedor = %s AND id_empresa = %s
+                ) AS existe
+                """,
+                (id_proveedor, self._id_empresa),
             )
             row = cur.fetchone()
-            return bool(row and row["exists"])
+            return bool(row and row["existe"])
 
     def medio_pago_existe(self, id_medio_pago: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "SELECT EXISTS (SELECT 1 FROM medio_pago WHERE id_medio_pago = %s)",
-                (id_medio_pago,),
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM medio_pago
+                    WHERE id_medio_pago = %s AND id_empresa = %s
+                ) AS existe
+                """,
+                (id_medio_pago, self._id_empresa),
             )
             row = cur.fetchone()
-            return bool(row and row["exists"])
+            return bool(row and row["existe"])
 
     def crear(
         self,
@@ -69,13 +80,19 @@ class PedidoCompraRepository:
             cur.execute(
                 """
                 INSERT INTO pedido_proveedor (
-                    estado, fecha_pedido, total, id_empleado,
+                    id_empresa, estado, fecha_pedido, total, id_empleado,
                     id_medio_pago, id_proveedor
                 )
-                VALUES ('pendiente', CURRENT_DATE, %s, %s, %s, %s)
+                VALUES (%s, 'pendiente', CURRENT_DATE, %s, %s, %s, %s)
                 RETURNING id_pedido_proveedor
                 """,
-                (total, id_empleado, id_medio_pago, id_proveedor),
+                (
+                    self._id_empresa,
+                    total,
+                    id_empleado,
+                    id_medio_pago,
+                    id_proveedor,
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -107,11 +124,14 @@ class PedidoCompraRepository:
     def obtener(
         self, id_pedido_proveedor: str, bloquear: bool = False
     ) -> PedidoCompraRow | None:
-        query = f"{_SELECT_PEDIDO} WHERE pp.id_pedido_proveedor = %s"
+        query = (
+            f"{_SELECT_PEDIDO} "
+            "WHERE pp.id_pedido_proveedor = %s AND pp.id_empresa = %s"
+        )
         if bloquear:
             query += " FOR UPDATE OF pp"
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(query, (id_pedido_proveedor,))
+            cur.execute(query, (id_pedido_proveedor, self._id_empresa))
             pedido = cur.fetchone()
         if pedido is None:
             return None
@@ -137,7 +157,8 @@ class PedidoCompraRepository:
             cur.execute(
                 f"""
                 {_SELECT_PEDIDO}
-                WHERE (%(estado)s::text IS NULL OR pp.estado = %(estado)s)
+                WHERE pp.id_empresa = %(id_empresa)s
+                  AND (%(estado)s::text IS NULL OR pp.estado = %(estado)s)
                   AND (
                       %(q)s::text IS NULL
                       OR pp.id_pedido_proveedor ILIKE %(q)s
@@ -148,6 +169,7 @@ class PedidoCompraRepository:
                 LIMIT %(limit)s OFFSET %(offset)s
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "estado": estado,
                     "q": pattern,
                     "limit": limit,
@@ -181,11 +203,11 @@ class PedidoCompraRepository:
                 """
                 UPDATE pedido_proveedor
                 SET estado = 'recibida', fecha_recepcion = CURRENT_DATE
-                WHERE id_pedido_proveedor = %s
+                WHERE id_pedido_proveedor = %s AND id_empresa = %s
                   AND estado IN ('pendiente', 'aprobada')
                 RETURNING id_pedido_proveedor
                 """,
-                (id_pedido_proveedor,),
+                (id_pedido_proveedor, self._id_empresa),
             )
             return cur.fetchone() is not None
 
@@ -195,10 +217,10 @@ class PedidoCompraRepository:
                 """
                 UPDATE pedido_proveedor
                 SET estado = 'cancelada'
-                WHERE id_pedido_proveedor = %s
+                WHERE id_pedido_proveedor = %s AND id_empresa = %s
                   AND estado IN ('pendiente', 'aprobada')
                 RETURNING id_pedido_proveedor
                 """,
-                (id_pedido_proveedor,),
+                (id_pedido_proveedor, self._id_empresa),
             )
             return cur.fetchone() is not None

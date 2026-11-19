@@ -1,11 +1,15 @@
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
 
-from .base import SchemaBase, UpdateSchema
+from pydantic import Field
+
+from .base import SchemaBase
 
 
 class MedioPagoFields(SchemaBase):
-    medio_pago: str
-    tipo_cobro: str
+    medio_pago: str = Field(min_length=1, max_length=80)
+    tipo_cobro: str = Field(min_length=1, max_length=20)
 
 
 class MedioPagoCreate(MedioPagoFields):
@@ -16,58 +20,44 @@ class MedioPagoRead(MedioPagoFields):
     id_medio_pago: str
 
 
-class MedioPagoUpdate(UpdateSchema):
+class MedioPagoUpdate(SchemaBase):
     medio_pago: str | None = None
     tipo_cobro: str | None = None
 
 
-class ComprobanteVentaFields(SchemaBase):
-    estado_pago: str
-    fecha_emision: date
+class PagoCreate(SchemaBase):
+    id_medio_pago: str = Field(min_length=1, max_length=20)
+    monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    referencia: str = Field(default="", max_length=80)
+    estado: Literal["aprobado", "pendiente", "rechazado"] = "aprobado"
     fecha_pago: date | None = None
-    monto: float
-    tipo_comprobante: str
-    id_pedido_cliente: str
 
 
-class ComprobanteVentaCreate(ComprobanteVentaFields):
-    pass
-
-
-class ComprobanteVentaRead(ComprobanteVentaFields):
-    id_comprobante_venta: str
-
-
-class ComprobanteVentaUpdate(UpdateSchema):
-    estado_pago: str | None = None
-    fecha_emision: date | None = None
-    fecha_pago: date | None = None
-    monto: float | None = None
-    tipo_comprobante: str | None = None
-    id_pedido_cliente: str | None = None
-
-
-class PagoFields(SchemaBase):
-    estado: str
-    fecha_pago: date
-    monto: float
-    referencia: str
-    id_comprobante_venta: str
-    id_medio_pago: str
-
-
-class PagoCreate(PagoFields):
-    pass
-
-
-class PagoRead(PagoFields):
+class PagoRead(SchemaBase):
     id_pago: str
+    estado: Literal["aprobado", "pendiente", "rechazado"]
+    fecha_pago: date
+    monto: Decimal
+    referencia: str
+    id_medio_pago: str
+    medio_pago: str
+    creado_en: datetime
 
 
-class PagoUpdate(UpdateSchema):
-    estado: str | None = None
-    fecha_pago: date | None = None
-    monto: float | None = None
-    referencia: str | None = None
-    id_comprobante_venta: str | None = None
-    id_medio_pago: str | None = None
+class PagoListadoRead(PagoRead):
+    id_comprobante_venta: str
+    numero_comprobante: str | None
+    punto_venta: str
+    id_pedido_cliente: str
+    id_cliente: str
+    cliente_nombre: str
+    cliente_apellido: str
+
+
+
+class ComprobanteEnvioRead(SchemaBase):
+    id_envio: int
+    destinatario: str
+    estado: Literal["enviado", "fallido"]
+    error: str | None
+    enviado_en: datetime

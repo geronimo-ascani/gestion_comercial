@@ -46,8 +46,9 @@ JOIN producto p ON p.id_producto = dp.id_producto
 
 
 class PresupuestoRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
 
     def transaction(self) -> Any:
         return self._conn.transaction()
@@ -55,27 +56,33 @@ class PresupuestoRepository:
     def cliente_existe(self, id_cliente: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
-                "SELECT EXISTS (SELECT 1 FROM cliente WHERE id_cliente = %s)",
-                (id_cliente,),
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM cliente
+                    WHERE id_cliente = %s AND id_empresa = %s
+                ) AS existe
+                """,
+                (id_cliente, self._id_empresa),
             )
             row = cur.fetchone()
-            return bool(row and row["exists"])
+            return bool(row and row["existe"])
 
     def crear(self, datos: dict[str, Any], total: Any) -> str:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 INSERT INTO presupuesto_cliente (
-                    estado, fecha_muestra, fecha_vencimiento,
+                    id_empresa, estado, fecha_muestra, fecha_vencimiento,
                     descuento_compra, total, id_cliente
                 )
                 VALUES (
-                    'pendiente', %(fecha_muestra)s, %(fecha_vencimiento)s,
-                    %(descuento_compra)s, %(total)s, %(id_cliente)s
+                    %(id_empresa)s, 'pendiente', %(fecha_muestra)s,
+                    %(fecha_vencimiento)s, %(descuento_compra)s,
+                    %(total)s, %(id_cliente)s
                 )
                 RETURNING id_presupuesto_cliente
                 """,
-                {**datos, "total": total},
+                {**datos, "total": total, "id_empresa": self._id_empresa},
             )
             row = cur.fetchone()
             assert row is not None
@@ -109,12 +116,12 @@ class PresupuestoRepository:
     ) -> PresupuestoRow | None:
         query = (
             f"{_SELECT_PRESUPUESTO} "
-            "WHERE pc.id_presupuesto_cliente = %s"
+            "WHERE pc.id_presupuesto_cliente = %s AND pc.id_empresa = %s"
         )
         if bloquear:
             query += " FOR UPDATE OF pc"
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(query, (id_presupuesto_cliente,))
+            cur.execute(query, (id_presupuesto_cliente, self._id_empresa))
             presupuesto = cur.fetchone()
         if presupuesto is None:
             return None
@@ -143,7 +150,8 @@ class PresupuestoRepository:
             cur.execute(
                 f"""
                 {_SELECT_PRESUPUESTO}
-                WHERE (%(estado)s::text IS NULL OR ({_ESTADO_EFECTIVO}) = %(estado)s)
+                WHERE pc.id_empresa = %(id_empresa)s
+                  AND (%(estado)s::text IS NULL OR ({_ESTADO_EFECTIVO}) = %(estado)s)
                   AND (
                       %(q)s::text IS NULL
                       OR pc.id_presupuesto_cliente ILIKE %(q)s
@@ -155,6 +163,7 @@ class PresupuestoRepository:
                 LIMIT %(limit)s OFFSET %(offset)s
                 """,
                 {
+                    "id_empresa": self._id_empresa,
                     "estado": estado,
                     "q": pattern,
                     "limit": limit,
@@ -202,6 +211,7 @@ class PresupuestoRepository:
                     total = %(total)s,
                     id_cliente = %(id_cliente)s
                 WHERE id_presupuesto_cliente = %(id_presupuesto_cliente)s
+                  AND id_empresa = %(id_empresa)s
                   AND estado = 'pendiente'
                 RETURNING id_presupuesto_cliente
                 """,
@@ -209,6 +219,7 @@ class PresupuestoRepository:
                     **datos,
                     "total": total,
                     "id_presupuesto_cliente": id_presupuesto_cliente,
+                    "id_empresa": self._id_empresa,
                 },
             )
             if cur.fetchone() is None:
@@ -228,11 +239,12 @@ class PresupuestoRepository:
                 UPDATE presupuesto_cliente
                 SET estado = 'aprobado'
                 WHERE id_presupuesto_cliente = %s
+                  AND id_empresa = %s
                   AND estado = 'pendiente'
                   AND fecha_vencimiento >= CURRENT_DATE
                 RETURNING id_presupuesto_cliente
                 """,
-                (id_presupuesto_cliente,),
+                (id_presupuesto_cliente, self._id_empresa),
             )
             return cur.fetchone() is not None
 
@@ -243,10 +255,11 @@ class PresupuestoRepository:
                 UPDATE presupuesto_cliente
                 SET estado = 'vencido'
                 WHERE id_presupuesto_cliente = %s
+                  AND id_empresa = %s
                   AND estado IN ('pendiente', 'aprobado')
                   AND fecha_vencimiento < CURRENT_DATE
                 """,
-                (id_presupuesto_cliente,),
+                (id_presupuesto_cliente, self._id_empresa),
             )
 
     def eliminar(self, id_presupuesto_cliente: str) -> bool:
@@ -254,10 +267,11 @@ class PresupuestoRepository:
             cur.execute(
                 """
                 DELETE FROM presupuesto_cliente
-                WHERE id_presupuesto_cliente = %s AND estado = 'pendiente'
+                WHERE id_presupuesto_cliente = %s AND id_empresa = %s
+                  AND estado = 'pendiente'
                 RETURNING id_presupuesto_cliente
                 """,
-                (id_presupuesto_cliente,),
+                (id_presupuesto_cliente, self._id_empresa),
             )
             return cur.fetchone() is not None
 
@@ -268,10 +282,11 @@ class PresupuestoRepository:
                 UPDATE presupuesto_cliente
                 SET estado = 'convertido'
                 WHERE id_presupuesto_cliente = %s
+                  AND id_empresa = %s
                   AND estado = 'aprobado'
                   AND fecha_vencimiento >= CURRENT_DATE
                 RETURNING id_presupuesto_cliente
                 """,
-                (id_presupuesto_cliente,),
+                (id_presupuesto_cliente, self._id_empresa),
             )
             return cur.fetchone() is not None

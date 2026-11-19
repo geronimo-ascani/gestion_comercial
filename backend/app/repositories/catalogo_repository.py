@@ -10,8 +10,12 @@ MedioPagoRow = dict[str, Any]
 
 
 class CatalogoRepository:
-    def __init__(self, conn: Connection) -> None:
+    def __init__(self, conn: Connection, id_empresa: str) -> None:
         self._conn = conn
+        self._id_empresa = id_empresa
+
+    def transaction(self) -> Any:
+        return self._conn.transaction()
 
     def listar_alicuotas(self) -> list[AlicuotaRow]:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -52,7 +56,25 @@ class CatalogoRepository:
                 """
                 SELECT id_medio_pago, medio_pago, tipo_cobro
                 FROM medio_pago
+                WHERE id_empresa = %s
                 ORDER BY medio_pago
-                """
+                """,
+                (self._id_empresa,),
             )
             return cur.fetchall()
+
+    def crear_medio_pago(
+        self, medio_pago: str, tipo_cobro: str
+    ) -> MedioPagoRow:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO medio_pago (id_empresa, medio_pago, tipo_cobro)
+                VALUES (%s, %s, %s)
+                RETURNING id_medio_pago, medio_pago, tipo_cobro
+                """,
+                (self._id_empresa, medio_pago, tipo_cobro),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return row

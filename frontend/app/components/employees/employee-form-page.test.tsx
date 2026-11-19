@@ -27,6 +27,8 @@ describe("EmployeeFormPage", () => {
     const store = await import("./employees-store");
     vi.mocked(store.createEmployee).mockResolvedValue({
       id: "EMP-0002",
+      idEmpresa: "EMP-0001",
+      empresaRazonSocial: "Empresa de prueba",
       firstName: "Ana",
       lastName: "Pérez",
       cuil: "20123456786",

@@ -27,5 +27,6 @@ export default [
     route("purchases/new-provider", "routes/purchases-new-provider.tsx"),
     route("providers", "routes/providers.tsx"),
     route("analytics", "routes/analytics.tsx"),
+    route("company", "routes/company.tsx"),
   ]),
 ] satisfies RouteConfig;
