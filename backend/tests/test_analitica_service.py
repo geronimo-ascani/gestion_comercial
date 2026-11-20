@@ -72,6 +72,7 @@ _COMPRA_RECIBIDA_FUERA_DE_PEDIDO = {
 class FakeAnaliticaRepository:
     def __init__(self) -> None:
         self.ventas = [_VENTA_1, _VENTA_2]
+        self.totales_rangos: list[tuple[date, date]] = []
         self.compras = [
             _COMPRA_PEDIDO,
             _COMPRA_RECIBIDA_FUERA_DE_PEDIDO,
@@ -153,6 +154,7 @@ class FakeAnaliticaRepository:
         ]
 
     def totales(self, desde: date, hasta: date):
+        self.totales_rangos.append((desde, hasta))
         return {"ventas": Decimal("120.00"), "gastos": Decimal("30.00")}
 
 
@@ -265,6 +267,17 @@ def test_medios_pago_solo_incluye_pagos_aprobados() -> None:
             "medio_pago": "Efectivo",
             "monto": Decimal("100.00"),
         }
+    ]
+
+
+def test_variacion_anio_compara_contra_mismo_periodo_del_anio_anterior() -> None:
+    repo = FakeAnaliticaRepository()
+    service = AnaliticaService(repo)  # type: ignore[arg-type]
+
+    service.obtener("año", "administrador", date(2026, 11, 20))
+
+    assert repo.totales_rangos == [
+        (date(2025, 1, 1), date(2025, 11, 20))
     ]
 
 

@@ -13,8 +13,8 @@ from app.repositories.pedido_venta_repository import (
 from app.repositories.producto_repository import ProductoRepository, ProductoRow
 from app.schemas.pedidos_venta import PedidoVentaInput
 from app.services.venta_calculos import (
+    LineaVentaConCosto,
     VentaImporteInvalido,
-    VentaLinea,
     calcular_linea_venta,
 )
 
@@ -323,8 +323,8 @@ class PedidoVentaService:
         datos: PedidoVentaInput,
         productos: dict[str, ProductoRow],
         precios_cotizados: dict[str, dict[str, Any]] | None = None,
-    ) -> list[VentaLinea]:
-        lineas: list[VentaLinea] = []
+    ) -> list[LineaVentaConCosto]:
+        lineas: list[LineaVentaConCosto] = []
         total = Decimal("0")
         for item in datos.items:
             producto = productos[item.id_producto]
@@ -355,7 +355,12 @@ class PedidoVentaService:
                 )
             except VentaImporteInvalido as exc:
                 raise PedidoVentaDatosInvalidos(str(exc)) from exc
-            lineas.append(linea)
+            lineas.append(
+                {
+                    **linea,
+                    "costo_unitario": producto["precio_compra"],
+                }
+            )
             total += linea["subtotal"]
         if total > _MAX_IMPORTE:
             raise PedidoVentaDatosInvalidos(

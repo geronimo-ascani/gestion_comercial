@@ -21,6 +21,7 @@ from app.services.analitica_calculos import (
     calcular_variacion,
     calcular_ventas_por_metodo_pago,
     predecir_demanda,
+    rango_comparacion,
     rango_periodo,
 )
 
@@ -126,6 +127,33 @@ def test_rango_periodo_cubre_todos_los_periodos() -> None:
 def test_rango_periodo_desconocido_falla() -> None:
     with pytest.raises(AnaliticaDatosInvalidos):
         rango_periodo("semana", date(2026, 11, 17))  # type: ignore[arg-type]
+
+
+def test_rango_comparacion_anio_usa_mismo_acumulado_del_anio_anterior() -> None:
+    desde, hasta = rango_periodo("año", date(2026, 11, 20))
+
+    assert rango_comparacion("año", desde, hasta) == (
+        date(2025, 1, 1),
+        date(2025, 11, 20),
+    )
+
+
+def test_rango_comparacion_anio_bisiesto_ajusta_fecha_final() -> None:
+    desde, hasta = rango_periodo("año", date(2024, 2, 29))
+
+    assert rango_comparacion("año", desde, hasta) == (
+        date(2023, 1, 1),
+        date(2023, 2, 28),
+    )
+
+
+def test_rango_comparacion_periodos_moviles_usa_ventana_inmediata() -> None:
+    desde, hasta = rango_periodo("7d", date(2026, 11, 17))
+
+    assert rango_comparacion("7d", desde, hasta) == (
+        date(2026, 11, 4),
+        date(2026, 11, 10),
+    )
 
 
 # --- KPIs ------------------------------------------------------------------
@@ -867,6 +895,11 @@ def test_calcular_variacion() -> None:
     assert calcular_variacion(_D("80"), _D("100")) == _D("-20.00")
     assert calcular_variacion(_D("100"), _D("100")) == _D("0.00")
     assert calcular_variacion(_D("100"), _D("0")) is None
+
+
+def test_calcular_variacion_con_base_negativa_no_invierte_el_signo() -> None:
+    assert calcular_variacion(_D("-80"), _D("-100")) == _D("20.00")
+    assert calcular_variacion(_D("-120"), _D("-100")) == _D("-20.00")
 
 
 def test_calcular_variacion_redondea_a_dos_decimales() -> None:

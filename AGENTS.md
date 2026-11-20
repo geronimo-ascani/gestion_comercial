@@ -16,7 +16,8 @@
   `001_schema_completo.sql`, `002_auth_recovery.sql`,
   `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`,
   `005_comprobantes_pagos.sql`, `006_multiempresa.sql`,
-  `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`.
+  `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`,
+  `009_costo_unitario_venta.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `python -m pytest -q` from `backend/`.
@@ -221,12 +222,20 @@
 - Sales KPIs use order totals including VAT. Purchases exclude canceled orders;
   expenses (`gastos`) include only received purchases and are imputed on the
   reception date for trends.
-- Gross margin uses net sales (without VAT) minus the product's current
-  `precio_compra` as unit cost. It is not the same as `neto`, which subtracts
-  received purchases from sales totals. Costs, gross margin and category
-  margins are available to `ventas`; the net margin (`margen_pct`), purchase
-  totals, expenses (`gastos`) and `neto` remain administrator-only because they
-  depend on purchase data.
+- Gross margin uses net sales (without VAT) minus the `costo_unitario` stored on
+  each sales line when the order was created, edited or converted from a budget.
+  Changing `producto.precio_compra` later must not change historical metrics.
+  Migration `009_costo_unitario_venta.sql` adds that column and backfills legacy
+  rows from the current product cost as a best effort. Gross margin is not the
+  same as `neto`, which subtracts received purchases from sales totals. Costs,
+  gross margin and category margins are available to `ventas`; the net margin
+  (`margen_pct`), purchase totals, expenses (`gastos`) and `neto` remain
+  administrator-only because they depend on purchase data.
+- Percentage variation uses `abs(previous)` as the denominator so a negative
+  base does not invert the sign; a zero base returns no variation. The `año`
+  period compares year-to-date against the same range in the previous year;
+  all other rolling periods compare against the immediately preceding
+  equal-length window.
 - A customer counts as new when an order falls on the same date as their first
   non-canceled purchase; otherwise the order is recurrent.
 - Demand forecasting is a simple linear regression over chronological,

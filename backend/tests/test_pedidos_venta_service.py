@@ -92,6 +92,7 @@ class FakeProductoRepository:
             "id_producto": "PRD-0001",
             "estado": True,
             "stock_actual": self.stock,
+            "precio_compra": Decimal("50.00"),
             "precio_venta": Decimal("120.00"),
             "alicuota_porcentaje": Decimal("21.00"),
             "alicuota_tipo_iva": "gravado",
@@ -178,6 +179,19 @@ def test_crear_calcula_descuentos_iva_y_reserva_stock() -> None:
     assert linea["iva"] == Decimal("33.74")
     assert productos.stock == Decimal("3.000")
     assert movimientos.sales == [("PV-0001", "PRD-0001", Decimal("2"))]
+
+
+def test_crear_guarda_costo_unitario_sin_afectar_metricas_por_cambios_futuros() -> None:
+    service, pedidos, productos, _movimientos = _service()
+
+    pedido = service.crear(_datos("2"))
+    assert pedido["items"][0]["costo_unitario"] == Decimal("50.00")
+
+    productos.producto["precio_compra"] = Decimal("999.00")
+    actual = service.obtener(pedido["id_pedido_cliente"])
+
+    assert actual["items"][0]["costo_unitario"] == Decimal("50.00")
+    assert pedidos.pedido["items"][0]["costo_unitario"] == Decimal("50.00")
 
 
 def test_editar_pedido_pendiente_aplica_deltas_de_stock() -> None:

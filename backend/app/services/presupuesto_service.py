@@ -20,6 +20,7 @@ from app.schemas.presupuestos import (
     PresupuestoInput,
 )
 from app.services.venta_calculos import (
+    LineaVentaConCosto,
     VentaImporteInvalido,
     VentaLinea,
     calcular_linea_venta,
@@ -228,9 +229,18 @@ class PresupuestoService:
                     )
 
                 items = presupuesto["items"]
-                self._bloquear_productos(
+                productos = self._bloquear_productos(
                     [item["id_producto"] for item in items]
                 )
+                items_con_costo: list[LineaVentaConCosto] = [
+                    {
+                        **item,
+                        "costo_unitario": productos[item["id_producto"]][
+                            "precio_compra"
+                        ],
+                    }
+                    for item in items
+                ]
                 total = presupuesto["total"]
                 cabecera = {
                     "id_cliente": presupuesto["id_cliente"],
@@ -258,8 +268,8 @@ class PresupuestoService:
                         )
 
                 id_pedido = self._pedidos.crear(cabecera)
-                self._pedidos.crear_items(id_pedido, items)
-                for item in items:
+                self._pedidos.crear_items(id_pedido, items_con_costo)
+                for item in items_con_costo:
                     self._movimientos.crear_venta(
                         id_pedido,
                         item["id_producto"],

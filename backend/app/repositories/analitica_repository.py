@@ -37,7 +37,7 @@ SELECT d.id_pedido_cliente,
        d.cantidad,
        d.neto,
        d.subtotal,
-       p.precio_compra AS costo_unitario
+       d.costo_unitario
 FROM detalle_pedido_cliente d
 JOIN producto p ON p.id_producto = d.id_producto
 JOIN categoria cat ON cat.id_categoria = p.id_categoria

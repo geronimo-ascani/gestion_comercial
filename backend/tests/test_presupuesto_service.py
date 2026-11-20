@@ -81,6 +81,7 @@ class FakePresupuestoRepository:
 class FakeProductoRepository:
     def __init__(self, stock: Decimal = Decimal("5.000")) -> None:
         self.stock = stock
+        self.precio_compra = Decimal("50.00")
         self.precio_venta = Decimal("120.00")
 
     def bloquear_para_pedido_venta(
@@ -91,6 +92,7 @@ class FakeProductoRepository:
             "nombre": "Producto",
             "estado": True,
             "stock_actual": self.stock,
+            "precio_compra": self.precio_compra,
             "precio_venta": self.precio_venta,
             "alicuota_porcentaje": Decimal("21.00"),
             "alicuota_tipo_iva": "gravado",
@@ -287,12 +289,14 @@ def test_conversion_aprobada_conserva_precio_y_reserva_stock_una_vez() -> None:
     presupuesto = service.crear(_datos())
     aprobada = service.aprobar(presupuesto["id_presupuesto_cliente"])
     productos.precio_venta = Decimal("500.00")
+    productos.precio_compra = Decimal("75.00")
 
     pedido = service.convertir(aprobada["id_presupuesto_cliente"], _direccion())
 
     assert pedido["id_presupuesto_cliente"] == "PRE-0001"
     assert pedido["total"] == Decimal("194.40")
     assert pedido["items"][0]["precio_unitario"] == Decimal("120.00")
+    assert pedido["items"][0]["costo_unitario"] == Decimal("75.00")
     assert productos.stock == Decimal("3.000")
     assert presupuestos.presupuesto["estado"] == "convertido"
     assert movimientos.sales == [

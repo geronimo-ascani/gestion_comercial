@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -20,6 +20,7 @@ from app.services.analitica_calculos import (
     calcular_variacion,
     calcular_ventas_por_metodo_pago,
     predecir_demanda,
+    rango_comparacion,
     rango_periodo,
 )
 
@@ -81,8 +82,8 @@ class AnaliticaService:
             if es_admin:
                 datos["kpis"] = kpis
             else:
-                # Costos y margen bruto se calculan desde las ventas y el costo
-                # actual de los productos, así que pueden mostrarse a ventas.
+                # Costos y margen bruto se calculan desde el costo guardado en
+                # cada venta, así que pueden mostrarse a ventas.
                 # El margen neto (`margen_pct`) depende de los gastos de compra
                 # y permanece oculto junto a compras/gastos/neto.
                 datos["kpis"] = {
@@ -132,7 +133,7 @@ class AnaliticaService:
             datos["mapa_calor"] = calcular_mapa_calor(ventas)
 
             datos["variacion"] = self._variacion(
-                desde, hasta, kpis, solo_ventas=not es_admin
+                periodo, desde, hasta, kpis, solo_ventas=not es_admin
             )
 
         if ve_compras:
@@ -161,15 +162,16 @@ class AnaliticaService:
 
     def _variacion(
         self,
+        periodo: str,
         desde: date,
         hasta: date,
         kpis: dict[str, Any],
         *,
         solo_ventas: bool,
     ) -> dict[str, Decimal | None]:
-        dias = (hasta - desde).days + 1
-        anterior_hasta = desde - timedelta(days=1)
-        anterior_desde = anterior_hasta - timedelta(days=dias - 1)
+        anterior_desde, anterior_hasta = rango_comparacion(
+            periodo, desde, hasta  # type: ignore[arg-type]
+        )
         anterior = self._repo.totales(anterior_desde, anterior_hasta)
 
         variacion = {

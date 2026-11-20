@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Mapping, Sequence, TypedDict
@@ -267,6 +268,35 @@ def rango_periodo(periodo: Periodo, referencia: date) -> tuple[date, date]:
     if periodo == "año":
         return date(referencia.year, 1, 1), referencia
     raise AnaliticaDatosInvalidos(f"Período desconocido: {periodo}")
+
+
+def _mismo_dia_anio_anterior(fecha: date) -> date:
+    anio = fecha.year - 1
+    dia = min(fecha.day, calendar.monthrange(anio, fecha.month)[1])
+    return date(anio, fecha.month, dia)
+
+
+def rango_comparacion(
+    periodo: Periodo, desde: date, hasta: date
+) -> tuple[date, date]:
+    """Rango anterior comparable al período calculado.
+
+    ``año`` es un acumulado desde el 1 de enero hasta la fecha de referencia,
+    así que se compara contra el mismo acumulado del año anterior. El resto de
+    los períodos son ventanas móviles y se comparan contra la ventana inmediata
+    anterior de igual duración.
+    """
+    if periodo == "año":
+        return (
+            _mismo_dia_anio_anterior(desde),
+            _mismo_dia_anio_anterior(hasta),
+        )
+    if periodo not in ("hoy", "7d", "mes", "trimestre"):
+        raise AnaliticaDatosInvalidos(f"Período desconocido: {periodo}")
+    dias = (hasta - desde).days + 1
+    anterior_hasta = desde - timedelta(days=1)
+    anterior_desde = anterior_hasta - timedelta(days=dias - 1)
+    return anterior_desde, anterior_hasta
 
 
 def calcular_kpis(
@@ -940,7 +970,12 @@ def predecir_demanda(
 
 
 def calcular_variacion(actual: Decimal, anterior: Decimal) -> Decimal | None:
-    """Variación porcentual; ``None`` si no hay base de comparación."""
+    """Variación porcentual; ``None`` si no hay base de comparación.
+
+    El denominador usa el valor absoluto de la base. Con bases negativas, usar
+    ``anterior`` directamente invertiría el signo: mejorar de -100 a -80 debe
+    dar +20%, no -20%.
+    """
     if anterior == 0:
         return None
-    return _porcentaje((actual - anterior) / anterior * _CIEN)
+    return _porcentaje((actual - anterior) / abs(anterior) * _CIEN)

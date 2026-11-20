@@ -103,12 +103,13 @@ class PedidoVentaRepository:
                 INSERT INTO detalle_pedido_cliente (
                     id_pedido_cliente, id_producto, cantidad,
                     descuento_producto, iva, neto, precio_unitario,
-                    subtotal, tipo_iva
+                    subtotal, tipo_iva, costo_unitario
                 )
                 VALUES (
                     %(id_pedido_cliente)s, %(id_producto)s, %(cantidad)s,
                     %(descuento_producto)s, %(iva)s, %(neto)s,
-                    %(precio_unitario)s, %(subtotal)s, %(tipo_iva)s
+                    %(precio_unitario)s, %(subtotal)s, %(tipo_iva)s,
+                    %(costo_unitario)s
                 )
                 """,
                 [

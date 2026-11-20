@@ -21,6 +21,10 @@ class VentaLinea(TypedDict):
     tipo_iva: str
 
 
+class LineaVentaConCosto(VentaLinea):
+    costo_unitario: Decimal
+
+
 def calcular_linea_venta(
     id_producto: str,
     cantidad: Decimal,
