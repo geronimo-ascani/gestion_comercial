@@ -42,6 +42,7 @@ interface ComprobanteResumenApi {
   cliente_nombre: string;
   cliente_apellido: string;
   cliente_email: string;
+  enviado?: boolean;
   id_empresa: string;
   empresa_razon_social: string;
 }
@@ -158,6 +159,7 @@ function mapResumen(comprobante: ComprobanteResumenApi): Invoice {
     balance: saldo,
     method: "",
     status: comprobante.estado_pago,
+    sent: comprobante.enviado ?? false,
   };
 }
 

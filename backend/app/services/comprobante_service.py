@@ -452,6 +452,7 @@ class ComprobanteService:
             "cliente_nombre": row["cliente_nombre"],
             "cliente_apellido": row["cliente_apellido"],
             "cliente_email": row["cliente_email"],
+            "enviado": bool(row["enviado"]),
         }
 
     @staticmethod
@@ -472,6 +473,7 @@ class ComprobanteService:
             "cliente_email": row["cliente_email"],
             "id_empresa": row["id_empresa"],
             "empresa_razon_social": row["empresa_razon_social"],
+            "enviado": bool(row["enviado"]),
         }
 
     @staticmethod

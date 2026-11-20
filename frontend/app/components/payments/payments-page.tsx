@@ -570,10 +570,11 @@ function InvoicesTable({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={invoice.sent}
                     onClick={() => onSend(invoice)}
                   >
                     <Send />
-                    Enviar
+                    {invoice.sent ? "Enviado" : "Enviar"}
                   </Button>
                 </div>
               </TableCell>

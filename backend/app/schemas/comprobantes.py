@@ -86,6 +86,7 @@ class ComprobanteVentaResumen(SchemaBase):
     cliente_nombre: str
     cliente_apellido: str
     cliente_email: str
+    enviado: bool
     id_empresa: str
     empresa_razon_social: str
 

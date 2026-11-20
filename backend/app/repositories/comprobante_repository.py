@@ -54,7 +54,12 @@ SELECT cv.id_comprobante_venta,
        cv.entrega_cp,
        cv.entrega_depto,
        cv.entrega_localidad,
-       cv.entrega_provincia
+       cv.entrega_provincia,
+       EXISTS (
+           SELECT 1 FROM comprobante_envio ce
+           WHERE ce.id_comprobante_venta = cv.id_comprobante_venta
+             AND ce.estado = 'enviado'
+       ) AS enviado
 FROM comprobante_venta cv
 """
 

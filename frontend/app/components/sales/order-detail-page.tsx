@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
+  CheckCircle2,
   FileText,
   Loader2,
   Send,
@@ -723,13 +724,19 @@ function OrderInvoiceCard({
                     Registrar cobro
                   </Button>
                 )}
-                <Button variant="outline" disabled={busy} onClick={onSend}>
+                <Button
+                  variant="outline"
+                  disabled={busy || invoice.sent}
+                  onClick={onSend}
+                >
                   {busy ? (
                     <Loader2 className="size-4 animate-spin" />
+                  ) : invoice.sent ? (
+                    <CheckCircle2 />
                   ) : (
                     <Send />
                   )}
-                  Enviar por email
+                  {invoice.sent ? "Enviado" : "Enviar por email"}
                 </Button>
               </div>
             )}

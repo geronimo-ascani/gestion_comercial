@@ -20,6 +20,8 @@ export interface Invoice {
   /** Último medio de pago aprobado, si existe. */
   method: string;
   status: InvoiceStatus;
+  /** true cuando el último intento de envío del comprobante fue exitoso. */
+  sent?: boolean;
 }
 
 export interface PaymentTransaction {

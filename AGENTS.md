@@ -315,6 +315,12 @@
   shared by comprobante sending and password recovery. Sending requires SMTP
   configuration; without it the API returns `409`, and a failed delivery
   returns `502`.
+- The current development `backend/.env` uses Brevo. When deploying, replace
+  `SMTP_SENDER` with a verified address on the deployed application's own
+  domain, and keep SPF/DKIM/DMARC aligned for that domain. SMTP credentials and
+  the sender remain global; each company's identity is carried by the
+  comprobante snapshot and, once implemented, its `Reply-To`. Never put tenant
+  credentials or per-company senders in the environment.
 - Multi-tenant isolation is implemented across products and stock, categories,
   customers, suppliers, sales orders, budgets, purchase orders, comprobantes,
   payments, and payment methods. Migration `006_multiempresa.sql` adds the

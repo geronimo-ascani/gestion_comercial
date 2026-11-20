@@ -126,6 +126,7 @@ def _comprobante_row(**overrides) -> dict:
         "cliente_telefono": "123456",
         "cliente_condicion_codigo": "5",
         "cliente_condicion_descripcion": "Consumidor Final",
+        "enviado": False,
         "items": [
             {
                 "id_producto": "PRD-0001",

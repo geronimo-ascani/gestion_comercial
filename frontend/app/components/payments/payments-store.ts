@@ -122,5 +122,16 @@ export async function enviarComprobante(
   idComprobante: string,
   payload: EnvioComprobantePayload = {}
 ): Promise<EnvioApi> {
-  return enviarComprobanteApi(idComprobante, payload);
+  const envio = await enviarComprobanteApi(idComprobante, payload);
+  if (envio.estado === "enviado") {
+    upsertEnvio(idComprobante);
+  }
+  return envio;
+}
+
+function upsertEnvio(idComprobante: string): void {
+  invoices = invoices.map((invoice) =>
+    invoice.id === idComprobante ? { ...invoice, sent: true } : invoice,
+  );
+  emit();
 }

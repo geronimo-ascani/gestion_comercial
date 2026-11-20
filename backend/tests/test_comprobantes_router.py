@@ -98,6 +98,7 @@ _COMPROBANTE = {
     "cliente_nombre": "Cliente",
     "cliente_apellido": "Prueba",
     "cliente_email": "cliente@example.com",
+    "enviado": False,
     "empresa": _EMPRESA,
     "cliente": _CLIENTE,
     "items": [_ITEM],
@@ -120,6 +121,7 @@ _RESUMEN = {
         "cliente_nombre",
         "cliente_apellido",
         "cliente_email",
+        "enviado",
         "id_empresa",
         "empresa_razon_social",
     )
