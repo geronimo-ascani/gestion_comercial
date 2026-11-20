@@ -243,6 +243,65 @@ class ComprobanteService:
             "</p></body></html>"
         )
 
+    @staticmethod
+    def _datos_snapshot(
+        pedido: dict[str, Any],
+        empresa: dict[str, Any],
+        *,
+        tipo_comprobante: str,
+        numero: str,
+        monto: Decimal,
+        datos: ComprobanteVentaCreate,
+        id_empleado: str | None,
+    ) -> dict[str, Any]:
+        """Datos inmutables que se congelan junto con la cabecera."""
+        return {
+            "estado_pago": "emitida",
+            "fecha_emision": date.today(),
+            "fecha_pago": None,
+            "monto": monto,
+            "saldo_pendiente": monto,
+            "tipo_comprobante": tipo_comprobante,
+            "numero_comprobante": numero,
+            "punto_venta": empresa["punto_venta"],
+            "id_pedido_cliente": pedido["id_pedido_cliente"],
+            "id_empresa": empresa["id_empresa"],
+            "id_empleado": id_empleado,
+            "observaciones": datos.observaciones,
+            "id_cliente": pedido["id_cliente"],
+            "cliente_nombre": pedido["cliente_nombre"],
+            "cliente_apellido": pedido["cliente_apellido"],
+            "cliente_dni_cuit": pedido["cliente_dni_cuit"],
+            "cliente_email": pedido["cliente_email"],
+            "cliente_telefono": pedido["cliente_telefono"],
+            "cliente_condicion_codigo": pedido["condicion_iva_codigo"],
+            "cliente_condicion_descripcion": pedido[
+                "condicion_iva_descripcion"
+            ],
+            "empresa_razon_social": empresa["razon_social"],
+            "empresa_nombre_fantasia": empresa["nombre_fantasia"],
+            "empresa_cuit": empresa["cuit"],
+            "empresa_condicion_iva": empresa["condicion_iva"],
+            "empresa_domicilio": empresa["domicilio"],
+            "empresa_punto_venta": empresa["punto_venta"],
+            "empresa_email": empresa["email"],
+            "empresa_telefono": empresa["telefono"],
+            "empresa_activa": empresa["activa"],
+            "empresa_ingresos_brutos": empresa["ingresos_brutos"],
+            "empresa_inicio_actividades": empresa["inicio_actividades"],
+            "empresa_codigo_postal": empresa["codigo_postal"],
+            "empresa_localidad": empresa["localidad"],
+            "empresa_provincia": empresa["provincia"],
+            "estado_envio": pedido["estado_envio"],
+            "descuento_compra": pedido["descuento_compra"],
+            "entrega_calle": pedido["entrega_calle"],
+            "entrega_altura": pedido["entrega_altura"],
+            "entrega_cp": pedido["entrega_cp"],
+            "entrega_depto": pedido["entrega_depto"],
+            "entrega_localidad": pedido["entrega_localidad"],
+            "entrega_provincia": pedido["entrega_provincia"],
+        }
+
     def emitir(
         self,
         id_pedido_cliente: str,
@@ -281,23 +340,20 @@ class ComprobanteService:
                     empresa["punto_venta"],
                     tipo_comprobante,
                 )
+                items = self._repo.obtener_items_pedido(id_pedido_cliente)
                 monto = pedido["total"]
                 id_comprobante = self._repo.crear(
-                    {
-                        "estado_pago": "emitida",
-                        "fecha_emision": date.today(),
-                        "fecha_pago": None,
-                        "monto": monto,
-                        "tipo_comprobante": tipo_comprobante,
-                        "id_pedido_cliente": id_pedido_cliente,
-                        "numero_comprobante": numero,
-                        "punto_venta": empresa["punto_venta"],
-                        "id_empresa": empresa["id_empresa"],
-                        "id_empleado": id_empleado,
-                        "observaciones": datos.observaciones,
-                        "saldo_pendiente": monto,
-                    }
+                    self._datos_snapshot(
+                        pedido,
+                        empresa,
+                        tipo_comprobante=tipo_comprobante,
+                        numero=numero,
+                        monto=monto,
+                        datos=datos,
+                        id_empleado=id_empleado,
+                    )
                 )
+                self._repo.crear_items(id_comprobante, items)
                 comprobante = self._repo.obtener(id_comprobante)
                 if comprobante is None:
                     raise ComprobanteError(
@@ -395,6 +451,7 @@ class ComprobanteService:
             "empresa_razon_social": row["empresa_razon_social"],
             "cliente_nombre": row["cliente_nombre"],
             "cliente_apellido": row["cliente_apellido"],
+            "cliente_email": row["cliente_email"],
         }
 
     @staticmethod
@@ -412,6 +469,7 @@ class ComprobanteService:
             "id_pedido_cliente": row["id_pedido_cliente"],
             "cliente_nombre": row["cliente_nombre"],
             "cliente_apellido": row["cliente_apellido"],
+            "cliente_email": row["cliente_email"],
             "id_empresa": row["id_empresa"],
             "empresa_razon_social": row["empresa_razon_social"],
         }

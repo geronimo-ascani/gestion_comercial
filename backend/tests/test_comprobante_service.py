@@ -4,7 +4,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.schemas.comprobantes import ComprobanteVentaCreate
+from app.schemas.comprobantes import (
+    ComprobanteVentaCreate,
+    ComprobanteVentaRead,
+    ComprobanteVentaResumen,
+)
 from app.schemas.pagos import PagoCreate
 from app.services.comprobante_service import (
     ComprobanteEnvioFallido,
@@ -108,7 +112,6 @@ def _comprobante_row(**overrides) -> dict:
         "empresa_provincia": "",
         "estado_envio": "enviado",
         "descuento_compra": Decimal("0"),
-        "pedido_total": Decimal("100.00"),
         "entrega_calle": "Test",
         "entrega_altura": "1",
         "entrega_cp": "",
@@ -175,12 +178,21 @@ class FakeComprobanteRepository:
         return str(self.numeros[clave]).zfill(8)
 
     def crear(self, datos):
+        self.items_guardados = [
+            dict(item) for item in self.obtener_items_pedido(datos["id_pedido_cliente"])
+        ]
         self.comprobante = _comprobante_row(
             **datos,
             id_comprobante_venta=f"FV-{len(self.numeros):04d}",
-            items=dict(self.pedido)["items"],
+            items=[dict(item) for item in self.items_guardados],
         )
         return self.comprobante["id_comprobante_venta"]
+
+    def crear_items(self, _id_comprobante, items):
+        self.items_guardados = [dict(item) for item in items]
+
+    def obtener_items_pedido(self, _id_pedido):
+        return [dict(item) for item in self.pedido["items"]]
 
     def actualizar_pago(self, _id, estado, saldo, fecha_pago):
         assert self.comprobante is not None
@@ -266,10 +278,10 @@ class FakePagoRepository:
 
 class FakeEmpresaService:
     def __init__(self, condicion_iva="responsable_inscripto") -> None:
-        self.condicion_iva = condicion_iva
+        self.empresa = _empresa(condicion_iva)
 
     def obtener_emisora(self, _id_empresa=None):
-        return _empresa(self.condicion_iva)
+        return dict(self.empresa)
 
 
 class FakeEmailService:
@@ -286,13 +298,15 @@ class FakeEmailService:
 def _services(condicion_iva="responsable_inscripto", email=None):
     comprobantes = FakeComprobanteRepository()
     pagos = FakePagoRepository()
+    empresas = FakeEmpresaService(condicion_iva)
     service = ComprobanteService(
         comprobantes,
         pagos,
-        FakeEmpresaService(condicion_iva),
+        empresas,
         email,
         id_empresa="EMP-0001",
     )
+    service.empresa_fake = empresas
     pago_service = PagoService(comprobantes, pagos)
     return service, pago_service, comprobantes, pagos
 
@@ -320,6 +334,51 @@ def test_emitir_es_idempotente() -> None:
     segundo = service.emitir("PV-0001", ComprobanteVentaCreate(), "EMP-0001")
 
     assert primero["id_comprobante_venta"] == segundo["id_comprobante_venta"]
+
+
+def test_respuestas_de_comprobante_incluyen_cliente_email() -> None:
+    service, _pagos, _repo, _pago_repo = _services()
+
+    emitido = service.emitir("PV-0001", ComprobanteVentaCreate(), "EMP-0001")
+    resumen = service.listar(None, None, 50, 0)[0]
+
+    assert emitido["cliente_email"] == "cliente@example.com"
+    assert resumen["cliente_email"] == "cliente@example.com"
+    ComprobanteVentaRead.model_validate(emitido)
+    ComprobanteVentaResumen.model_validate(resumen)
+
+
+def test_comprobante_emitido_es_inmutable() -> None:
+    service, _pagos, repo, _pago_repo = _services()
+    emitido = service.emitir("PV-0001", ComprobanteVentaCreate(), "EMP-0001")
+    id_comprobante = emitido["id_comprobante_venta"]
+
+    # Modificaciones posteriores en el pedido, el cliente, la empresa y el
+    # catálogo no deben alterar el comprobante ya emitido.
+    repo.pedido["cliente_nombre"] = "Cliente Modificado"
+    repo.pedido["cliente_email"] = "nuevo@example.com"
+    repo.pedido["entrega_calle"] = "Otra calle"
+    repo.pedido["estado_envio"] = "entregado"
+    repo.pedido["total"] = Decimal("999.00")
+    repo.pedido["items"][0]["producto_nombre"] = "Producto modificado"
+    repo.pedido["items"][0]["precio_unitario"] = Decimal("999.00")
+    service.empresa_fake.empresa["razon_social"] = "Empresa modificada"
+    service.empresa_fake.empresa["cuit"] = "20999999999"
+
+    actual = service.obtener(id_comprobante)
+
+    assert actual["cliente"]["nombre"] == "Cliente"
+    assert actual["cliente"]["email"] == "cliente@example.com"
+    assert actual["cliente_email"] == "cliente@example.com"
+    assert actual["entrega_calle"] == "Test"
+    assert actual["estado_envio"] == "enviado"
+    assert actual["monto"] == Decimal("100.00")
+    assert actual["empresa"]["razon_social"] == "Empresa de prueba"
+    assert actual["empresa"]["cuit"] == "20111111112"
+    assert actual["items"][0]["producto_nombre"] == "Producto"
+    assert actual["items"][0]["precio_unitario"] == Decimal("100.00")
+    assert repo.items_guardados[0]["producto_nombre"] == "Producto"
+    ComprobanteVentaRead.model_validate(actual)
 
 
 def test_emitir_permite_pedido_recien_creado() -> None:

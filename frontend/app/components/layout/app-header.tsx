@@ -38,17 +38,6 @@ export function AppHeader({
           )}
         </Button>
       </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Notificaciones"
-          onClick={() => undefined}
-        >
-          <Bell className="text-muted-foreground" />
-        </Button>
-      </div>
     </header>
   );
 }

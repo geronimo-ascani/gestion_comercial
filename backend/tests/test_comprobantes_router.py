@@ -12,6 +12,7 @@ from app.services.comprobante_service import (
     ComprobanteEnvioNoConfigurado,
     ComprobanteEstadoInvalido,
     ComprobanteNoEncontrado,
+    ComprobanteService,
 )
 from app.services.pago_service import PagoDatosInvalidos
 
@@ -123,6 +124,49 @@ _RESUMEN = {
         "empresa_razon_social",
     )
 }
+
+
+_FILA_SNAPSHOT = {
+    **_COMPROBANTE,
+    **{
+        f"empresa_{clave}": valor
+        for clave, valor in _EMPRESA.items()
+        if clave != "id_empresa"
+    },
+    **{f"cliente_{clave}": valor for clave, valor in _CLIENTE.items()},
+    "id_cliente": _CLIENTE["id_cliente"],
+    "cliente_condicion_codigo": _CLIENTE["condicion_iva_codigo"],
+    "cliente_condicion_descripcion": _CLIENTE["condicion_iva_descripcion"],
+    "descuento_compra": Decimal("0"),
+    "entrega_calle": "Test",
+    "entrega_altura": "1",
+    "entrega_cp": "",
+    "entrega_depto": "",
+    "entrega_localidad": "CABA",
+    "entrega_provincia": "Buenos Aires",
+    "items": [_ITEM],
+}
+
+
+class RepoConSnapshot:
+    """Repo mínimo para ejercer el servicio real en las rutas de lectura."""
+
+    def listar(self, _estado, _q, _limit, _offset):
+        return [dict(_RESUMEN)]
+
+    def obtener(self, _id_comprobante):
+        return {**_FILA_SNAPSHOT, "items": [dict(_ITEM)]}
+
+
+class PagoRepoVacio:
+    def listar_por_comprobante(self, _id_comprobante):
+        return []
+
+
+def _servicio_real() -> ComprobanteService:
+    return ComprobanteService(
+        RepoConSnapshot(), PagoRepoVacio(), None, id_empresa="EMP-0001"
+    )
 
 
 class FakeComprobanteService:
@@ -263,6 +307,17 @@ def test_list_and_detail_return_backend_values() -> None:
     assert listed.json()[0]["estado_pago"] == "emitida"
     assert detail.status_code == 200
     assert detail.json()["empresa"]["razon_social"] == "Empresa de prueba"
+
+
+def test_rutas_reales_devuelven_cliente_email() -> None:
+    with _client("ventas", _servicio_real) as client:
+        listado = client.get("/api/v1/ventas/comprobantes")
+        detalle = client.get("/api/v1/ventas/comprobantes/FV-0001")
+
+    assert listado.status_code == 200
+    assert listado.json()[0]["cliente_email"] == "cliente@example.com"
+    assert detalle.status_code == 200
+    assert detalle.json()["cliente_email"] == "cliente@example.com"
 
 
 def test_register_partial_payment_returns_created() -> None:

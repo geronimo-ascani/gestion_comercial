@@ -25,42 +25,37 @@ SELECT cv.id_comprobante_venta,
        cv.cae,
        cv.cae_vence,
        cv.creado_en,
-       e.razon_social AS empresa_razon_social,
-       e.nombre_fantasia AS empresa_nombre_fantasia,
-       e.cuit AS empresa_cuit,
-       e.condicion_iva AS empresa_condicion_iva,
-       e.domicilio AS empresa_domicilio,
-       e.punto_venta AS empresa_punto_venta,
-       e.email AS empresa_email,
-       e.telefono AS empresa_telefono,
-       e.activa AS empresa_activa,
-       e.ingresos_brutos AS empresa_ingresos_brutos,
-       e.inicio_actividades AS empresa_inicio_actividades,
-       e.codigo_postal AS empresa_codigo_postal,
-       e.localidad AS empresa_localidad,
-       e.provincia AS empresa_provincia,
-       pv.estado_envio,
-       pv.descuento_compra,
-       pv.total AS pedido_total,
-       pv.entrega_calle,
-       pv.entrega_altura,
-       pv.entrega_cp,
-       pv.entrega_depto,
-       pv.entrega_localidad,
-       pv.entrega_provincia,
-       c.id_cliente,
-       c.nombre AS cliente_nombre,
-       c.apellido AS cliente_apellido,
-       c.dni_cuit AS cliente_dni_cuit,
-       c.email AS cliente_email,
-       c.telefono AS cliente_telefono,
-       ci.codigo_afip AS cliente_condicion_codigo,
-       ci.descripcion AS cliente_condicion_descripcion
+       cv.id_cliente,
+       cv.cliente_nombre,
+       cv.cliente_apellido,
+       cv.cliente_dni_cuit,
+       cv.cliente_email,
+       cv.cliente_telefono,
+       cv.cliente_condicion_codigo,
+       cv.cliente_condicion_descripcion,
+       cv.empresa_razon_social,
+       cv.empresa_nombre_fantasia,
+       cv.empresa_cuit,
+       cv.empresa_condicion_iva,
+       cv.empresa_domicilio,
+       cv.empresa_punto_venta,
+       cv.empresa_email,
+       cv.empresa_telefono,
+       cv.empresa_activa,
+       cv.empresa_ingresos_brutos,
+       cv.empresa_inicio_actividades,
+       cv.empresa_codigo_postal,
+       cv.empresa_localidad,
+       cv.empresa_provincia,
+       cv.estado_envio,
+       cv.descuento_compra,
+       cv.entrega_calle,
+       cv.entrega_altura,
+       cv.entrega_cp,
+       cv.entrega_depto,
+       cv.entrega_localidad,
+       cv.entrega_provincia
 FROM comprobante_venta cv
-JOIN empresa e ON e.id_empresa = cv.id_empresa
-JOIN pedido_cliente pv ON pv.id_pedido_cliente = cv.id_pedido_cliente
-JOIN cliente c ON c.id_cliente = pv.id_cliente
-JOIN condicion_iva ci ON ci.id_condicion_iva = c.id_condicion_iva
 """
 
 _SELECT_PEDIDO = """
@@ -87,7 +82,7 @@ JOIN cliente c ON c.id_cliente = pv.id_cliente
 JOIN condicion_iva ci ON ci.id_condicion_iva = c.id_condicion_iva
 """
 
-_SELECT_ITEMS = """
+_SELECT_ITEMS_PEDIDO = """
 SELECT d.id_producto,
        p.nombre AS producto_nombre,
        d.cantidad,
@@ -100,6 +95,76 @@ SELECT d.id_producto,
 FROM detalle_pedido_cliente d
 JOIN producto p ON p.id_producto = d.id_producto
 """
+
+_SELECT_ITEMS_COMPROBANTE = """
+SELECT id_producto,
+       producto_nombre,
+       cantidad,
+       descuento_producto,
+       iva,
+       neto,
+       precio_unitario,
+       subtotal,
+       tipo_iva
+FROM comprobante_item
+"""
+
+_COLUMNAS_SNAPSHOT = (
+    "estado_pago",
+    "fecha_emision",
+    "fecha_pago",
+    "monto",
+    "tipo_comprobante",
+    "id_pedido_cliente",
+    "numero_comprobante",
+    "punto_venta",
+    "id_empresa",
+    "id_empleado",
+    "observaciones",
+    "saldo_pendiente",
+    "id_cliente",
+    "cliente_nombre",
+    "cliente_apellido",
+    "cliente_dni_cuit",
+    "cliente_email",
+    "cliente_telefono",
+    "cliente_condicion_codigo",
+    "cliente_condicion_descripcion",
+    "empresa_razon_social",
+    "empresa_nombre_fantasia",
+    "empresa_cuit",
+    "empresa_condicion_iva",
+    "empresa_domicilio",
+    "empresa_punto_venta",
+    "empresa_email",
+    "empresa_telefono",
+    "empresa_activa",
+    "empresa_ingresos_brutos",
+    "empresa_inicio_actividades",
+    "empresa_codigo_postal",
+    "empresa_localidad",
+    "empresa_provincia",
+    "estado_envio",
+    "descuento_compra",
+    "entrega_calle",
+    "entrega_altura",
+    "entrega_cp",
+    "entrega_depto",
+    "entrega_localidad",
+    "entrega_provincia",
+)
+
+_COLUMNAS_ITEM = (
+    "id_producto",
+    "producto_nombre",
+    "cantidad",
+    "descuento_producto",
+    "iva",
+    "neto",
+    "precio_unitario",
+    "subtotal",
+    "tipo_iva",
+)
 
 
 class ComprobanteRepository:
@@ -150,8 +215,8 @@ class ComprobanteRepository:
             cur.execute(query, (id_comprobante_venta, self._id_empresa))
             comprobante = cur.fetchone()
         if comprobante is not None:
-            comprobante["items"] = self._items(
-                comprobante["id_pedido_cliente"]
+            comprobante["items"] = self._items_comprobante(
+                comprobante["id_comprobante_venta"]
             )
         return comprobante
 
@@ -168,8 +233,8 @@ class ComprobanteRepository:
             cur.execute(query, (id_pedido_cliente, self._id_empresa))
             comprobante = cur.fetchone()
         if comprobante is not None:
-            comprobante["items"] = self._items(
-                comprobante["id_pedido_cliente"]
+            comprobante["items"] = self._items_comprobante(
+                comprobante["id_comprobante_venta"]
             )
         return comprobante
 
@@ -191,10 +256,10 @@ class ComprobanteRepository:
                       %(q)s::text IS NULL
                       OR cv.id_comprobante_venta ILIKE %(q)s
                       OR cv.numero_comprobante ILIKE %(q)s
-                      OR pv.id_pedido_cliente ILIKE %(q)s
-                      OR c.nombre ILIKE %(q)s
-                      OR c.apellido ILIKE %(q)s
-                      OR e.razon_social ILIKE %(q)s
+                      OR cv.id_pedido_cliente ILIKE %(q)s
+                      OR cv.cliente_nombre ILIKE %(q)s
+                      OR cv.cliente_apellido ILIKE %(q)s
+                      OR cv.empresa_razon_social ILIKE %(q)s
                   )
                 ORDER BY cv.fecha_emision DESC, cv.id_comprobante_venta DESC
                 LIMIT %(limit)s OFFSET %(offset)s
@@ -233,21 +298,13 @@ class ComprobanteRepository:
             return str(row["ultimo"]).zfill(8)
 
     def crear(self, datos: dict[str, Any]) -> str:
+        columnas = ", ".join(_COLUMNAS_SNAPSHOT)
+        valores = ", ".join(f"%({columna})s" for columna in _COLUMNAS_SNAPSHOT)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                """
-                INSERT INTO comprobante_venta (
-                    estado_pago, fecha_emision, fecha_pago, monto,
-                    tipo_comprobante, id_pedido_cliente, numero_comprobante,
-                    punto_venta, id_empresa, id_empleado, observaciones,
-                    saldo_pendiente
-                )
-                VALUES (
-                    %(estado_pago)s, %(fecha_emision)s, %(fecha_pago)s,
-                    %(monto)s, %(tipo_comprobante)s, %(id_pedido_cliente)s,
-                    %(numero_comprobante)s, %(punto_venta)s, %(id_empresa)s,
-                    %(id_empleado)s, %(observaciones)s, %(saldo_pendiente)s
-                )
+                f"""
+                INSERT INTO comprobante_venta ({columnas})
+                VALUES ({valores})
                 RETURNING id_comprobante_venta
                 """,
                 {**datos, "id_empresa": self._id_empresa},
@@ -255,6 +312,46 @@ class ComprobanteRepository:
             row = cur.fetchone()
             assert row is not None
             return row["id_comprobante_venta"]
+
+    def crear_items(
+        self, id_comprobante_venta: str, items: list[dict[str, Any]]
+    ) -> None:
+        if not items:
+            return
+        columnas = ", ".join(("id_comprobante_venta", "orden", *_COLUMNAS_ITEM))
+        marcadores = ", ".join(["%s"] * (len(_COLUMNAS_ITEM) + 2))
+        filas = [
+            (
+                id_comprobante_venta,
+                orden,
+                *(item[columna] for columna in _COLUMNAS_ITEM),
+            )
+            for orden, item in enumerate(items, start=1)
+        ]
+        with self._conn.cursor() as cur:
+            cur.executemany(
+                f"""
+                INSERT INTO comprobante_item ({columnas})
+                VALUES ({marcadores})
+                """,
+                filas,
+            )
+
+    def obtener_items_pedido(
+        self, id_pedido_cliente: str
+    ) -> list[dict[str, Any]]:
+        query = (
+            f"{_SELECT_ITEMS_PEDIDO} "
+            "WHERE d.id_pedido_cliente = %s "
+            "AND EXISTS ("
+            "SELECT 1 FROM pedido_cliente pv "
+            "WHERE pv.id_pedido_cliente = d.id_pedido_cliente "
+            "AND pv.id_empresa = %s) "
+            "ORDER BY d.id_producto"
+        )
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(query, (id_pedido_cliente, self._id_empresa))
+            return cur.fetchall()
 
     def actualizar_pago(
         self,
@@ -357,19 +454,16 @@ class ComprobanteRepository:
             )
             return cur.fetchall()
 
-    def _items(self, id_pedido_cliente: str) -> list[dict[str, Any]]:
+    def _items_comprobante(
+        self, id_comprobante_venta: str
+    ) -> list[dict[str, Any]]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"""
-                {_SELECT_ITEMS}
-                WHERE d.id_pedido_cliente = %s
-                  AND EXISTS (
-                      SELECT 1 FROM pedido_cliente pv
-                      WHERE pv.id_pedido_cliente = d.id_pedido_cliente
-                        AND pv.id_empresa = %s
-                  )
-                ORDER BY d.id_producto
+                {_SELECT_ITEMS_COMPROBANTE}
+                WHERE id_comprobante_venta = %s
+                ORDER BY orden, id_producto
                 """,
-                (id_pedido_cliente, self._id_empresa),
+                (id_comprobante_venta,),
             )
             return cur.fetchall()

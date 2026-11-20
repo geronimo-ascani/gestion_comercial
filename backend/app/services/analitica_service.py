@@ -81,15 +81,19 @@ class AnaliticaService:
             if es_admin:
                 datos["kpis"] = kpis
             else:
+                # Costos y margen bruto se calculan desde las ventas y el costo
+                # actual de los productos, así que pueden mostrarse a ventas.
+                # El margen neto (`margen_pct`) depende de los gastos de compra
+                # y permanece oculto junto a compras/gastos/neto.
                 datos["kpis"] = {
                     "ventas": kpis["ventas"],
                     "compras": None,
                     "gastos": None,
                     "neto": None,
                     "margen_pct": None,
-                    "costo_ventas": None,
-                    "margen_bruto": None,
-                    "margen_bruto_pct": None,
+                    "costo_ventas": kpis["costo_ventas"],
+                    "margen_bruto": kpis["margen_bruto"],
+                    "margen_bruto_pct": kpis["margen_bruto_pct"],
                 }
 
             tendencias = calcular_tendencias(

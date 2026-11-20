@@ -203,7 +203,15 @@ def test_ventas_solo_recibe_secciones_comerciales() -> None:
     datos = _service().obtener("mes", "ventas", _REFERENCIA)
 
     assert datos["kpis"]["ventas"] == Decimal("150.00")
+    # Costos y margen bruto son analíticas comerciales: ventas sí los ve.
+    assert datos["kpis"]["costo_ventas"] == Decimal("40.00")
+    assert datos["kpis"]["margen_bruto"] == Decimal("40.00")
+    assert datos["kpis"]["margen_bruto_pct"] == Decimal("50.00")
+    # El margen neto depende de gastos de compra, que siguen ocultos.
+    assert datos["kpis"]["margen_pct"] is None
+    assert datos["kpis"]["compras"] is None
     assert datos["kpis"]["gastos"] is None
+    assert datos["kpis"]["neto"] is None
     assert all(punto["gastos"] is None for punto in datos["tendencias"])
     assert datos["variacion"]["ventas"] is not None
     assert datos["variacion"]["gastos"] is None

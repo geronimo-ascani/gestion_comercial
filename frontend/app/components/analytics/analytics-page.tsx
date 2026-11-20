@@ -148,12 +148,14 @@ export function AnalyticsPage() {
       visible: isAdmin,
     },
     {
-      title: "MARGEN DE GANANCIA",
-      value: formatPercent(kpis?.margenPct),
-      delta: "del neto / ventas",
+      title: isAdmin ? "MARGEN DE GANANCIA" : "MARGEN BRUTO",
+      value: formatPercent(
+        isAdmin ? kpis?.margenPct : kpis?.margenBrutoPct
+      ),
+      delta: isAdmin ? "del neto / ventas" : "sobre ventas netas",
       deltaVariant: "outline" as const,
       icon: TrendingUp,
-      visible: isAdmin,
+      visible: canSeeSales,
     },
   ].filter((card) => card.visible);
 

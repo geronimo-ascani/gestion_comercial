@@ -16,7 +16,7 @@
   `001_schema_completo.sql`, `002_auth_recovery.sql`,
   `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`,
   `005_comprobantes_pagos.sql`, `006_multiempresa.sql`,
-  `007_comprobante_envio_copias.sql`.
+  `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `python -m pytest -q` from `backend/`.
@@ -126,6 +126,13 @@
   through `comprobante_secuencia`; numbers are never reused.
 - Comprobantes are internal for now. Fiscal fields for ARCA are prepared but
   not transmitted.
+- An emitted comprobante is immutable. The header stores the total, and the
+  issuer's fiscal data, customer data, delivery address and line items are
+  snapshotted in `comprobante_venta` and `comprobante_item` at emission. Payment
+  state and balances remain derived from approved payments. The order's
+  fulfillment state is snapshotted for the API but is not shown in the customer
+  PDF. `cliente_email` is returned by both summary and detail endpoints from
+  that snapshot.
 - `estado_pago` derives from approved payments: `emitida` without payments,
   `aprobada` with a partial payment, `pagada` at zero balance. Pending or
   rejected payments are stored but do not affect the balance; the committed
@@ -151,7 +158,9 @@
   `comprobante_secuencia`, `comprobante_envio`, the new comprobante columns,
   and `pago.creado_en`. Migration `007_comprobante_envio_copias.sql` adds the
   `cc` and `bcc` columns to `comprobante_envio` (empty arrays for existing
-  rows).
+  rows). Migration `008_comprobante_snapshot.sql` adds the immutable snapshot
+  columns and `comprobante_item`, and backfills existing comprobantes from the
+  current catalog data as a best effort.
 
 ### Sales budgets
 
@@ -214,7 +223,10 @@
   reception date for trends.
 - Gross margin uses net sales (without VAT) minus the product's current
   `precio_compra` as unit cost. It is not the same as `neto`, which subtracts
-  received purchases from sales totals.
+  received purchases from sales totals. Costs, gross margin and category
+  margins are available to `ventas`; the net margin (`margen_pct`), purchase
+  totals, expenses (`gastos`) and `neto` remain administrator-only because they
+  depend on purchase data.
 - A customer counts as new when an order falls on the same date as their first
   non-canceled purchase; otherwise the order is recurrent.
 - Demand forecasting is a simple linear regression over chronological,
@@ -263,12 +275,17 @@
   `administrador`, `ventas`, `abastecimiento`), backed by
   `analitica_repository.py`, `analitica_service.py`, and the response schema in
   `schemas/analitica.py`. Sections are returned according to the role:
-  administrators receive everything, sales receive commercial sections without
-  purchase data, and supply receives supplier/price/inventory sections plus the
-  demand forecast.
+  administrators receive everything, sales receive commercial sections
+  including costs, gross margin and category margins (but not purchase totals,
+  expenses, net margin or net income), and supply receives supplier/price/
+  inventory sections plus the demand forecast.
 - The analytics frontend now consumes the real endpoint through
   `frontend/app/components/analytics/analytics-api.ts`; the executive report
-  prints the same backend data. The main dashboard is still a placeholder.
+  prints the same backend data. The main dashboard (`/dashboard`, administrator
+  only) is backed by `/analiticas` for KPIs and trends,
+  `/productos/alertas-stock` for critical stock, and `/ventas/pedidos` for
+  recent orders. The frontend only renders those backend results; it does not
+  recompute analytics.
 - Comprobante API: `POST/GET /ventas/pedidos/{id}/comprobante` (emit and read
   by order), `GET /ventas/comprobantes`, `GET /ventas/comprobantes/{id}`,
   `GET/POST /ventas/comprobantes/{id}/pagos`,
@@ -283,7 +300,12 @@
   `administrador`. Focused service and route tests cover emission idempotency,
   type selection, numbering, payments, balances, sending, and role permissions.
   The PostgreSQL emission/payment probe was run with temporary data and rolled
-  back.
+  back. Comprobante responses now include `cliente_email` in both summaries and
+  details, so those endpoints return `200` instead of a response-validation
+  `500`. Emission snapshots the issuer, customer, delivery address and items;
+  tests verify later changes to the order, company and catalog do not alter an
+  emitted comprobante. Migration `008` backfills existing rows and was applied
+  locally.
 - The payments frontend uses the real API through
   `frontend/app/components/payments/payments-api.ts`. Comprobantes are emitted,
   collected, and sent from the order detail page and the payments page; the

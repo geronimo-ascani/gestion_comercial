@@ -195,7 +195,6 @@ class ComprobantePDF(FPDF):
             5,
             _texto(
                 f"Pedido {comprobante['id_pedido_cliente']} | "
-                f"Estado del pedido: {comprobante['estado_envio']} | "
                 f"Pago: {_ESTADOS_PAGO.get(comprobante['estado_pago'], comprobante['estado_pago'])}"
             ),
             new_x="LMARGIN",
