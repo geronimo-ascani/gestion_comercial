@@ -26,6 +26,10 @@ class ProveedorSinCambios(ProveedorError):
     pass
 
 
+class ProveedorDatosInvalidos(ProveedorError):
+    pass
+
+
 class ProveedorService:
     def __init__(self, repo: ProveedorRepository) -> None:
         self._repo = repo
@@ -34,6 +38,7 @@ class ProveedorService:
     def _publico(row: ProveedorRow) -> dict[str, Any]:
         return {
             "id_proveedor": row["id_proveedor"],
+            "id_condicion_iva": row.get("id_condicion_iva"),
             "banco": row["banco"],
             "cuenta": row["cuenta"],
             "cuit": row["cuit"],
@@ -68,6 +73,12 @@ class ProveedorService:
 
     def crear(self, datos: ProveedorCreate) -> dict[str, Any]:
         values = datos.model_dump(exclude={"direccion"})
+        if values.get("id_condicion_iva") and not self._repo.condicion_iva_existe(
+            values["id_condicion_iva"]
+        ):
+            raise ProveedorDatosInvalidos(
+                "La condición de IVA seleccionada no existe"
+            )
         try:
             with self._repo.transaction():
                 if self._repo.cuit_existe(values["cuit"]):
@@ -100,6 +111,12 @@ class ProveedorService:
         if not cambios and direccion is None:
             raise ProveedorSinCambios(id_proveedor)
         self.obtener(id_proveedor)
+        if cambios.get("id_condicion_iva") and not self._repo.condicion_iva_existe(
+            cambios["id_condicion_iva"]
+        ):
+            raise ProveedorDatosInvalidos(
+                "La condición de IVA seleccionada no existe"
+            )
         try:
             with self._repo.transaction():
                 if "cuit" in cambios and self._repo.cuit_existe(

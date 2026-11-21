@@ -19,6 +19,8 @@ interface ComboboxProps<TValue extends string = string> {
   options: ComboboxOption<TValue>[];
   placeholder?: string;
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   notFoundText?: string;
   emptyText?: string;
   disabled?: boolean;
@@ -33,6 +35,8 @@ export function Combobox<TValue extends string = string>({
   options,
   placeholder = "Seleccionar…",
   searchPlaceholder = "Buscar…",
+  searchValue,
+  onSearchChange,
   notFoundText = "No se encontraron resultados",
   emptyText = "No hay opciones disponibles",
   disabled,
@@ -89,6 +93,8 @@ export function Combobox<TValue extends string = string>({
               <SearchIcon className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
               <Command.Input
                 placeholder={searchPlaceholder}
+                value={searchValue}
+                onValueChange={onSearchChange}
                 className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>

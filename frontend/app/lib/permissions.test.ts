@@ -45,6 +45,12 @@ describe("permissions", () => {
     expect(canAccessRoute("ventas", "/purchases")).toBe(false);
     expect(canAccessRoute("ventas", "/providers")).toBe(false);
 
+    expect(canAccessRoute("abastecimiento", "/purchases/invoices")).toBe(true);
+    expect(canAccessRoute("administrador", "/purchases/invoices/new")).toBe(true);
+    expect(canAccessRoute("administrador", "/purchases/invoices/FAC-0001")).toBe(true);
+    expect(canAccessRoute("ventas", "/purchases/invoices")).toBe(false);
+    expect(canAccessRoute("ventas", "/purchases/invoices/FAC-0001")).toBe(false);
+
     expect(canAccessRoute("ventas", "/customers")).toBe(true);
     expect(canAccessRoute("abastecimiento", "/customers")).toBe(false);
   });
@@ -84,6 +90,7 @@ describe("permissions", () => {
     ).toEqual([
       "/products",
       "/purchases",
+      "/purchases/invoices",
       "/providers",
       "/analytics",
       "/company",

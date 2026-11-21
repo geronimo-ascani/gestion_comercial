@@ -9,6 +9,7 @@ from app.schemas.clientes import DireccionEntidad, DireccionEntidadRead
 
 class ProveedorFields(SchemaBase):
     razon_social: str = Field(min_length=1, max_length=160)
+    id_condicion_iva: str | None = Field(default=None, max_length=20)
     cuit: str = Field(min_length=11, max_length=20)
     email: str = Field(max_length=160)
     telefono: str = Field(min_length=1, max_length=40)
@@ -45,6 +46,7 @@ class ProveedorRead(ProveedorFields):
 
 class ProveedorUpdate(UpdateSchema):
     razon_social: str | None = Field(default=None, min_length=1, max_length=160)
+    id_condicion_iva: str | None = Field(default=None, max_length=20)
     cuit: str | None = Field(default=None, min_length=11, max_length=20)
     email: str | None = Field(default=None, max_length=160)
     telefono: str | None = Field(default=None, min_length=1, max_length=40)

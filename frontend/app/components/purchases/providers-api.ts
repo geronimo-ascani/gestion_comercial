@@ -6,6 +6,7 @@ interface ProviderApi {
   banco: string;
   cuenta: string;
   cuit: string;
+  id_condicion_iva?: string | null;
   direccion: {
     altura: string;
     calle: string;
@@ -25,6 +26,7 @@ export interface ProviderPayload {
   banco: string;
   cuenta: string;
   cuit: string;
+  id_condicion_iva?: string;
   direccion: ProviderApi["direccion"];
   email: string;
   razon_social: string;
@@ -43,6 +45,7 @@ export function mapProvider(data: ProviderApi): Provider {
   return {
     id: data.id_proveedor,
     name: data.razon_social,
+    id_condicion_iva: data.id_condicion_iva ?? undefined,
     cuit: data.cuit,
     phone: data.telefono,
     email: data.email,
@@ -58,6 +61,9 @@ export function providerPayload(provider: Provider): ProviderPayload {
     banco: provider.bank,
     cuenta: provider.account,
     cuit: provider.cuit,
+    ...(provider.id_condicion_iva
+      ? { id_condicion_iva: provider.id_condicion_iva }
+      : {}),
     direccion: {
       altura: provider.address.number,
       calle: provider.address.street,

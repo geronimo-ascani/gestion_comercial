@@ -33,6 +33,18 @@ const routeRules: readonly RouteRule[] = [
     pattern: "/purchases/new-provider",
     roles: ["administrador", "abastecimiento"],
   },
+  {
+    pattern: "/purchases/invoices/new",
+    roles: ["administrador", "abastecimiento"],
+  },
+  {
+    pattern: "/purchases/invoices/:id",
+    roles: ["administrador", "abastecimiento"],
+  },
+  {
+    pattern: "/purchases/invoices",
+    roles: ["administrador", "abastecimiento"],
+  },
   { pattern: "/providers", roles: ["administrador", "abastecimiento"] },
   { pattern: "/sales", roles: ["administrador", "ventas"] },
   { pattern: "/sales/new-order", roles: ["administrador", "ventas"] },

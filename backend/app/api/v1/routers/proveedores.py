@@ -6,6 +6,7 @@ from app.api.deps import get_proveedor_service
 from app.api.v1.routers.auth import get_current_user, require_roles
 from app.schemas.proveedores import ProveedorCreate, ProveedorRead, ProveedorUpdate
 from app.services.proveedor_service import (
+    ProveedorDatosInvalidos,
     ProveedorDuplicado,
     ProveedorEnUso,
     ProveedorError,
@@ -49,10 +50,15 @@ def _error_http(exc: ProveedorError) -> HTTPException:
             else "El proveedor tiene órdenes asociadas y no se puede eliminar"
         )
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
-    if isinstance(exc, ProveedorSinCambios):
+    if isinstance(exc, (ProveedorDatosInvalidos, ProveedorSinCambios)):
+        detail = (
+            str(exc)
+            if isinstance(exc, ProveedorDatosInvalidos)
+            else "No se enviaron campos para actualizar"
+        )
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="No se enviaron campos para actualizar",
+            detail=detail,
         )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,

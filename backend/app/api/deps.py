@@ -11,6 +11,9 @@ from app.repositories.catalogo_repository import CatalogoRepository
 from app.repositories.categoria_repository import CategoriaRepository
 from app.repositories.comprobante_repository import ComprobanteRepository
 from app.repositories.empresa_repository import EmpresaRepository
+from app.repositories.factura_proveedor_repository import (
+    FacturaProveedorRepository,
+)
 from app.repositories.pago_repository import PagoRepository
 from app.repositories.movimiento_inventario_repository import (
     MovimientoInventarioRepository,
@@ -26,6 +29,7 @@ from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
 from app.services.comprobante_service import ComprobanteService
 from app.services.empresa_service import EmpresaService
+from app.services.factura_proveedor_service import FacturaProveedorService
 from app.services.pago_service import PagoService
 from app.services.auth_service import AuthService
 from app.services.producto_service import ProductoService
@@ -48,6 +52,7 @@ __all__ = [
     "get_empresa_service",
     "get_comprobante_service",
     "get_pago_service",
+    "get_factura_proveedor_service",
 ]
 
 DbDep = Annotated[Connection[dict[str, Any]], Depends(get_db)]
@@ -163,4 +168,16 @@ def get_pago_service(
     return PagoService(
         ComprobanteRepository(db, usuario["id_empresa"]),
         PagoRepository(db, usuario["id_empresa"]),
+    )
+
+
+def get_factura_proveedor_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> FacturaProveedorService:
+    return FacturaProveedorService(
+        FacturaProveedorRepository(db, usuario["id_empresa"]),
+        PagoRepository(db, usuario["id_empresa"]),
+        EmpresaService(EmpresaRepository(db)),
+        id_empresa=usuario["id_empresa"],
     )

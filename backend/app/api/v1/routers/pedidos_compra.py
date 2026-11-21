@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from app.api.deps import get_pedido_compra_service
 from app.api.v1.routers.auth import get_current_user, require_roles
-from app.schemas.pedidos_compra import PedidoCompraCreate, PedidoCompraRead
+from app.schemas.pedidos_compra import (
+    PedidoCompraCreate,
+    PedidoCompraLineaRead,
+    PedidoCompraRead,
+)
 from app.services.pedido_compra_service import (
     PedidoCompraDatosInvalidos,
     PedidoCompraError,
@@ -29,6 +33,21 @@ PuedeCrear = Annotated[
     dict[str, Any],
     Depends(require_roles("administrador", "abastecimiento")),
 ]
+
+_CAMPOS_LINEA = set(PedidoCompraLineaRead.model_fields)
+
+
+def _validar_pedido(row: dict[str, Any]) -> PedidoCompraRead:
+    """Valida un pedido del repositorio descartando campos internos de los ítems."""
+    items = [
+        {
+            campo: valor
+            for campo, valor in item.items()
+            if campo in _CAMPOS_LINEA
+        }
+        for item in row.get("items", [])
+    ]
+    return PedidoCompraRead.model_validate({**row, "items": items})
 
 
 def _error_http(exc: PedidoCompraError) -> HTTPException:
@@ -66,7 +85,7 @@ def listar_pedidos_compra(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PedidoCompraRead]:
     return [
-        PedidoCompraRead.model_validate(row)
+        _validar_pedido(row)
         for row in service.listar(estado, q, limit, offset)
     ]
 
@@ -78,9 +97,7 @@ def obtener_pedido_compra(
     _: PuedeLeer,
 ) -> PedidoCompraRead:
     try:
-        return PedidoCompraRead.model_validate(
-            service.obtener(id_pedido_proveedor)
-        )
+        return _validar_pedido(service.obtener(id_pedido_proveedor))
     except PedidoCompraError as exc:
         raise _error_http(exc) from exc
 
@@ -96,7 +113,7 @@ def crear_pedido_compra(
     usuario: PuedeCrear,
 ) -> PedidoCompraRead:
     try:
-        return PedidoCompraRead.model_validate(
+        return _validar_pedido(
             service.crear(datos, usuario["id_empleado"])
         )
     except PedidoCompraError as exc:
@@ -113,9 +130,7 @@ def recibir_pedido_compra(
     _: PuedeCrear,
 ) -> PedidoCompraRead:
     try:
-        return PedidoCompraRead.model_validate(
-            service.recibir(id_pedido_proveedor)
-        )
+        return _validar_pedido(service.recibir(id_pedido_proveedor))
     except PedidoCompraError as exc:
         raise _error_http(exc) from exc
 
@@ -130,8 +145,6 @@ def cancelar_pedido_compra(
     _: PuedeCrear,
 ) -> PedidoCompraRead:
     try:
-        return PedidoCompraRead.model_validate(
-            service.cancelar(id_pedido_proveedor)
-        )
+        return _validar_pedido(service.cancelar(id_pedido_proveedor))
     except PedidoCompraError as exc:
         raise _error_http(exc) from exc

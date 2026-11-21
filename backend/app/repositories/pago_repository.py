@@ -14,7 +14,11 @@ SELECT p.id_pago,
        p.referencia,
        p.id_medio_pago,
        mp.medio_pago,
-       p.creado_en
+       p.creado_en,
+       p.id_comprobante_venta,
+       p.id_factura_proveedor,
+       CASE WHEN p.id_factura_proveedor IS NOT NULL THEN 'pago' ELSE 'cobro' END
+           AS tipo_pago
 FROM pago p
 JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
 """
@@ -31,16 +35,21 @@ class PagoRepository:
                 """
                 INSERT INTO pago (
                     id_empresa, estado, fecha_pago, monto, referencia,
-                    id_comprobante_venta, id_medio_pago
+                    id_comprobante_venta, id_factura_proveedor, id_medio_pago
                 )
                 VALUES (
                     %(id_empresa)s, %(estado)s, %(fecha_pago)s, %(monto)s,
                     %(referencia)s, %(id_comprobante_venta)s,
-                    %(id_medio_pago)s
+                    %(id_factura_proveedor)s, %(id_medio_pago)s
                 )
                 RETURNING id_pago
                 """,
-                {**datos, "id_empresa": self._id_empresa},
+                {
+                    **datos,
+                    "id_empresa": self._id_empresa,
+                    "id_comprobante_venta": datos.get("id_comprobante_venta"),
+                    "id_factura_proveedor": datos.get("id_factura_proveedor"),
+                },
             )
             row = cur.fetchone()
             assert row is not None
@@ -65,6 +74,20 @@ class PagoRepository:
                 ORDER BY p.creado_en, p.id_pago
                 """,
                 (id_comprobante_venta, self._id_empresa),
+            )
+            return cur.fetchall()
+
+    def listar_por_factura(
+        self, id_factura_proveedor: str
+    ) -> list[PagoRow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                {_SELECT_PAGO}
+                WHERE p.id_factura_proveedor = %s AND p.id_empresa = %s
+                ORDER BY p.creado_en, p.id_pago
+                """,
+                (id_factura_proveedor, self._id_empresa),
             )
             return cur.fetchall()
 
@@ -115,6 +138,24 @@ class PagoRepository:
                   AND estado = ANY(%s)
                 """,
                 (id_comprobante_venta, self._id_empresa, list(estados)),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return Decimal(row["total"])
+
+    def sumar_factura(
+        self, id_factura_proveedor: str, estados: tuple[str, ...]
+    ) -> Decimal:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(monto), 0) AS total
+                FROM pago
+                WHERE id_factura_proveedor = %s
+                  AND id_empresa = %s
+                  AND estado = ANY(%s)
+                """,
+                (id_factura_proveedor, self._id_empresa, list(estados)),
             )
             row = cur.fetchone()
             assert row is not None

@@ -75,6 +75,7 @@ class PagoService:
                         "monto": datos.monto,
                         "referencia": datos.referencia,
                         "id_comprobante_venta": id_comprobante_venta,
+                        "id_factura_proveedor": None,
                         "id_medio_pago": datos.id_medio_pago,
                     }
                 )

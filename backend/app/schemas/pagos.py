@@ -42,6 +42,9 @@ class PagoRead(SchemaBase):
     id_medio_pago: str
     medio_pago: str
     creado_en: datetime
+    id_comprobante_venta: str | None = None
+    id_factura_proveedor: str | None = None
+    tipo_pago: Literal["cobro", "pago"] | None = None
 
 
 class PagoListadoRead(PagoRead):

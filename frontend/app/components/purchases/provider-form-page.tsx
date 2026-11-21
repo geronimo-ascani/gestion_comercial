@@ -8,6 +8,13 @@ import { FormPage } from "~/components/ui/form-page";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import {
   requireText,
   validateAddress,
   validateDocument,
@@ -16,6 +23,7 @@ import {
 } from "~/lib/validation";
 
 import { useCurrentUser } from "../auth/session-store";
+import { listTaxConditions, type CondicionIVA } from "../customers/customers-api";
 import { getProvider } from "./providers-api";
 import {
   addProvider,
@@ -53,6 +61,8 @@ export function ProviderFormPage() {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [idCondicionIVA, setIdCondicionIVA] = useState("");
+  const [condicionesIVA, setCondicionesIVA] = useState<CondicionIVA[]>([]);
   const [cuit, setCuit] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -67,6 +77,18 @@ export function ProviderFormPage() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
+    let cancelled = false;
+    listTaxConditions()
+      .then((condiciones) => {
+        if (!cancelled) setCondicionesIVA(condiciones);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!editId) return;
     let cancelled = false;
     setLoading(true);
@@ -74,6 +96,7 @@ export function ProviderFormPage() {
       .then((provider) => {
         if (cancelled) return;
         setName(provider.name);
+        setIdCondicionIVA(provider.id_condicion_iva ?? "");
         setCuit(provider.cuit);
         setPhone(provider.phone);
         setEmail(provider.email);
@@ -139,6 +162,7 @@ export function ProviderFormPage() {
     const provider: Provider = {
       id: editId ?? "",
       name: name.trim(),
+      id_condicion_iva: idCondicionIVA || undefined,
       cuit: cuit.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -209,6 +233,47 @@ export function ProviderFormPage() {
                 <Label htmlFor="provider-cuit">CUIT</Label>
                 <Input id="provider-cuit" value={cuit} onChange={(event) => setField("cuit", event.target.value, setCuit)} aria-invalid={!!errors.cuit} />
                 <FieldError message={errors.cuit} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-condicion-iva">Condición de IVA</Label>
+                <Select
+                  value={idCondicionIVA || "__none__"}
+                  items={{
+                    __none__: "Sin especificar",
+                    ...Object.fromEntries(
+                      condicionesIVA.map((condicion) => [
+                        condicion.id_condicion_iva,
+                        condicion.descripcion,
+                      ])
+                    ),
+                  }}
+                  onValueChange={(value) =>
+                    setIdCondicionIVA(value === "__none__" ? "" : (value ?? ""))
+                  }
+                >
+                  <SelectTrigger id="provider-condicion-iva" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin especificar</SelectItem>
+                    {condicionesIVA.map((condicion) => (
+                      <SelectItem
+                        key={condicion.id_condicion_iva}
+                        value={condicion.id_condicion_iva}
+                      >
+                        {condicion.descripcion}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editId && idCondicionIVA && (
+                  <p className="text-xs text-muted-foreground">
+                    Condición actual:{" "}
+                    {condicionesIVA.find(
+                      (condicion) => condicion.id_condicion_iva === idCondicionIVA
+                    )?.descripcion ?? idCondicionIVA}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-phone">Teléfono</Label>

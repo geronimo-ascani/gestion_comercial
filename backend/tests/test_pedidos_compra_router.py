@@ -36,6 +36,24 @@ class FakePedidoCompraService:
     def crear(self, _datos, id_empleado):
         return {**_PEDIDO, "id_empleado": id_empleado}
 
+    @staticmethod
+    def _con_item_interno():
+        return {
+            **_PEDIDO,
+            "items": [
+                {
+                    **_PEDIDO["items"][0],
+                    "id_pedido_proveedor": _PEDIDO["id_pedido_proveedor"],
+                }
+            ],
+        }
+
+    def listar(self, estado, q, limit, offset):
+        return [self._con_item_interno()]
+
+    def obtener(self, id_pedido_proveedor):
+        return self._con_item_interno()
+
 
 def _client(rol: str) -> TestClient:
     app = FastAPI()
@@ -90,3 +108,19 @@ def test_sales_role_cannot_create_purchase_order() -> None:
         )
 
     assert response.status_code == 403
+
+
+def test_listar_pedidos_acepta_items_con_campos_internos() -> None:
+    with _client("administrador") as client:
+        response = client.get("/api/v1/compras/pedidos")
+
+    assert response.status_code == 200
+    assert "id_pedido_proveedor" not in response.json()[0]["items"][0]
+
+
+def test_obtener_pedido_acepta_items_con_campos_internos() -> None:
+    with _client("abastecimiento") as client:
+        response = client.get("/api/v1/compras/pedidos/OC-0001")
+
+    assert response.status_code == 200
+    assert "id_pedido_proveedor" not in response.json()["items"][0]

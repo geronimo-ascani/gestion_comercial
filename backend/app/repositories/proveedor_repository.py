@@ -6,7 +6,7 @@ from psycopg.rows import dict_row
 ProveedorRow = dict[str, Any]
 
 _SELECT = """
-SELECT p.id_proveedor, p.banco, p.cuenta, p.cuit, p.email,
+SELECT p.id_proveedor, p.id_condicion_iva, p.banco, p.cuenta, p.cuit, p.email,
        p.razon_social, p.saldo, p.telefono,
        d.altura AS direccion_altura, d.calle AS direccion_calle,
        d.cp AS direccion_cp, d.depto AS direccion_depto,
@@ -21,14 +21,15 @@ LEFT JOIN LATERAL (
 ) d ON TRUE
 """
 
-_FIELDS = {
+_FIELDS = (
+    "id_condicion_iva",
     "banco",
     "cuenta",
     "cuit",
     "email",
     "razon_social",
     "telefono",
-}
+)
 
 
 class ProveedorRepository:
@@ -91,19 +92,36 @@ class ProveedorRepository:
             row = cur.fetchone()
             return bool(row and row["existe"])
 
-    def crear(self, datos: dict[str, Any]) -> str:
-        values = {key: datos[key] for key in _FIELDS}
-        with self._conn.cursor(row_factory=dict_row) as cur:
+    def condicion_iva_existe(self, id_condicion_iva: str) -> bool:
+        with self._conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO proveedor (
-                    id_empresa, banco, cuenta, cuit, email, razon_social,
-                    telefono
-                )
-                VALUES (
-                    %(id_empresa)s, %(banco)s, %(cuenta)s, %(cuit)s,
-                    %(email)s, %(razon_social)s, %(telefono)s
-                )
+                SELECT EXISTS (
+                    SELECT 1 FROM condicion_iva
+                    WHERE id_condicion_iva = %s
+                ) AS existe
+                """,
+                (id_condicion_iva,),
+            )
+            row = cur.fetchone()
+            return bool(row and row["existe"])
+
+    def crear(self, datos: dict[str, Any]) -> str:
+        # Si no viene la condición IVA, la columna usa el DEFAULT de la BD.
+        values = {
+            key: datos[key]
+            for key in _FIELDS
+            if datos.get(key) is not None
+        }
+        columnas = ", ".join(("id_empresa", *values))
+        marcadores = ", ".join(
+            f"%({campo})s" for campo in ("id_empresa", *values)
+        )
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                INSERT INTO proveedor ({columnas})
+                VALUES ({marcadores})
                 RETURNING id_proveedor
                 """,
                 {**values, "id_empresa": self._id_empresa},
@@ -115,7 +133,7 @@ class ProveedorRepository:
     def actualizar(
         self, id_proveedor: str, campos: dict[str, Any]
     ) -> bool:
-        unknown = set(campos) - _FIELDS
+        unknown = set(campos) - set(_FIELDS)
         if unknown:
             raise ValueError(f"Campos de proveedor no actualizables: {sorted(unknown)}")
         if not campos:

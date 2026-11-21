@@ -17,7 +17,8 @@
   `003_producto_reservas.sql`, `004_pedido_provincia_entrega.sql`,
   `005_comprobantes_pagos.sql`, `006_multiempresa.sql`,
   `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`,
-  `009_costo_unitario_venta.sql`.
+  `009_costo_unitario_venta.sql`, `010_factura_proveedor.sql`,
+  `011_factura_proveedor_archivo.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `python -m pytest -q` from `backend/`.
@@ -199,6 +200,72 @@
 - The purchase form preserves its draft and selected payment method while
   navigating to inline supplier creation.
 
+### Supplier invoices
+
+- A supplier invoice is an external fiscal document received from the supplier
+  and stored in `factura_proveedor`; it is not a sales comprobante. The issuer
+  is the supplier and the receiver is the authenticated employee's company.
+- Every invoice belongs to one company, one employee, and one purchase order.
+  The purchase order is an internal reference and does not gate the invoice:
+  invoices may be recorded regardless of the order state, including canceled
+  orders. One purchase order may have many invoices.
+- `id_proveedor` is stored explicitly on the invoice even though it could be
+  reached through the purchase order. The backend derives it from the locked
+  purchase order and never accepts it from the request body.
+- Supplier `id_condicion_iva` is required. The backend derives the comprobante
+  type from the supplier's and the company's VAT conditions: A for a responsable
+  inscripto supplier billing a responsable inscripto or monotributista company,
+  B for other receivers, and C for a monotributista/exento supplier. Type E is
+  reserved for a future export stage; credit/debit notes are not implemented.
+- The number shown in the invoice list is the generated `FP-####` ID. The
+  supplier's own invoice number, punto de venta and every other fiscal detail
+  stay inside the uploaded PDF/JPG and are not stored separately. The legacy
+  `punto_venta` and `numero_comprobante` columns from migration `010` are filled
+  internally with the generated display value only to satisfy that historical
+  schema; the client never sends them and the API does not expose `punto_venta`.
+- Supplier invoices are registered from the PDF/JPG received from the supplier.
+  `POST /compras/facturas` is `multipart/form-data` with a JSON `metadata` field
+  and an `archivo` field; the old JSON line-item creation flow was removed. The
+  frontend opens a form first, lets the user find a purchase order with a
+  debounced searchable combobox, transcribes only the fields shown in the
+  invoice list, and attaches the file. Missing fields are reported by scrolling
+  to and focusing the first invalid control; the number field is never shown
+  because it is generated on save.
+- The only accepted metadata are `id_pedido_proveedor`, `fecha_emision`,
+  `fecha_vence` and `total`. The supplier, comprobante type, balance, payment
+  state, file data and ID are derived on the server. Every other fiscal detail
+  stays inside the PDF/JPG and is not stored as a separate field.
+- The file is stored in `factura_proveedor_archivo.contenido BYTEA` (PDF or JPG,
+  max 3 MB, with MIME and file-signature validation) in the same transaction as
+  the header. `GET /compras/facturas/{id}/archivo` returns the original inline
+  and is tenant-scoped.
+- The invoice ID is generated from `factura_proveedor_id_seq`; the request never
+  sends it. `id_empresa`, `id_proveedor` and `id_empleado` are derived on the
+  server. `saldo_pendiente` starts at the total and the payment state is derived
+  from approved payments. Pure comprobante-type derivation and legacy
+  calculation helpers live in `factura_compra_calculos.py` with `Decimal` and
+  `ROUND_HALF_UP`.
+- The legacy amount columns and line-item tables from migration `010` remain for
+  historical data, but new registration does not populate them and the API does
+  not expose them. Issuer and receiver snapshots are stored on the header at
+  registration; changing the supplier or company later must not alter a stored
+  invoice.
+- The invoice does not create inventory movements; stock still changes on
+  purchase-order receipt.
+- Registered invoices are immutable: there is no update or delete endpoint.
+- Payments attach to `factura_proveedor` by extending `pago` with a nullable
+  `id_factura_proveedor`. Exactly one of `id_comprobante_venta` or
+  `id_factura_proveedor` must be present. Approved payments reduce
+  `saldo_pendiente` atomically; pending and rejected payments are stored but do
+  not affect balances. Supplier invoices expose only `emitida` and `pagada`:
+  partial payments reduce `saldo_pendiente` but keep the invoice `emitida`, and
+  the invoice becomes `pagada` when the balance reaches zero. The detail screen
+  has a manual "Marcar como pagada" action that registers an approved payment
+  for the remaining balance. The old `aprobada` value may remain in legacy rows
+  but is normalized to `emitida` or `pagada` on read.
+- Routes under `/compras/facturas` and `/compras/pedidos/{id}/facturas` are
+  restricted to `administrador` and `abastecimiento`.
+
 ## API and Data Conventions
 
 - Use Pydantic request/response schemas and explicit service exceptions mapped
@@ -342,5 +409,27 @@
 - Comprobante emission uses the authenticated employee's company as issuer and
   is blocked with `409 Conflict` when the company is inactive or lacks a
   11-digit CUIT.
+- Supplier invoice API: `GET/POST /compras/facturas` (multipart upload),
+  `GET /compras/facturas/{id}`, `GET /compras/facturas/{id}/archivo`,
+  `GET /compras/pedidos/{id}/facturas`, and
+  `GET/POST /compras/facturas/{id}/pagos`. Creation snapshots the supplier and
+  receiver; the backend derives the company, supplier, employee, invoice ID and
+  comprobante type, and stores the PDF/JPG as `BYTEA`. Invoices are
+  immutable and do not affect stock. Migrations `010` and `011` were applied
+  locally and the file creation/download path was probed with temporary data
+  and rolled back.
+- Supplier `id_condicion_iva` is part of the provider form and API. Legacy
+  providers default to `Consumidor Final` so invoice registration can derive a
+  comprobante type; the administrator can correct the condition later.
+- The supplier invoice frontend is integrated at `/purchases/invoices` with
+  creation, detail and payment registration routes. Only `administrador` and
+  `abastecimiento` can see the navigation entry or access those routes; the
+  backend still enforces the same permission. "Nueva factura" opens a form where
+  the user searches a purchase order, enters only the list metadata (order,
+  dates and total), attaches a PDF/JPG and sees a local preview before saving.
+  The invoice number is generated on save and never requested. Missing fields
+  scroll the page to and focus the first invalid control. The list and detail
+  expose the file metadata and allow viewing/downloading the stored original;
+  all totals, type, number, ID and payment state remain backend-owned.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

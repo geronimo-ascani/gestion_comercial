@@ -69,9 +69,13 @@ export function listPurchasePaymentMethods(): Promise<PurchasePaymentMethod[]> {
   return apiRequest<PurchasePaymentMethod[]>("/medios-pago");
 }
 
-export async function listPurchaseOrders(): Promise<PurchaseOrder[]> {
+export async function listPurchaseOrders(
+  q = ""
+): Promise<PurchaseOrder[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (q.trim()) query.set("q", q.trim());
   const orders = await apiRequest<PurchaseOrderApi[]>(
-    "/compras/pedidos?limit=200"
+    `/compras/pedidos?${query.toString()}`
   );
   return orders.map(mapPurchaseOrder);
 }

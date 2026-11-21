@@ -10,6 +10,7 @@ export type PurchaseOrderStatus =
 export interface Provider {
   id: string;
   name: string;
+  id_condicion_iva?: string;
   cuit: string;
   phone: string;
   email: string;

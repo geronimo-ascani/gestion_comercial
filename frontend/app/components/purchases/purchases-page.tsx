@@ -58,9 +58,11 @@ import { PurchaseOrderStatusBadge } from "./purchases-views";
 function PurchaseOrderDetailDialog({
   order,
   trigger,
+  onNewInvoice,
 }: {
   order: PurchaseOrder;
   trigger: ReactElement;
+  onNewInvoice: (order: PurchaseOrder) => void;
 }) {
   return (
     <Dialog>
@@ -80,6 +82,9 @@ function PurchaseOrderDetailDialog({
         <OrderLineItemsTable items={order.items} total={order.total} />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cerrar</DialogClose>
+          <Button type="button" onClick={() => onNewInvoice(order)}>
+            Nueva factura
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -286,6 +291,11 @@ export function PurchasesPage() {
                       <div className="flex justify-end gap-1">
                         <PurchaseOrderDetailDialog
                           order={order}
+                          onNewInvoice={(selected) =>
+                            navigate(
+                              `/purchases/invoices/new?pedido=${encodeURIComponent(selected.number)}`
+                            )
+                          }
                           trigger={
                             <Button
                               variant="ghost"
