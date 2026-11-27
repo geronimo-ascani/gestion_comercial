@@ -49,6 +49,10 @@ WHERE p.id_empresa = %(id_empresa)s
   AND (%(id_unidad)s::text IS NULL OR p.id_unidad = %(id_unidad)s)
   AND (%(precio_min)s::numeric IS NULL OR p.precio_venta >= %(precio_min)s)
   AND (%(precio_max)s::numeric IS NULL OR p.precio_venta <= %(precio_max)s)
+  AND (%(precio_compra_min)s::numeric IS NULL OR p.precio_compra >= %(precio_compra_min)s)
+  AND (%(precio_compra_max)s::numeric IS NULL OR p.precio_compra <= %(precio_compra_max)s)
+  AND (%(stock_min)s::numeric IS NULL OR p.stock_actual >= %(stock_min)s)
+  AND (%(stock_max)s::numeric IS NULL OR p.stock_actual <= %(stock_max)s)
   AND (%(estado)s::boolean IS NULL OR p.estado = %(estado)s)
   AND (
       %(stock_estado)s::text IS NULL
@@ -58,6 +62,15 @@ WHERE p.id_empresa = %(id_empresa)s
       OR (%(stock_estado)s = 'alerta' AND p.stock_actual <= p.stock_minimo)
   )
 """
+
+_ORDENES_PRODUCTO = {
+    "nombre": "p.nombre",
+    "precio_asc": "p.precio_venta ASC, p.nombre",
+    "precio_desc": "p.precio_venta DESC, p.nombre",
+    "stock_asc": "p.stock_actual ASC, p.nombre",
+    "stock_desc": "p.stock_actual DESC, p.nombre",
+    "stock_minimo": "p.stock_minimo DESC, p.nombre",
+}
 
 _COLUMNAS_ACTUALIZABLES = {
     "nombre",
@@ -84,7 +97,11 @@ class ProductoRepository:
         return self._conn.transaction()
 
     def listar(
-        self, filtros: dict[str, Any], limit: int, offset: int
+        self,
+        filtros: dict[str, Any],
+        limit: int,
+        offset: int,
+        orden: str = "nombre",
     ) -> list[ProductoRow]:
         parametros = {
             **filtros,
@@ -92,10 +109,11 @@ class ProductoRepository:
             "limit": limit,
             "offset": offset,
         }
+        orden_sql = _ORDENES_PRODUCTO.get(orden, _ORDENES_PRODUCTO["nombre"])
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"{_SELECT_PRODUCTO} {_WHERE_PRODUCTO} "
-                "ORDER BY p.nombre LIMIT %(limit)s OFFSET %(offset)s",
+                f"ORDER BY {orden_sql} LIMIT %(limit)s OFFSET %(offset)s",
                 parametros,
             )
             return cur.fetchall()

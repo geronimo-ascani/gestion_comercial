@@ -50,6 +50,7 @@ _COMPRA_PEDIDO = {
         {
             "id_producto": "PRD-0001",
             "nombre": "Producto Uno",
+            "id_categoria": "CAT-0001",
             "cantidad": Decimal("4.000"),
             "precio_unitario": Decimal("10.00"),
             "subtotal": Decimal("40.00"),
@@ -112,18 +113,20 @@ class FakeAnaliticaRepository:
             {
                 "id_producto": "PRD-0001",
                 "nombre": "Producto Uno",
+                "id_categoria": "CAT-0001",
                 "stock": Decimal("10.000"),
                 "costo_unitario": Decimal("20.00"),
             },
             {
                 "id_producto": "PRD-0002",
                 "nombre": "Producto Dos",
+                "id_categoria": None,
                 "stock": Decimal("5.000"),
                 "costo_unitario": Decimal("10.00"),
             },
         ]
 
-    def listar_ultima_venta(self):
+    def listar_ultima_venta(self, id_cliente: str | None = None):
         return {"PRD-0001": date(2026, 11, 1)}
 
     def listar_pagos(self, desde: date, hasta: date):
@@ -133,27 +136,42 @@ class FakeAnaliticaRepository:
                 "medio_pago": "Efectivo",
                 "monto": Decimal("100.00"),
                 "estado": "aprobado",
+                "id_pedido": "PV-0001",
+                "id_cliente": "CLI-0001",
             },
             {
                 "id_medio_pago": "MPG-0002",
                 "medio_pago": "Tarjeta",
                 "monto": Decimal("50.00"),
                 "estado": "pendiente",
+                "id_pedido": "PV-0002",
+                "id_cliente": "CLI-0002",
             },
         ]
 
-    def listar_historial_demanda(self, desde: date, hasta: date):
+    def listar_historial_demanda(
+        self, desde: date, hasta: date, id_producto: str | None = None
+    ):
         return [
             {
                 "id_producto": "PRD-0001",
                 "nombre": "Producto Uno",
+                "id_categoria": "CAT-0001",
                 "mes": date(2026, month, 1),
                 "cantidad": Decimal(str(month - 5)),
             }
             for month in range(6, 12)
         ]
 
-    def totales(self, desde: date, hasta: date):
+    def totales(
+        self,
+        desde: date,
+        hasta: date,
+        *,
+        id_cliente: str | None = None,
+        id_proveedor: str | None = None,
+        id_categoria: str | None = None,
+    ):
         self.totales_rangos.append((desde, hasta))
         return {"ventas": Decimal("120.00"), "gastos": Decimal("30.00")}
 
@@ -266,8 +284,12 @@ def test_medios_pago_solo_incluye_pagos_aprobados() -> None:
             "id_medio_pago": "MPG-0001",
             "medio_pago": "Efectivo",
             "monto": Decimal("100.00"),
+            "participacion_pct": Decimal("100.00"),
         }
     ]
+    assert datos["resumen_medios_pago"] == {
+        "total_cobrado": Decimal("100.00")
+    }
 
 
 def test_variacion_anio_compara_contra_mismo_periodo_del_anio_anterior() -> None:
@@ -307,3 +329,93 @@ def test_rol_desconocido_falla() -> None:
 
     with pytest.raises(AnaliticaDatosInvalidos):
         _service().obtener("mes", "invitado", _REFERENCIA)
+
+
+def test_filtros_avanzados_se_reflejan_en_parametros_y_secciones() -> None:
+    datos = _service().obtener(
+        "mes",
+        "administrador",
+        _REFERENCIA,
+        granularidad="semanal",
+        limite=3,
+        dias_inmovilizado=30,
+        id_categoria="CAT-0001",
+        id_cliente="CLI-0001",
+        id_proveedor="PRV-0001",
+        id_producto="PRD-0001",
+        periodos_pronostico=2,
+    )
+
+    assert datos["parametros"] == {
+        "periodo": "mes",
+        "desde": _DESDE,
+        "hasta": _HASTA,
+        "granularidad": "semanal",
+        "limite": 3,
+        "dias_inmovilizado": 30,
+        "id_categoria": "CAT-0001",
+        "id_cliente": "CLI-0001",
+        "id_proveedor": "PRV-0001",
+        "id_producto": "PRD-0001",
+        "periodos_pronostico": 2,
+    }
+    assert datos["kpis"]["ventas"] == Decimal("96.80")
+    assert len(datos["ranking_productos"]) == 1
+    assert datos["inventario_inmovilizado"] == []
+    assert len(datos["prediccion_demanda"][0]["pronostico"]) == 2
+    assert [punto["inicio"] for punto in datos["aov_upt"]] == [
+        date(2026, 10, 19),
+        date(2026, 10, 26),
+        date(2026, 11, 2),
+        date(2026, 11, 9),
+        date(2026, 11, 16),
+    ]
+
+
+def test_rango_personalizado_compara_ventana_anterior_equivalente() -> None:
+    repo = FakeAnaliticaRepository()
+    service = AnaliticaService(repo)  # type: ignore[arg-type]
+
+    service.obtener(
+        "mes",
+        "administrador",
+        _REFERENCIA,
+        desde=date(2026, 11, 1),
+        hasta=date(2026, 11, 17),
+    )
+
+    assert repo.totales_rangos == [
+        (date(2026, 10, 15), date(2026, 10, 31))
+    ]
+
+
+def test_resumenes_secalculan_en_backend() -> None:
+    datos = _service().obtener("mes", "administrador", _REFERENCIA)
+
+    assert datos["resumen_nuevos_recurrentes"] == {
+        "total": Decimal("150.00"),
+        "nuevos_pct": Decimal("100.00"),
+        "recurrentes_pct": Decimal("0.00"),
+    }
+    assert datos["resumen_inventario_inmovilizado"] == {
+        "productos": 2,
+        "capital": Decimal("250.00"),
+    }
+    assert datos["productos_menos_vendidos"][0]["id_producto"] == "PRD-0001"
+    assert datos["productos_mas_rentables"][0]["id_producto"] == "PRD-0001"
+
+
+def test_parametros_fuera_de_rango_fallan() -> None:
+    import pytest
+
+    from app.services.analitica_calculos import AnaliticaDatosInvalidos
+
+    for kwargs in (
+        {"limite": 0},
+        {"dias_inmovilizado": -1},
+        {"periodos_pronostico": 7},
+        {"desde": date(2026, 11, 1)},
+        {"desde": date(2026, 11, 17), "hasta": date(2026, 11, 1)},
+    ):
+        with pytest.raises(AnaliticaDatosInvalidos):
+            _service().obtener("mes", "administrador", _REFERENCIA, **kwargs)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DollarSign, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Bar,
@@ -16,6 +16,11 @@ import {
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Combobox,
+  type ComboboxOption,
+} from "~/components/ui/combobox";
+import { Input } from "~/components/ui/input";
 import {
   Card,
   CardContent,
@@ -44,14 +49,20 @@ import {
   Skeleton,
   TableSkeleton,
 } from "~/components/ui/skeleton";
+import { useDebouncedValue } from "~/lib/use-debounced-value";
 
-import { ExecutiveReportSheet } from "~/components/reports/executive-report-sheet";
-import { ReportPreviewDialog } from "~/components/reports/report-preview-dialog";
 import { useCurrentUser } from "../auth/session-store";
+import type { Customer } from "../customers/customers-types";
+import { listCustomers } from "../customers/customers-api";
+import { listarCategorias, type Categoria } from "../products/products-api";
+import { listProviders } from "../purchases/providers-api";
+import type { Provider } from "../purchases/purchases-types";
 
 import {
+  downloadAnalyticsReport,
   fetchAnalytics,
   type AnalyticsData,
+  type AnalyticsFilters,
   type Period,
 } from "./analytics-api";
 import {
@@ -78,25 +89,150 @@ const tooltipStyle = {
   borderRadius: 8,
 };
 
+function normalizarBusqueda(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es");
+}
+
+function filtrarOpciones<T extends ComboboxOption>(
+  opciones: T[],
+  busqueda: string
+): T[] {
+  const texto = normalizarBusqueda(busqueda.trim());
+  if (!texto) return opciones;
+  // La primera opción ("Todos/Todas…") siempre queda visible para poder
+  // volver a seleccionarla sin borrar la búsqueda.
+  const [todas, ...resto] = opciones;
+  if (!todas) return opciones;
+  return [
+    todas,
+    ...resto.filter((opcion) =>
+      normalizarBusqueda(
+        [opcion.label, ...(opcion.keywords ?? [])].join(" ")
+      ).includes(texto)
+    ),
+  ];
+}
+
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("mes");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [idCategoria, setIdCategoria] = useState("");
+  const [idCliente, setIdCliente] = useState("");
+  const [idProveedor, setIdProveedor] = useState("");
+  const [diasInmovilizado, setDiasInmovilizado] = useState(60);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [clientes, setClientes] = useState<Customer[]>([]);
+  const [proveedores, setProveedores] = useState<Provider[]>([]);
+  const [busquedaCategoria, setBusquedaCategoria] = useState("");
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [busquedaProveedor, setBusquedaProveedor] = useState("");
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const currentUser = useCurrentUser();
   const role = currentUser?.role;
   const isAdmin = role === "administrador";
   const canSeeSales = isAdmin || role === "ventas";
   const canSeeSupply = isAdmin || role === "abastecimiento";
 
+  const busquedaCategoriaDebounced = useDebouncedValue(busquedaCategoria);
+  const busquedaClienteDebounced = useDebouncedValue(busquedaCliente);
+  const busquedaProveedorDebounced = useDebouncedValue(busquedaProveedor);
+
+  const categoriaOptions = useMemo(
+    () =>
+      filtrarOpciones(
+        [
+          { value: "", label: "Todas las categorías" },
+          ...categorias.map((categoria) => ({
+            value: categoria.id_categoria,
+            label: categoria.nombre,
+          })),
+        ],
+        busquedaCategoriaDebounced
+      ),
+    [categorias, busquedaCategoriaDebounced]
+  );
+  const clienteOptions = useMemo(
+    () =>
+      filtrarOpciones(
+        [
+          { value: "", label: "Todos los clientes" },
+          ...clientes.map((cliente) => ({
+            value: cliente.id,
+            label: `${cliente.firstName} ${cliente.lastName}`.trim(),
+            keywords: [cliente.document, cliente.email],
+          })),
+        ],
+        busquedaClienteDebounced
+      ),
+    [clientes, busquedaClienteDebounced]
+  );
+  const proveedorOptions = useMemo(
+    () =>
+      filtrarOpciones(
+        [
+          { value: "", label: "Todos los proveedores" },
+          ...proveedores.map((proveedor) => ({
+            value: proveedor.id,
+            label: proveedor.name,
+            keywords: [proveedor.cuit, proveedor.email],
+          })),
+        ],
+        busquedaProveedorDebounced
+      ),
+    [proveedores, busquedaProveedorDebounced]
+  );
+
+  const filters: AnalyticsFilters = {
+    periodo: period,
+    desde: desde || undefined,
+    hasta: hasta || undefined,
+    id_categoria: idCategoria || undefined,
+    id_cliente: canSeeSales ? idCliente || undefined : undefined,
+    id_proveedor: canSeeSupply ? idProveedor || undefined : undefined,
+    dias_inmovilizado: diasInmovilizado,
+  };
+
+  useEffect(() => {
+    let active = true;
+    listarCategorias()
+      .then((result) => {
+        if (active) setCategorias(result);
+      })
+      .catch(() => undefined);
+    if (canSeeSales) {
+      listCustomers()
+        .then((result) => {
+          if (active) setClientes(result);
+        })
+        .catch(() => undefined);
+    }
+    if (canSeeSupply) {
+      listProviders()
+        .then((result) => {
+          if (active) setProveedores(result);
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+    };
+  }, [canSeeSales, canSeeSupply]);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
 
-    fetchAnalytics(period)
+    fetchAnalytics(filters)
       .then((result) => {
         if (active) setData(result);
       })
@@ -115,7 +251,35 @@ export function AnalyticsPage() {
     return () => {
       active = false;
     };
-  }, [period, reloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    period,
+    desde,
+    hasta,
+    idCategoria,
+    idCliente,
+    idProveedor,
+    diasInmovilizado,
+    canSeeSales,
+    canSeeSupply,
+    reloadKey,
+  ]);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadAnalyticsReport(filters);
+    } catch (cause: unknown) {
+      setExportError(
+        cause instanceof Error
+          ? cause.message
+          : "No se pudo descargar el reporte."
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const kpis = data?.kpis ?? null;
   const variacion = data?.variacion ?? null;
@@ -163,7 +327,6 @@ export function AnalyticsPage() {
     ...payment,
     color: paymentColor(index),
   }));
-  const totalPayments = payments.reduce((sum, item) => sum + item.monto, 0);
 
   return (
     <div className="space-y-6">
@@ -174,7 +337,7 @@ export function AnalyticsPage() {
             Indicadores y reportes del negocio.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select
             value={period}
             onValueChange={(value) => setPeriod(value as Period)}
@@ -190,11 +353,80 @@ export function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
+          <Input
+            type="date"
+            aria-label="Fecha desde"
+            className="w-40"
+            value={desde}
+            onChange={(event) => setDesde(event.target.value)}
+          />
+          <Input
+            type="date"
+            aria-label="Fecha hasta"
+            className="w-40"
+            value={hasta}
+            onChange={(event) => setHasta(event.target.value)}
+          />
+          <Combobox
+            value={idCategoria}
+            onValueChange={setIdCategoria}
+            options={categoriaOptions}
+            searchValue={busquedaCategoria}
+            onSearchChange={setBusquedaCategoria}
+            searchPlaceholder="Buscar categoría…"
+            notFoundText="No se encontraron categorías"
+            className="w-52"
+          />
+          {canSeeSales && (
+            <Combobox
+              value={idCliente}
+              onValueChange={setIdCliente}
+              options={clienteOptions}
+              searchValue={busquedaCliente}
+              onSearchChange={setBusquedaCliente}
+              searchPlaceholder="Buscar por nombre, DNI/CUIT o email…"
+              notFoundText="No se encontraron clientes"
+              className="w-56"
+            />
+          )}
+          {canSeeSupply && (
+            <Combobox
+              value={idProveedor}
+              onValueChange={setIdProveedor}
+              options={proveedorOptions}
+              searchValue={busquedaProveedor}
+              onSearchChange={setBusquedaProveedor}
+              searchPlaceholder="Buscar por razón social, CUIT o email…"
+              notFoundText="No se encontraron proveedores"
+              className="w-56"
+            />
+          )}
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setDesde("");
+              setHasta("");
+              setIdCategoria("");
+              setIdCliente("");
+              setIdProveedor("");
+              setBusquedaCategoria("");
+              setBusquedaCliente("");
+              setBusquedaProveedor("");
+            }}
+          >
+            Limpiar filtros
+          </Button>
           {isAdmin && data && (
-            <Button onClick={() => setPreviewOpen(true)}>Exportar reporte</Button>
+            <Button onClick={() => void handleExport()} disabled={exporting}>
+              {exporting ? "Generando..." : "Descargar PDF"}
+            </Button>
           )}
         </div>
       </div>
+
+      {exportError && (
+        <p className="text-sm text-destructive">{exportError}</p>
+      )}
 
       {error ? (
         <Card>
@@ -296,7 +528,7 @@ export function AnalyticsPage() {
                     <CardDescription>Distribución del período</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {payments.length === 0 || totalPayments === 0 ? (
+                    {payments.length === 0 ? (
                       <div className="flex h-[220px] items-center justify-center rounded-lg border text-sm text-muted-foreground">
                         No hay pagos aprobados en el período.
                       </div>
@@ -315,9 +547,10 @@ export function AnalyticsPage() {
                                 const entry = props as unknown as {
                                   medioPago: string;
                                   monto: number;
+                                  participacionPct: number;
                                 };
                                 return `${entry.medioPago} · ${Math.round(
-                                  (entry.monto / totalPayments) * 100
+                                  entry.participacionPct
                                 )}%`;
                               }}
                             >
@@ -345,7 +578,7 @@ export function AnalyticsPage() {
                                 {entry.medioPago}
                               </span>
                               <span className="font-medium">
-                                {Math.round((entry.monto / totalPayments) * 100)}%
+                                {Math.round(entry.participacionPct)}%
                               </span>
                             </div>
                           ))}
@@ -376,12 +609,20 @@ export function AnalyticsPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {canSeeSupply && (
               <div className={canSeeSales ? "lg:col-span-2" : "lg:col-span-3"}>
-                <ImmobilizedInventory items={data.inventarioInmovilizado} />
+                <ImmobilizedInventory
+                  items={data.inventarioInmovilizado}
+                  summary={data.resumenInventarioInmovilizado}
+                  umbral={diasInmovilizado}
+                  onUmbralChange={setDiasInmovilizado}
+                />
               </div>
             )}
             {canSeeSales && (
               <div className={canSeeSupply ? "lg:col-span-1" : "lg:col-span-3"}>
-                <NewVsRecurrent series={data.nuevosRecurrentes} />
+                <NewVsRecurrent
+                  series={data.nuevosRecurrentes}
+                  summary={data.resumenNuevosRecurrentes}
+                />
               </div>
             )}
           </div>
@@ -389,7 +630,11 @@ export function AnalyticsPage() {
           {canSeeSales && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className={canSeeSupply ? "" : "lg:col-span-2"}>
-                <RankingsPanel products={data.rankingProductos} />
+                <RankingsPanel
+                  masVendidos={data.rankingProductos}
+                  menosVendidos={data.productosMenosVendidos}
+                  masRentables={data.productosMasRentables}
+                />
               </div>
               <Card>
                 <CardHeader>
@@ -464,15 +709,6 @@ export function AnalyticsPage() {
         </>
       )}
 
-      {isAdmin && data && (
-        <ReportPreviewDialog
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          title="Previsualización de reporte"
-        >
-          <ExecutiveReportSheet period={period} data={data} />
-        </ReportPreviewDialog>
-      )}
     </div>
   );
 }

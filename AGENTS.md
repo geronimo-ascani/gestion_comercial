@@ -322,7 +322,23 @@
 - Demand forecasting is a simple linear regression over chronological,
   equidistant periods, clamped at zero.
 - Analytics remain backend-owned: the frontend must not recompute these values
-  or trust client-supplied figures.
+  or trust client-supplied figures. The JSON response includes `parametros`,
+  so the UI can echo the exact backend-applied filters and range.
+- RF-29 advanced filters are accepted by `GET /analiticas` and the PDF endpoint:
+  `desde`/`hasta` (together), `granularidad`, `limite`, `dias_inmovilizado`,
+  `id_categoria`, `id_cliente`, `id_proveedor`, `id_producto` and
+  `periodos_pronostico`. Omitting every new parameter preserves the previous
+  behavior. Category filtering recalculates affected order/invoice totals from
+  the matching lines; payment filtering keeps the payment date unless a
+  category is selected, in which case only payments of matching orders count.
+- A custom `desde`/`hasta` range compares against the immediately preceding
+  window of equal length; the `año` period compares year-to-date with the same
+  range in the previous year. Summaries for new vs. recurring customers,
+  payment methods and immobilized inventory are calculated in the backend.
+- RF-28: report exports are PDF-only. `GET /analiticas/reporte.pdf` generates the
+  PDF with `fpdf2` from the same backend-calculated data as the JSON endpoint,
+  using the same query parameters. No CSV or client-side HTML-canvas PDF export
+  is used.
 
 ## Current Status
 
@@ -364,21 +380,32 @@
   The "Medios de pago" section counts only approved sales collections: the SQL
   filters `id_comprobante_venta IS NOT NULL` and the pure calculation ignores any
   payment carrying `id_factura_proveedor`, so supplier payments cannot inflate it.
-- Analytics are served by `GET /analiticas?periodo=...` (roles
-  `administrador`, `ventas`, `abastecimiento`), backed by
-  `analitica_repository.py`, `analitica_service.py`, and the response schema in
-  `schemas/analitica.py`. Sections are returned according to the role:
-  administrators receive everything, sales receive commercial sections
-  including costs, gross margin and category margins (but not purchase totals,
-  expenses, net margin or net income), and supply receives supplier/price/
-  inventory sections plus the demand forecast.
-- The analytics frontend now consumes the real endpoint through
-  `frontend/app/components/analytics/analytics-api.ts`; the executive report
-  prints the same backend data. The main dashboard (`/dashboard`, administrator
+- Analytics are served by `GET /analiticas?periodo=...` and exported through
+  `GET /analiticas/reporte.pdf?periodo=...` (roles `administrador`, `ventas`,
+  `abastecimiento`), backed by `analitica_repository.py`,
+  `analitica_service.py`, `analitica_calculos.py`, `analitica_pdf.py` and the
+  response schema in `schemas/analitica.py`. Sections are returned according to
+  the role: administrators receive everything, sales receive commercial
+  sections including costs, gross margin and category margins (but not purchase
+  totals, expenses, net margin or net income), and supply receives supplier/
+  price/inventory sections plus the demand forecast. Both endpoints accept the
+  RF-29 filters and the JSON response echoes them in `parametros`.
+- `GET /productos` now also accepts `precio_compra_min`, `precio_compra_max`,
+  `stock_min`, `stock_max` and a whitelisted `orden`. `GET /productos/movimientos`
+  lists inventory movements across products for administrators and supply;
+  it is declared before `/productos/{id_producto}/movimientos` so the static
+  route is not captured as a product ID.
+- The analytics frontend consumes the real endpoint through
+  `frontend/app/components/analytics/analytics-api.ts`. The screen sends date,
+  category, client, supplier and idle-stock filters, renders backend summaries
+  and rankings (including least sold and most profitable products), and
+  downloads the backend PDF. The main dashboard (`/dashboard`, administrator
   only) is backed by `/analiticas` for KPIs and trends,
   `/productos/alertas-stock` for critical stock, and `/ventas/pedidos` for
   recent orders. The frontend only renders those backend results; it does not
-  recompute analytics.
+  recompute analytics. The old client-side report preview/canvas-PDF files and
+  the payments CSV export were removed; jspdf/html2canvas-pro are no longer
+  frontend dependencies.
 - Comprobante API: `POST/GET /ventas/pedidos/{id}/comprobante` (emit and read
   by order), `GET /ventas/comprobantes`, `GET /ventas/comprobantes/{id}`,
   `GET/POST /ventas/comprobantes/{id}/pagos`,

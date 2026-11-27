@@ -1,6 +1,36 @@
-import { apiRequest } from "~/lib/api";
+import { apiFetchBlob, apiRequest } from "~/lib/api";
 
 export type Period = "hoy" | "7d" | "mes" | "trimestre" | "año";
+export type Granularity = "diario" | "semanal" | "mensual" | "anual";
+
+/** Filtros RF-29; el backend calcula todas las secciones con los mismos valores. */
+export interface AnalyticsFilters {
+  periodo: Period;
+  desde?: string;
+  hasta?: string;
+  granularidad?: Granularity;
+  limite?: number;
+  dias_inmovilizado?: number;
+  id_categoria?: string;
+  id_cliente?: string;
+  id_proveedor?: string;
+  id_producto?: string;
+  periodos_pronostico?: number;
+}
+
+export interface AnalyticsParametros {
+  periodo: Period;
+  desde: string;
+  hasta: string;
+  granularidad: Granularity;
+  limite: number;
+  dias_inmovilizado: number;
+  id_categoria: string | null;
+  id_cliente: string | null;
+  id_proveedor: string | null;
+  id_producto: string | null;
+  periodos_pronostico: number;
+}
 
 export interface AnalyticsKpis {
   ventas: number | null;
@@ -84,6 +114,22 @@ export interface ImmobilizedItem {
   costoUnitario: number;
   capital: number;
   diasSinVenta: number | null;
+  sugerenciaLiquidar: boolean;
+}
+
+export interface ImmobilizedSummary {
+  productos: number;
+  capital: number;
+}
+
+export interface NewRecurrentSummary {
+  total: number;
+  nuevosPct: number;
+  recurrentesPct: number;
+}
+
+export interface PaymentMethodSummary {
+  totalCobrado: number;
 }
 
 export interface CategoryMargin {
@@ -105,6 +151,7 @@ export interface PaymentMethodTotal {
   id: string;
   medioPago: string;
   monto: number;
+  participacionPct: number;
 }
 
 export interface DemandForecast {
@@ -125,19 +172,25 @@ export interface AnalyticsData {
   desde: string;
   hasta: string;
   generadoEn: string;
+  parametros: AnalyticsParametros;
   kpis: AnalyticsKpis | null;
   tendencias: TrendPoint[];
   aovUpt: AovUptPoint[];
   aovUptActual: AovUpt | null;
   nuevosRecurrentes: NewRecurrentPoint[];
+  resumenNuevosRecurrentes: NewRecurrentSummary | null;
   rankingProductos: ProductRanking[];
+  productosMenosVendidos: ProductRanking[];
+  productosMasRentables: ProductRanking[];
   rankingClientes: CustomerRanking[];
   rankingProveedores: ProviderRanking[];
   comparativaPrecios: PriceComparison[];
   margenCategorias: CategoryMargin[];
   inventarioInmovilizado: ImmobilizedItem[];
+  resumenInventarioInmovilizado: ImmobilizedSummary | null;
   mapaCalor: HeatmapData | null;
   mediosPago: PaymentMethodTotal[];
+  resumenMediosPago: PaymentMethodSummary | null;
   prediccionDemanda: DemandForecast[];
   variacion: Variation | null;
 }
@@ -222,6 +275,22 @@ interface ImmobilizedApi {
   costo_unitario: string;
   capital: string;
   dias_sin_venta: number | null;
+  sugerencia_liquidar: boolean;
+}
+
+interface ImmobilizedSummaryApi {
+  productos: number;
+  capital: string;
+}
+
+interface NewRecurrentSummaryApi {
+  total: string;
+  nuevos_pct: string;
+  recurrentes_pct: string;
+}
+
+interface PaymentSummaryApi {
+  total_cobrado: string;
 }
 
 interface CategoryMarginApi {
@@ -243,6 +312,7 @@ interface PaymentApi {
   id_medio_pago: string;
   medio_pago: string;
   monto: string;
+  participacion_pct: string;
 }
 
 interface DemandApi {
@@ -258,24 +328,44 @@ interface VariationApi {
   neto: string | null;
 }
 
+interface ParametrosApi {
+  periodo: Period;
+  desde: string;
+  hasta: string;
+  granularidad: Granularity;
+  limite: number;
+  dias_inmovilizado: number;
+  id_categoria: string | null;
+  id_cliente: string | null;
+  id_proveedor: string | null;
+  id_producto: string | null;
+  periodos_pronostico: number;
+}
+
 interface AnalyticsApi {
   periodo: Period;
   desde: string;
   hasta: string;
   generado_en: string;
+  parametros: ParametrosApi;
   kpis: KpisApi | null;
   tendencias: TrendApi[] | null;
   aov_upt: AovUptApi[] | null;
   aov_upt_actual: AovUptApi | null;
   nuevos_recurrentes: NewRecurrentApi[] | null;
+  resumen_nuevos_recurrentes: NewRecurrentSummaryApi | null;
   ranking_productos: ProductRankingApi[] | null;
+  productos_menos_vendidos: ProductRankingApi[] | null;
+  productos_mas_rentables: ProductRankingApi[] | null;
   ranking_clientes: CustomerRankingApi[] | null;
   ranking_proveedores: ProviderRankingApi[] | null;
   comparativa_precios: PriceComparisonApi[] | null;
   margen_categorias: CategoryMarginApi[] | null;
   inventario_inmovilizado: ImmobilizedApi[] | null;
+  resumen_inventario_inmovilizado: ImmobilizedSummaryApi | null;
   mapa_calor: HeatmapApi | null;
   medios_pago: PaymentApi[] | null;
+  resumen_medios_pago: PaymentSummaryApi | null;
   prediccion_demanda: DemandApi[] | null;
   variacion: VariationApi | null;
 }
@@ -317,12 +407,37 @@ function bucketLabel(inicio: string, fin: string): string {
   });
 }
 
+function mapProductRanking(filas: ProductRankingApi[] | null): ProductRanking[] {
+  return (filas ?? []).map((fila) => ({
+    id: fila.id_producto,
+    nombre: fila.nombre,
+    cantidad: Number(fila.cantidad),
+    ventaNeta: Number(fila.venta_neta),
+    costo: Number(fila.costo),
+    margen: Number(fila.margen),
+    margenPct: Number(fila.margen_pct),
+  }));
+}
+
 function mapAnalytics(raw: AnalyticsApi): AnalyticsData {
   return {
     periodo: raw.periodo,
     desde: raw.desde,
     hasta: raw.hasta,
     generadoEn: raw.generado_en,
+    parametros: {
+      periodo: raw.parametros.periodo,
+      desde: raw.parametros.desde,
+      hasta: raw.parametros.hasta,
+      granularidad: raw.parametros.granularidad,
+      limite: raw.parametros.limite,
+      dias_inmovilizado: raw.parametros.dias_inmovilizado,
+      id_categoria: raw.parametros.id_categoria,
+      id_cliente: raw.parametros.id_cliente,
+      id_proveedor: raw.parametros.id_proveedor,
+      id_producto: raw.parametros.id_producto,
+      periodos_pronostico: raw.parametros.periodos_pronostico,
+    },
     kpis: raw.kpis
       ? {
           ventas: toNumber(raw.kpis.ventas),
@@ -356,15 +471,18 @@ function mapAnalytics(raw: AnalyticsApi): AnalyticsData {
       nuevos: Number(punto.nuevos),
       recurrentes: Number(punto.recurrentes),
     })),
-    rankingProductos: (raw.ranking_productos ?? []).map((fila) => ({
-      id: fila.id_producto,
-      nombre: fila.nombre,
-      cantidad: Number(fila.cantidad),
-      ventaNeta: Number(fila.venta_neta),
-      costo: Number(fila.costo),
-      margen: Number(fila.margen),
-      margenPct: Number(fila.margen_pct),
-    })),
+    resumenNuevosRecurrentes: raw.resumen_nuevos_recurrentes
+      ? {
+          total: Number(raw.resumen_nuevos_recurrentes.total),
+          nuevosPct: Number(raw.resumen_nuevos_recurrentes.nuevos_pct),
+          recurrentesPct: Number(
+            raw.resumen_nuevos_recurrentes.recurrentes_pct
+          ),
+        }
+      : null,
+    rankingProductos: mapProductRanking(raw.ranking_productos),
+    productosMenosVendidos: mapProductRanking(raw.productos_menos_vendidos),
+    productosMasRentables: mapProductRanking(raw.productos_mas_rentables),
     rankingClientes: (raw.ranking_clientes ?? []).map((fila) => ({
       id: fila.id_cliente,
       nombre: fila.nombre,
@@ -407,8 +525,15 @@ function mapAnalytics(raw: AnalyticsApi): AnalyticsData {
         costoUnitario: Number(fila.costo_unitario),
         capital: Number(fila.capital),
         diasSinVenta: fila.dias_sin_venta,
+        sugerenciaLiquidar: fila.sugerencia_liquidar,
       })
     ),
+    resumenInventarioInmovilizado: raw.resumen_inventario_inmovilizado
+      ? {
+          productos: raw.resumen_inventario_inmovilizado.productos,
+          capital: Number(raw.resumen_inventario_inmovilizado.capital),
+        }
+      : null,
     mapaCalor: raw.mapa_calor
       ? {
           days: raw.mapa_calor.dias,
@@ -422,7 +547,11 @@ function mapAnalytics(raw: AnalyticsApi): AnalyticsData {
       id: fila.id_medio_pago,
       medioPago: fila.medio_pago,
       monto: Number(fila.monto),
+      participacionPct: Number(fila.participacion_pct),
     })),
+    resumenMediosPago: raw.resumen_medios_pago
+      ? { totalCobrado: Number(raw.resumen_medios_pago.total_cobrado) }
+      : null,
     prediccionDemanda: (raw.prediccion_demanda ?? []).map((fila) => ({
       id: fila.id_producto,
       nombre: fila.nombre,
@@ -439,9 +568,50 @@ function mapAnalytics(raw: AnalyticsApi): AnalyticsData {
   };
 }
 
-export async function fetchAnalytics(period: Period): Promise<AnalyticsData> {
+function analyticsQuery(filters: AnalyticsFilters | Period): string {
+  const values: AnalyticsFilters =
+    typeof filters === "string" ? { periodo: filters } : filters;
+  const params = new URLSearchParams({ periodo: values.periodo });
+  const optional: Array<[string, string | number | undefined]> = [
+    ["desde", values.desde],
+    ["hasta", values.hasta],
+    ["granularidad", values.granularidad],
+    ["limite", values.limite],
+    ["dias_inmovilizado", values.dias_inmovilizado],
+    ["id_categoria", values.id_categoria],
+    ["id_cliente", values.id_cliente],
+    ["id_proveedor", values.id_proveedor],
+    ["id_producto", values.id_producto],
+    ["periodos_pronostico", values.periodos_pronostico],
+  ];
+  for (const [key, value] of optional) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  return params.toString();
+}
+
+export async function fetchAnalytics(
+  filters: AnalyticsFilters | Period
+): Promise<AnalyticsData> {
   const raw = await apiRequest<AnalyticsApi>(
-    `/analiticas?periodo=${encodeURIComponent(period)}`
+    `/analiticas?${analyticsQuery(filters)}`
   );
   return mapAnalytics(raw);
+}
+
+/** RF-28: la única exportación es el PDF generado por el backend. */
+export async function downloadAnalyticsReport(
+  filters: AnalyticsFilters | Period
+): Promise<void> {
+  const { blob, filename } = await apiFetchBlob(
+    `/analiticas/reporte.pdf?${analyticsQuery(filters)}`
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "reporte-analitico.pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

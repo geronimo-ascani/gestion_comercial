@@ -20,9 +20,17 @@ from app.services.analitica_calculos import (
     calcular_tendencias,
     calcular_variacion,
     calcular_ventas_por_metodo_pago,
+    filtrar_compras,
+    filtrar_inventario,
+    filtrar_pagos,
+    filtrar_ventas,
     predecir_demanda,
     rango_comparacion,
+    rango_comparacion_personalizado,
     rango_periodo,
+    resumen_inventario_inmovilizado,
+    resumen_medios_pago,
+    resumen_nuevos_recurrentes,
 )
 
 _D = Decimal
@@ -850,7 +858,12 @@ def test_ventas_por_metodo_pago_excluye_pagos_a_proveedor() -> None:
     filas = calcular_ventas_por_metodo_pago(pagos)
 
     assert filas == [
-        {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("100.00")}
+        {
+            "id_medio_pago": "MP-1",
+            "medio_pago": "Efectivo",
+            "monto": _D("100.00"),
+            "participacion_pct": _D("100.00"),
+        }
     ]
 
 
@@ -923,3 +936,172 @@ def test_calcular_variacion_con_base_negativa_no_invierte_el_signo() -> None:
 
 def test_calcular_variacion_redondea_a_dos_decimales() -> None:
     assert calcular_variacion(_D("1"), _D("3")) == _D("-66.67")
+
+
+# --- filtros avanzados y resúmenes -----------------------------------------
+
+
+def test_filtrar_ventas_por_cliente_y_categoria_recalcula_el_total() -> None:
+    ventas = [
+        _venta(
+            id_pedido="PV-1",
+            id_cliente="CLI-1",
+            total="100.00",
+            items=[_item_venta(subtotal="40.00"), _item_venta(subtotal="60.00")],
+        ),
+        _venta(id_pedido="PV-2", id_cliente="CLI-2", total="200.00"),
+    ]
+
+    por_cliente = filtrar_ventas(ventas, id_cliente="CLI-1")
+    assert [venta["id_pedido"] for venta in por_cliente] == ["PV-1"]
+
+    por_categoria = filtrar_ventas(
+        ventas,
+        id_categoria="CAT-2",
+    )
+    assert por_categoria == []  # ningún ítem pertenece a CAT-2
+
+    venta = _venta(
+        total="100.00",
+        items=[
+            _item_venta(id_producto="PRD-1", id_categoria="CAT-1", subtotal="40.00"),
+            _item_venta(id_producto="PRD-2", id_categoria="CAT-2", subtotal="60.00"),
+        ],
+    )
+    filtrada = filtrar_ventas([venta], id_categoria="CAT-2")
+    assert len(filtrada) == 1
+    assert [item["id_producto"] for item in filtrada[0]["items"]] == ["PRD-2"]
+    assert filtrada[0]["total"] == _D("60.00")
+    assert venta["total"] == _D("100.00")  # el original no se muta
+
+
+def test_filtrar_compras_y_pagos_por_proveedor_cliente_y_pedido() -> None:
+    compra = {
+        "id_pedido": "OC-1",
+        "fecha": date(2026, 11, 1),
+        "fecha_recepcion": None,
+        "id_proveedor": "PRV-1",
+        "proveedor_nombre": "Proveedor",
+        "total": _D("50.00"),
+        "estado": "pendiente",
+        "items": [
+            {
+                "id_producto": "PRD-1",
+                "nombre": "Producto",
+                "id_categoria": "CAT-1",
+                "cantidad": _D("2"),
+                "precio_unitario": _D("10"),
+                "subtotal": _D("20.00"),
+            },
+            {
+                "id_producto": "PRD-2",
+                "nombre": "Otro",
+                "id_categoria": "CAT-2",
+                "cantidad": _D("3"),
+                "precio_unitario": _D("10"),
+                "subtotal": _D("30.00"),
+            },
+        ],
+    }
+    assert filtrar_compras([compra], id_proveedor="PRV-2") == []
+    filtrada = filtrar_compras([compra], id_categoria="CAT-1")[0]
+    assert filtrada["total"] == _D("20.00")
+    assert len(filtrada["items"]) == 1
+
+    pagos = [
+        {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("10"), "estado": "aprobado", "id_pedido": "PV-1", "id_cliente": "CLI-1"},
+        {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("20"), "estado": "aprobado", "id_pedido": "PV-2", "id_cliente": "CLI-2"},
+    ]
+    assert [pago["monto"] for pago in filtrar_pagos(pagos, id_cliente="CLI-1")] == [_D("10")]
+    assert [
+        pago["monto"] for pago in filtrar_pagos(pagos, ids_pedido={"PV-2"})
+    ] == [_D("20")]
+
+
+def test_filtrar_inventario_y_resumenes() -> None:
+    productos = [
+        {"id_producto": "PRD-1", "nombre": "Uno", "id_categoria": "CAT-1", "stock": _D("2"), "costo_unitario": _D("5")},
+        {"id_producto": "PRD-2", "nombre": "Dos", "id_categoria": "CAT-2", "stock": _D("3"), "costo_unitario": _D("10")},
+    ]
+    filtrados = filtrar_inventario(
+        productos, id_categoria="CAT-2", ids_producto={"PRD-1", "PRD-2"}
+    )
+    assert [producto["id_producto"] for producto in filtrados] == ["PRD-2"]
+
+    resumen = resumen_nuevos_recurrentes(
+        [
+            {"inicio": date(2026, 11, 1), "fin": date(2026, 11, 2), "nuevos": _D("3"), "recurrentes": _D("1")},
+            {"inicio": date(2026, 11, 3), "fin": date(2026, 11, 4), "nuevos": _D("1"), "recurrentes": _D("5")},
+        ]
+    )
+    assert resumen["total"] == _D("10.00")
+    assert resumen["nuevos_pct"] == _D("40.00")
+    assert resumen["recurrentes_pct"] == _D("60.00")
+
+    assert resumen_medios_pago(
+        [
+            {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("10"), "participacion_pct": _D("100")}
+        ]
+    ) == {"total_cobrado": _D("10.00")}
+
+    inmovilizado = [
+        {"id_producto": "PRD-1", "nombre": "Uno", "stock": _D("2"), "costo_unitario": _D("5"), "capital": _D("10.00"), "dias_sin_venta": None, "sugerencia_liquidar": False},
+        {"id_producto": "PRD-2", "nombre": "Dos", "stock": _D("3"), "costo_unitario": _D("10"), "capital": _D("30.00"), "dias_sin_venta": 90, "sugerencia_liquidar": True},
+    ]
+    assert resumen_inventario_inmovilizado(inmovilizado) == {
+        "productos": 2,
+        "capital": _D("40.00"),
+    }
+
+
+def test_inmovilizado_marca_sugerencia_de_liquidar() -> None:
+    productos = [
+        {"id_producto": "PRD-1", "nombre": "Uno", "stock": _D("2"), "costo_unitario": _D("5")},
+        {"id_producto": "PRD-2", "nombre": "Dos", "stock": _D("3"), "costo_unitario": _D("10")},
+    ]
+    filas = calcular_inventario_inmovilizado(
+        productos,
+        {"PRD-1": date(2026, 11, 1)},
+        date(2026, 11, 16),
+        dias_minimos=15,
+    )
+    assert [fila["id_producto"] for fila in filas] == ["PRD-2", "PRD-1"]
+    assert filas[0]["sugerencia_liquidar"] is True
+    assert filas[1]["sugerencia_liquidar"] is False
+
+
+def test_ranking_menos_vendidos_y_mas_rentables() -> None:
+    ventas = [
+        _venta(
+            id_pedido="PV-1",
+            items=[
+                {
+                    **_item_venta(id_producto="PRD-1", nombre="Uno", cantidad="1", neto="50", subtotal="60.50", costo_unitario="10"),
+                }
+            ],
+        ),
+        _venta(
+            id_pedido="PV-2",
+            items=[
+                {
+                    **_item_venta(id_producto="PRD-2", nombre="Dos", cantidad="5", neto="40", subtotal="48.40", costo_unitario="2"),
+                }
+            ],
+        ),
+    ]
+    assert [
+        fila["id_producto"]
+        for fila in calcular_ranking_productos(ventas, orden="asc", limite=1)
+    ] == ["PRD-1"]
+    assert [
+        fila["id_producto"]
+        for fila in calcular_ranking_productos(ventas, orden="margen_desc", limite=1)
+    ] == ["PRD-1"]
+
+
+def test_rango_comparacion_personalizado() -> None:
+    assert rango_comparacion_personalizado(
+        date(2026, 11, 1), date(2026, 11, 17)
+    ) == (date(2026, 10, 15), date(2026, 10, 31))
+    with pytest.raises(AnaliticaDatosInvalidos):
+        rango_comparacion_personalizado(date(2026, 11, 17), date(2026, 11, 1))

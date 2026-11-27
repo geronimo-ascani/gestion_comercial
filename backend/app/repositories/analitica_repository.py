@@ -72,6 +72,7 @@ _SELECT_ITEMS_COMPRA = """
 SELECT d.id_pedido_proveedor,
        d.id_producto,
        p.nombre,
+       p.id_categoria,
        d.cantidad,
        d.precio_unitario,
        d.subtotal
@@ -83,6 +84,7 @@ WHERE d.id_pedido_proveedor = ANY(%s)
 _SELECT_INVENTARIO = """
 SELECT p.id_producto,
        p.nombre,
+       p.id_categoria,
        p.stock_actual AS stock,
        p.precio_compra AS costo_unitario
 FROM producto p
@@ -97,8 +99,9 @@ SELECT d.id_producto,
        MAX({_FECHA_VENTA}) AS ultima_venta
 FROM detalle_pedido_cliente d
 JOIN pedido_cliente pv ON pv.id_pedido_cliente = d.id_pedido_cliente
-WHERE pv.id_empresa = %s
+WHERE pv.id_empresa = %(id_empresa)s
   AND pv.estado_envio <> 'cancelado'
+  AND (%(id_cliente)s::text IS NULL OR pv.id_cliente = %(id_cliente)s)
 GROUP BY d.id_producto
 """
 
@@ -106,9 +109,13 @@ _SELECT_PAGOS = """
 SELECT pg.id_medio_pago,
        mp.medio_pago,
        pg.monto,
-       pg.estado
+       pg.estado,
+       cv.id_pedido_cliente AS id_pedido,
+       pv.id_cliente
 FROM pago pg
 JOIN medio_pago mp ON mp.id_medio_pago = pg.id_medio_pago
+JOIN comprobante_venta cv ON cv.id_comprobante_venta = pg.id_comprobante_venta
+JOIN pedido_cliente pv ON pv.id_pedido_cliente = cv.id_pedido_cliente
 WHERE pg.id_empresa = %s
   AND pg.fecha_pago BETWEEN %s AND %s
   AND pg.id_comprobante_venta IS NOT NULL
@@ -117,31 +124,53 @@ WHERE pg.id_empresa = %s
 _SELECT_DEMANDA = f"""
 SELECT d.id_producto,
        p.nombre,
+       p.id_categoria,
        DATE_TRUNC('month', {_FECHA_VENTA})::date AS mes,
        SUM(d.cantidad) AS cantidad
 FROM detalle_pedido_cliente d
 JOIN pedido_cliente pv ON pv.id_pedido_cliente = d.id_pedido_cliente
 JOIN producto p ON p.id_producto = d.id_producto
-WHERE pv.id_empresa = %s
+WHERE pv.id_empresa = %(id_empresa)s
   AND pv.estado_envio <> 'cancelado'
-  AND {_FECHA_VENTA} BETWEEN %s AND %s
-GROUP BY d.id_producto, p.nombre, mes
+  AND {_FECHA_VENTA} BETWEEN %(desde)s AND %(hasta)s
+  AND (%(id_producto)s::text IS NULL OR d.id_producto = %(id_producto)s)
+GROUP BY d.id_producto, p.nombre, p.id_categoria, mes
 """
 
 _SELECT_TOTALES_VENTAS = f"""
-SELECT COALESCE(SUM(pv.total), 0) AS ventas
+SELECT COALESCE(SUM(
+         CASE WHEN %(id_categoria)s::text IS NULL THEN pv.total
+              ELSE (
+                  SELECT COALESCE(SUM(d.subtotal), 0)
+                  FROM detalle_pedido_cliente d
+                  JOIN producto p ON p.id_producto = d.id_producto
+                  WHERE d.id_pedido_cliente = pv.id_pedido_cliente
+                    AND p.id_categoria = %(id_categoria)s
+              )
+         END), 0) AS ventas
 FROM pedido_cliente pv
-WHERE pv.id_empresa = %s
+WHERE pv.id_empresa = %(id_empresa)s
+  AND (%(id_cliente)s::text IS NULL OR pv.id_cliente = %(id_cliente)s)
   AND pv.estado_envio <> 'cancelado'
-  AND {_FECHA_VENTA} BETWEEN %s AND %s
+  AND {_FECHA_VENTA} BETWEEN %(desde)s AND %(hasta)s
 """
 
 _SELECT_TOTALES_GASTOS = """
-SELECT COALESCE(SUM(pp.total), 0) AS gastos
+SELECT COALESCE(SUM(
+         CASE WHEN %(id_categoria)s::text IS NULL THEN pp.total
+              ELSE (
+                  SELECT COALESCE(SUM(d.subtotal), 0)
+                  FROM detalle_pedido_proveedor d
+                  JOIN producto p ON p.id_producto = d.id_producto
+                  WHERE d.id_pedido_proveedor = pp.id_pedido_proveedor
+                    AND p.id_categoria = %(id_categoria)s
+              )
+         END), 0) AS gastos
 FROM pedido_proveedor pp
-WHERE pp.id_empresa = %s
+WHERE pp.id_empresa = %(id_empresa)s
+  AND (%(id_proveedor)s::text IS NULL OR pp.id_proveedor = %(id_proveedor)s)
   AND pp.estado = 'recibida'
-  AND pp.fecha_recepcion BETWEEN %s AND %s
+  AND pp.fecha_recepcion BETWEEN %(desde)s AND %(hasta)s
 """
 
 
@@ -231,9 +260,14 @@ class AnaliticaRepository:
             cur.execute(_SELECT_INVENTARIO, (self._id_empresa,))
             return cur.fetchall()
 
-    def listar_ultima_venta(self) -> dict[str, date]:
+    def listar_ultima_venta(
+        self, id_cliente: str | None = None
+    ) -> dict[str, date]:
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(_SELECT_ULTIMA_VENTA, (self._id_empresa,))
+            cur.execute(
+                _SELECT_ULTIMA_VENTA,
+                {"id_empresa": self._id_empresa, "id_cliente": id_cliente},
+            )
             filas = cur.fetchall()
         return {
             fila["id_producto"]: fila["ultima_venta"] for fila in filas
@@ -247,21 +281,44 @@ class AnaliticaRepository:
             return cur.fetchall()
 
     def listar_historial_demanda(
-        self, desde: date, hasta: date
+        self,
+        desde: date,
+        hasta: date,
+        id_producto: str | None = None,
     ) -> list[dict[str, Any]]:
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(_SELECT_DEMANDA, (self._id_empresa, desde, hasta))
+            cur.execute(
+                _SELECT_DEMANDA,
+                {
+                    "id_empresa": self._id_empresa,
+                    "desde": desde,
+                    "hasta": hasta,
+                    "id_producto": id_producto,
+                },
+            )
             return cur.fetchall()
 
-    def totales(self, desde: date, hasta: date) -> dict[str, Decimal]:
+    def totales(
+        self,
+        desde: date,
+        hasta: date,
+        *,
+        id_cliente: str | None = None,
+        id_proveedor: str | None = None,
+        id_categoria: str | None = None,
+    ) -> dict[str, Decimal]:
+        parametros = {
+            "id_empresa": self._id_empresa,
+            "desde": desde,
+            "hasta": hasta,
+            "id_cliente": id_cliente,
+            "id_proveedor": id_proveedor,
+            "id_categoria": id_categoria,
+        }
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                _SELECT_TOTALES_VENTAS, (self._id_empresa, desde, hasta)
-            )
+            cur.execute(_SELECT_TOTALES_VENTAS, parametros)
             ventas = cur.fetchone()
-            cur.execute(
-                _SELECT_TOTALES_GASTOS, (self._id_empresa, desde, hasta)
-            )
+            cur.execute(_SELECT_TOTALES_GASTOS, parametros)
             gastos = cur.fetchone()
         return {
             "ventas": ventas["ventas"] if ventas else Decimal("0"),

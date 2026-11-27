@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Clock,
-  Download,
   FileText,
   Plus,
   Search,
@@ -65,25 +64,6 @@ type PaymentTab = "cobros" | "reportes";
 interface Feedback {
   type: "success" | "error";
   text: string;
-}
-
-function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const csv = rows
-    .map((row) =>
-      row
-        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-        .join(";")
-    )
-    .join("\n");
-  const blob = new Blob([`\ufeff${csv}`], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 export function PaymentsPage() {
@@ -233,33 +213,6 @@ export function PaymentsPage() {
           : "No se pudieron cargar los comprobantes y pagos."
       );
     }
-  }
-
-  function handleExport() {
-    downloadCsv("cobros-pagos.csv", [
-      [
-        "ID",
-        "Fecha",
-        "Cliente",
-        "Comprobante",
-        "Pedido",
-        "Método",
-        "Monto",
-        "Estado",
-        "Referencia",
-      ],
-      ...filteredPayments.map((payment) => [
-        payment.id,
-        payment.date,
-        payment.client,
-        payment.invoiceNumber,
-        payment.orderNumber,
-        payment.methodLabel,
-        payment.amount,
-        payment.status,
-        payment.reference ?? "",
-      ]),
-    ]);
   }
 
   return (
@@ -432,17 +385,12 @@ export function PaymentsPage() {
       {activeTab === "reportes" && (
         <section className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Reportes de cobros y pagos</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Totales por medio de pago y exportación de la lista filtrada.
-                </p>
-              </div>
-              <Button variant="outline" onClick={handleExport}>
-                <Download />
-                Exportar CSV
-              </Button>
+            <CardHeader>
+              <CardTitle>Reportes de cobros y pagos</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Totales por medio de pago. Para exportar, descargue el reporte
+                PDF desde Analíticas.
+              </p>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <KpiCard

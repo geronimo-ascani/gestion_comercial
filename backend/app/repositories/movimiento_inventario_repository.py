@@ -204,3 +204,50 @@ class MovimientoInventarioRepository:
                 },
             )
             return cur.fetchall()
+
+    def listar_global(
+        self,
+        desde: datetime | None,
+        hasta: datetime | None,
+        tipo: str | None,
+        motivo: str | None,
+        id_producto: str | None,
+        limit: int,
+        offset: int,
+    ) -> list[MovimientoRow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    m.id_movimiento,
+                    m.cantidad,
+                    m.fecha_movimiento,
+                    m.motivo,
+                    m.tipo,
+                    m.id_pedido_cliente,
+                    m.id_pedido_proveedor,
+                    m.id_producto,
+                    p.nombre AS producto_nombre
+                FROM movimiento_inventario m
+                JOIN producto p ON p.id_producto = m.id_producto
+                WHERE m.id_empresa = %(id_empresa)s
+                  AND (%(id_producto)s::text IS NULL OR m.id_producto = %(id_producto)s)
+                  AND (%(desde)s::timestamptz IS NULL OR m.fecha_movimiento >= %(desde)s)
+                  AND (%(hasta)s::timestamptz IS NULL OR m.fecha_movimiento <= %(hasta)s)
+                  AND (%(tipo)s::text IS NULL OR m.tipo = %(tipo)s::tipo_movimiento)
+                  AND (%(motivo)s::text IS NULL OR m.motivo = %(motivo)s::motivo_movimiento)
+                ORDER BY m.fecha_movimiento DESC
+                LIMIT %(limit)s OFFSET %(offset)s
+                """,
+                {
+                    "id_empresa": self._id_empresa,
+                    "id_producto": id_producto,
+                    "desde": desde,
+                    "hasta": hasta,
+                    "tipo": tipo,
+                    "motivo": motivo,
+                    "limit": limit,
+                    "offset": offset,
+                },
+            )
+            return cur.fetchall()

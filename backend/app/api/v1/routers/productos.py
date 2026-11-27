@@ -99,10 +99,33 @@ def listar_productos(
     precio_max: Annotated[
         Decimal | None, Query(ge=0, max_digits=14, decimal_places=2)
     ] = None,
+    precio_compra_min: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=2)
+    ] = None,
+    precio_compra_max: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=2)
+    ] = None,
+    stock_min: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=3)
+    ] = None,
+    stock_max: Annotated[
+        Decimal | None, Query(ge=0, max_digits=14, decimal_places=3)
+    ] = None,
     stock_estado: Annotated[
         Literal["todos", "en_stock", "critico", "sin_stock"], Query()
     ] = "todos",
     estado: Annotated[bool, Query()] = True,
+    orden: Annotated[
+        Literal[
+            "nombre",
+            "precio_asc",
+            "precio_desc",
+            "stock_asc",
+            "stock_desc",
+            "stock_minimo",
+        ],
+        Query(),
+    ] = "nombre",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ProductoListResponse:
@@ -118,6 +141,11 @@ def listar_productos(
             estado,
             limit,
             offset,
+            precio_compra_min=precio_compra_min,
+            precio_compra_max=precio_compra_max,
+            stock_min=stock_min,
+            stock_max=stock_max,
+            orden=orden,
         )
     except ProductoError as exc:
         raise _error_http(exc) from exc
@@ -168,6 +196,35 @@ def anular_codigo_producto(
     except ProductoError as exc:
         raise _error_http(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/movimientos",
+    response_model=list[MovimientoInventarioRead],
+)
+def listar_movimientos_globales(
+    service: ServiceDep,
+    _: Annotated[dict, Depends(require_roles("administrador", "abastecimiento"))],
+    desde: Annotated[datetime | None, Query()] = None,
+    hasta: Annotated[datetime | None, Query()] = None,
+    tipo: Annotated[Literal["entrada", "salida"] | None, Query()] = None,
+    motivo: Annotated[
+        Literal["compra", "venta", "devolucion", "ajuste"] | None, Query()
+    ] = None,
+    id_producto: Annotated[str | None, Query(max_length=20)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MovimientoInventarioRead]:
+    try:
+        movimientos = service.listar_movimientos_globales(
+            desde, hasta, tipo, motivo, id_producto, limit, offset
+        )
+    except ProductoError as exc:
+        raise _error_http(exc) from exc
+    return [
+        MovimientoInventarioRead.model_validate(movimiento)
+        for movimiento in movimientos
+    ]
 
 
 @router.get("/{id_producto}", response_model=ProductoRead)

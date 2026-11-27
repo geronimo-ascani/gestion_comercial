@@ -20,7 +20,7 @@ import {
 import type { ProductRanking } from "./analytics-api";
 import { formatAR, formatNumber, formatPercent } from "./analytics-data";
 
-type View = "volumen" | "rentabilidad";
+type View = "volumen" | "rentabilidad" | "menos_vendidos";
 
 function marginBadge(margenPct: number) {
   const variant =
@@ -28,11 +28,22 @@ function marginBadge(margenPct: number) {
   return <Badge variant={variant}>{formatPercent(margenPct)}</Badge>;
 }
 
-export function RankingsPanel({ products }: { products: ProductRanking[] }) {
+export function RankingsPanel({
+  masVendidos,
+  menosVendidos,
+  masRentables,
+}: {
+  masVendidos: ProductRanking[];
+  menosVendidos: ProductRanking[];
+  masRentables: ProductRanking[];
+}) {
   const [view, setView] = useState<View>("volumen");
-
-  const byVolume = [...products].sort((a, b) => b.cantidad - a.cantidad);
-  const byProfit = [...products].sort((a, b) => b.margen - a.margen);
+  const filas =
+    view === "volumen"
+      ? masVendidos
+      : view === "rentabilidad"
+        ? masRentables
+        : menosVendidos;
 
   return (
     <Card>
@@ -55,36 +66,18 @@ export function RankingsPanel({ products }: { products: ProductRanking[] }) {
           >
             Rentabilidad
           </Button>
+          <Button
+            variant={view === "menos_vendidos" ? "default" : "outline"}
+            className="flex-1"
+            onClick={() => setView("menos_vendidos")}
+          >
+            Menos vendidos
+          </Button>
         </div>
 
-        {products.length === 0 ? (
+        {filas.length === 0 ? (
           <EmptyState />
-        ) : view === "volumen" ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead className="text-right">Cantidad</TableHead>
-                <TableHead className="text-right">Venta neta</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {byVolume.map((product, index) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{product.nombre}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatNumber(product.cantidad, 3)}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatAR(product.ventaNeta)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
+        ) : view === "rentabilidad" ? (
           <Table>
             <TableHeader>
               <TableRow>
@@ -96,7 +89,7 @@ export function RankingsPanel({ products }: { products: ProductRanking[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {byProfit.map((product, index) => (
+              {filas.map((product, index) => (
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
                   <TableCell>{product.nombre}</TableCell>
@@ -108,6 +101,31 @@ export function RankingsPanel({ products }: { products: ProductRanking[] }) {
                   </TableCell>
                   <TableCell className="text-right">
                     {marginBadge(product.margenPct)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">#</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead className="text-right">Cantidad</TableHead>
+                <TableHead className="text-right">Venta neta</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filas.map((product, index) => (
+                <TableRow key={product.id}>
+                  <TableCell className="font-medium">{index + 1}</TableCell>
+                  <TableCell>{product.nombre}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatNumber(product.cantidad, 3)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatAR(product.ventaNeta)}
                   </TableCell>
                 </TableRow>
               ))}

@@ -94,6 +94,10 @@ class ProductoService:
         precio_max: Decimal | None,
         stock_estado: str,
         estado: bool,
+        precio_compra_min: Decimal | None = None,
+        precio_compra_max: Decimal | None = None,
+        stock_min: Decimal | None = None,
+        stock_max: Decimal | None = None,
         solo_alerta: bool = False,
     ) -> dict[str, object]:
         busqueda = q.strip() if q else None
@@ -109,6 +113,10 @@ class ProductoService:
             "id_unidad": id_unidad,
             "precio_min": precio_min,
             "precio_max": precio_max,
+            "precio_compra_min": precio_compra_min,
+            "precio_compra_max": precio_compra_max,
+            "stock_min": stock_min,
+            "stock_max": stock_max,
             "estado": estado,
             "stock_estado": filtro_stock,
         }
@@ -119,6 +127,17 @@ class ProductoService:
         if precio_min is not None and precio_max is not None and precio_min > precio_max:
             raise ProductoDatosInvalidos(
                 "El precio mínimo no puede ser mayor que el precio máximo"
+            )
+
+    def _validar_rango(
+        self,
+        minimo: Decimal | None,
+        maximo: Decimal | None,
+        etiqueta: str,
+    ) -> None:
+        if minimo is not None and maximo is not None and minimo > maximo:
+            raise ProductoDatosInvalidos(
+                f"El {etiqueta} mínimo no puede ser mayor que el máximo"
             )
 
     def _obtener_alicuota(self, id_alicuota_iva: str) -> AlicuotaRow:
@@ -158,8 +177,16 @@ class ProductoService:
         estado: bool,
         limit: int,
         offset: int,
+        *,
+        precio_compra_min: Decimal | None = None,
+        precio_compra_max: Decimal | None = None,
+        stock_min: Decimal | None = None,
+        stock_max: Decimal | None = None,
+        orden: str = "nombre",
     ) -> tuple[list[ProductoRow], int]:
         self._validar_precios(precio_min, precio_max)
+        self._validar_rango(precio_compra_min, precio_compra_max, "precio de compra")
+        self._validar_rango(stock_min, stock_max, "stock")
         filtros = self._filtros(
             q,
             id_categoria,
@@ -169,9 +196,13 @@ class ProductoService:
             precio_max,
             stock_estado,
             estado,
+            precio_compra_min,
+            precio_compra_max,
+            stock_min,
+            stock_max,
         )
         return (
-            self._repo.listar(filtros, limit, offset),
+            self._repo.listar(filtros, limit, offset, orden),
             self._repo.contar(filtros),
         )
 
@@ -411,6 +442,30 @@ class ProductoService:
             hasta,
             tipo,
             motivo,
+            limit,
+            offset,
+        )
+
+    def listar_movimientos_globales(
+        self,
+        desde: datetime | None,
+        hasta: datetime | None,
+        tipo: str | None,
+        motivo: str | None,
+        id_producto: str | None,
+        limit: int,
+        offset: int,
+    ) -> list[MovimientoRow]:
+        if desde is not None and hasta is not None and desde > hasta:
+            raise ProductoDatosInvalidos(
+                "La fecha 'desde' no puede ser posterior a la fecha 'hasta'"
+            )
+        return self._movimientos.listar_global(
+            desde,
+            hasta,
+            tipo,
+            motivo,
+            id_producto,
             limit,
             offset,
         )

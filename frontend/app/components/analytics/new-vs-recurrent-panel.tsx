@@ -18,13 +18,20 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 
-import type { NewRecurrentPoint } from "./analytics-api";
+import type {
+  NewRecurrentPoint,
+  NewRecurrentSummary,
+} from "./analytics-api";
 import { formatAR, formatPercent } from "./analytics-data";
 
-export function NewVsRecurrent({ series }: { series: NewRecurrentPoint[] }) {
-  const last = series[series.length - 1];
-  const total = last ? last.recurrentes + last.nuevos : 0;
-  const recurrentShare = total > 0 ? (last.recurrentes / total) * 100 : 0;
+export function NewVsRecurrent({
+  series,
+  summary,
+}: {
+  series: NewRecurrentPoint[];
+  summary?: NewRecurrentSummary | null;
+}) {
+  const recurrentShare = summary?.recurrentesPct ?? 0;
 
   return (
     <Card>

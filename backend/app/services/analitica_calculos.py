@@ -1,4 +1,5 @@
 import calendar
+from collections.abc import Collection
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Mapping, NotRequired, Sequence, TypedDict
@@ -10,7 +11,7 @@ _CIEN = Decimal("100")
 _CERO = Decimal("0")
 
 Granularidad = Literal["diario", "semanal", "mensual", "anual"]
-Orden = Literal["asc", "desc"]
+Orden = Literal["asc", "desc", "margen_desc"]
 Periodo = Literal["hoy", "7d", "mes", "trimestre", "año"]
 
 
@@ -42,6 +43,7 @@ class VentaAnalitica(TypedDict):
 class ItemCompraAnalitica(TypedDict):
     id_producto: str
     nombre: str
+    id_categoria: NotRequired[str | None]
     cantidad: Decimal
     precio_unitario: Decimal
     subtotal: Decimal
@@ -61,6 +63,7 @@ class CompraAnalitica(TypedDict):
 class ProductoInventario(TypedDict):
     id_producto: str
     nombre: str
+    id_categoria: NotRequired[str | None]
     stock: Decimal
     costo_unitario: Decimal
 
@@ -71,6 +74,8 @@ class PagoAnalitica(TypedDict):
     monto: Decimal
     estado: str
     id_factura_proveedor: NotRequired[str | None]
+    id_pedido: NotRequired[str | None]
+    id_cliente: NotRequired[str | None]
 
 
 class KpisAnalitica(TypedDict):
@@ -158,6 +163,7 @@ class InventarioInmovilizado(TypedDict):
     costo_unitario: Decimal
     capital: Decimal
     dias_sin_venta: int | None
+    sugerencia_liquidar: bool
 
 
 class MargenCategoria(TypedDict):
@@ -179,6 +185,22 @@ class VentaMetodoPago(TypedDict):
     id_medio_pago: str
     medio_pago: str
     monto: Decimal
+    participacion_pct: Decimal
+
+
+class ResumenNuevosRecurrentes(TypedDict):
+    total: Decimal
+    nuevos_pct: Decimal
+    recurrentes_pct: Decimal
+
+
+class ResumenMediosPago(TypedDict):
+    total_cobrado: Decimal
+
+
+class ResumenInventarioInmovilizado(TypedDict):
+    productos: int
+    capital: Decimal
 
 
 class _AcumuladoProducto(TypedDict):
@@ -298,6 +320,152 @@ def rango_comparacion(
     anterior_hasta = desde - timedelta(days=1)
     anterior_desde = anterior_hasta - timedelta(days=dias - 1)
     return anterior_desde, anterior_hasta
+
+
+def rango_comparacion_personalizado(
+    desde: date, hasta: date
+) -> tuple[date, date]:
+    """Ventana inmediatamente anterior de igual duración a un rango dado."""
+    if hasta < desde:
+        raise AnaliticaDatosInvalidos("'desde' no puede ser posterior a 'hasta'")
+    dias = (hasta - desde).days + 1
+    anterior_hasta = desde - timedelta(days=1)
+    return anterior_hasta - timedelta(days=dias - 1), anterior_hasta
+
+
+def filtrar_ventas(
+    ventas: Sequence[VentaAnalitica],
+    *,
+    id_cliente: str | None = None,
+    id_categoria: str | None = None,
+) -> list[VentaAnalitica]:
+    """Aplica filtros de cliente/categoría recalculando el total por renglones."""
+    filas: list[VentaAnalitica] = []
+    for venta in ventas:
+        if id_cliente and venta["id_cliente"] != id_cliente:
+            continue
+        items = venta["items"]
+        if id_categoria:
+            items = [
+                item
+                for item in items
+                if item.get("id_categoria") == id_categoria
+            ]
+            if not items:
+                continue
+            filas.append(
+                {
+                    **venta,
+                    "items": items,
+                    "total": _importe(
+                        sum((item["subtotal"] for item in items), _CERO)
+                    ),
+                }
+            )
+        else:
+            filas.append(venta)
+    return filas
+
+
+def filtrar_compras(
+    compras: Sequence[CompraAnalitica],
+    *,
+    id_proveedor: str | None = None,
+    id_categoria: str | None = None,
+) -> list[CompraAnalitica]:
+    """Aplica filtros de proveedor/categoría a órdenes de compra."""
+    filas: list[CompraAnalitica] = []
+    for compra in compras:
+        if id_proveedor and compra["id_proveedor"] != id_proveedor:
+            continue
+        items = compra["items"]
+        if id_categoria:
+            items = [
+                item
+                for item in items
+                if item.get("id_categoria") == id_categoria
+            ]
+            if not items:
+                continue
+            filas.append(
+                {
+                    **compra,
+                    "items": items,
+                    "total": _importe(
+                        sum((item["subtotal"] for item in items), _CERO)
+                    ),
+                }
+            )
+        else:
+            filas.append(compra)
+    return filas
+
+
+def filtrar_pagos(
+    pagos: Sequence[PagoAnalitica],
+    *,
+    id_cliente: str | None = None,
+    ids_pedido: Collection[str] | None = None,
+) -> list[PagoAnalitica]:
+    """Restringe cobros al cliente y a los pedidos filtrados."""
+    return [
+        pago
+        for pago in pagos
+        if (not id_cliente or pago.get("id_cliente") == id_cliente)
+        and (
+            ids_pedido is None
+            or pago.get("id_pedido") in ids_pedido
+        )
+    ]
+
+
+def filtrar_inventario(
+    productos: Sequence[ProductoInventario],
+    *,
+    id_categoria: str | None = None,
+    ids_producto: Collection[str] | None = None,
+) -> list[ProductoInventario]:
+    """Restringe el inventario por categoría y por productos comprados."""
+    return [
+        producto
+        for producto in productos
+        if (not id_categoria or producto.get("id_categoria") == id_categoria)
+        and (
+            ids_producto is None
+            or producto["id_producto"] in ids_producto
+        )
+    ]
+
+
+def resumen_nuevos_recurrentes(
+    series: Sequence[PuntoNuevosRecurrentes],
+) -> ResumenNuevosRecurrentes:
+    """Participación de nuevos y recurrentes sobre todo el período."""
+    nuevos = sum((punto["nuevos"] for punto in series), _CERO)
+    recurrentes = sum((punto["recurrentes"] for punto in series), _CERO)
+    total = _importe(nuevos + recurrentes)
+    return {
+        "total": total,
+        "nuevos_pct": _pct(nuevos, total),
+        "recurrentes_pct": _pct(recurrentes, total),
+    }
+
+
+def resumen_medios_pago(
+    filas: Sequence[VentaMetodoPago],
+) -> ResumenMediosPago:
+    return {
+        "total_cobrado": _importe(sum((fila["monto"] for fila in filas), _CERO))
+    }
+
+
+def resumen_inventario_inmovilizado(
+    filas: Sequence[InventarioInmovilizado],
+) -> ResumenInventarioInmovilizado:
+    return {
+        "productos": len(filas),
+        "capital": _importe(sum((fila["capital"] for fila in filas), _CERO)),
+    }
 
 
 def calcular_kpis(
@@ -610,8 +778,18 @@ def calcular_ranking_productos(
 
     if orden == "desc":
         filas.sort(key=lambda fila: (-fila["cantidad"], fila["nombre"]))
-    else:
+    elif orden == "asc":
         filas.sort(key=lambda fila: (fila["cantidad"], fila["nombre"]))
+    elif orden == "margen_desc":
+        filas.sort(
+            key=lambda fila: (
+                -fila["margen"],
+                -fila["cantidad"],
+                fila["nombre"],
+            )
+        )
+    else:
+        raise AnaliticaDatosInvalidos(f"Orden desconocido: {orden}")
     return filas[:limite] if limite is not None else filas
 
 
@@ -806,6 +984,8 @@ def calcular_inventario_inmovilizado(
                     producto["stock"] * producto["costo_unitario"]
                 ),
                 "dias_sin_venta": dias_sin_venta,
+                "sugerencia_liquidar": dias_minimos > 0
+                and (dias_sin_venta is None or dias_sin_venta >= dias_minimos * 2),
             }
         )
 
@@ -913,10 +1093,14 @@ def calcular_ventas_por_metodo_pago(
             "id_medio_pago": id_medio_pago,
             "medio_pago": datos["medio_pago"],
             "monto": _importe(datos["monto"]),
+            "participacion_pct": Decimal("0.00"),
         }
         for id_medio_pago, datos in acumulado.items()
     ]
     filas.sort(key=lambda fila: fila["monto"], reverse=True)
+    total = sum((fila["monto"] for fila in filas), _CERO)
+    for fila in filas:
+        fila["participacion_pct"] = _pct(fila["monto"], total)
     return filas
 
 
