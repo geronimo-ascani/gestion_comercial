@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
@@ -25,6 +26,7 @@ from app.schemas.facturas_proveedor import (
     PagoProveedorCreate,
     PagoProveedorRead,
 )
+from app.schemas.reportes_cobros_pagos import PagoProveedorListadoRead
 from app.schemas.pagos import PagoEstadoUpdate
 from app.services.factura_proveedor_service import (
     MAX_ARCHIVO_BYTES,
@@ -49,6 +51,10 @@ Id = Annotated[str, Path(min_length=1, max_length=20)]
 PuedeGestionar = Annotated[
     dict[str, Any],
     Depends(require_roles("administrador", "abastecimiento")),
+]
+SoloAdmin = Annotated[
+    dict[str, Any],
+    Depends(require_roles("administrador")),
 ]
 
 
@@ -98,6 +104,38 @@ def listar_facturas(
             limit,
             offset,
         )
+    ]
+
+
+@router.get("/pagos", response_model=list[PagoProveedorListadoRead])
+def listar_pagos_a_proveedores(
+    service: ServiceDep,
+    _: SoloAdmin,
+    desde: Annotated[date | None, Query()] = None,
+    hasta: Annotated[date | None, Query()] = None,
+    id_proveedor: Annotated[str | None, Query(max_length=20)] = None,
+    estado: Annotated[
+        Literal["aprobado", "pendiente", "rechazado"] | None, Query()
+    ] = None,
+    id_medio_pago: Annotated[str | None, Query(max_length=20)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[PagoProveedorListadoRead]:
+    """RF-20: listado global de pagos a proveedor, solo administrador."""
+    try:
+        pagos = service.listar_pagos_globales(
+            desde,
+            hasta,
+            id_proveedor,
+            estado,
+            id_medio_pago,
+            limit,
+            offset,
+        )
+    except FacturaProveedorError as exc:
+        raise _error_http(exc) from exc
+    return [
+        PagoProveedorListadoRead.model_validate(pago) for pago in pagos
     ]
 
 

@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from "~/lib/api";
+import { ApiError, apiFetchBlob, apiRequest } from "~/lib/api";
 import { formatInputDate } from "../sales/sales-types";
 import type { Invoice, PaymentTransaction } from "./payments-types";
 
@@ -108,6 +108,81 @@ export interface PagoPayload {
   monto: string;
   referencia?: string;
   estado?: "aprobado" | "pendiente" | "rechazado";
+}
+
+/** RF-20: el backend calcula todos los importes del reporte. */
+export interface ReporteCobrosPagosFilters {
+  desde: string;
+  hasta: string;
+  id_cliente?: string;
+  id_proveedor?: string;
+}
+
+export interface ReporteConteoMontoApi {
+  monto: string;
+  cantidad: number;
+}
+
+export interface ReporteCobrosPagosApi {
+  desde: string;
+  hasta: string;
+  generado_en: string;
+  parametros: {
+    desde: string;
+    hasta: string;
+    id_cliente: string | null;
+    id_proveedor: string | null;
+  };
+  totales: {
+    cobros_aprobados: string;
+    cobros_pendientes: string;
+    cobros_rechazados: string;
+    pagos_aprobados: string;
+    pagos_pendientes: string;
+    pagos_rechazados: string;
+    cobros_realizados: string;
+    pagos_realizados: string;
+    neto_realizado: string;
+  };
+  por_estado: Array<{
+    estado: "aprobado" | "pendiente" | "rechazado";
+    cobros: ReporteConteoMontoApi;
+    pagos: ReporteConteoMontoApi;
+  }>;
+  por_medio_pago: Array<{
+    id_medio_pago: string;
+    medio_pago: string;
+    cobros_aprobados: string;
+    pagos_aprobados: string;
+    total_aprobado: string;
+  }>;
+}
+
+export interface PagoProveedorListadoApi {
+  id_pago: string;
+  fecha_pago: string;
+  monto: string;
+  estado: "aprobado" | "pendiente" | "rechazado";
+  referencia: string;
+  id_medio_pago: string;
+  medio_pago: string;
+  id_factura_proveedor: string;
+  numero_factura: string;
+  id_proveedor: string;
+  proveedor_razon_social: string;
+  creado_en: string;
+}
+
+function reporteQuery(filters: ReporteCobrosPagosFilters): string {
+  const params = new URLSearchParams({
+    desde: filters.desde,
+    hasta: filters.hasta,
+  });
+  for (const key of ["id_cliente", "id_proveedor"] as const) {
+    const value = filters[key];
+    if (value) params.set(key, value);
+  }
+  return params.toString();
 }
 
 function clienteNombre(nombre: string, apellido: string): string {
@@ -236,6 +311,63 @@ export async function emitirComprobante(
     { method: "POST", body: JSON.stringify({}) },
   );
   return mapComprobante(comprobante);
+}
+
+export async function getReporteCobrosPagos(
+  filters: ReporteCobrosPagosFilters,
+): Promise<ReporteCobrosPagosApi> {
+  return apiRequest<ReporteCobrosPagosApi>(
+    `/reportes/cobros-pagos?${reporteQuery(filters)}`,
+  );
+}
+
+/** RF-28: la única exportación del reporte RF-20 es el PDF del backend. */
+export async function downloadReporteCobrosPagosPdf(
+  filters: ReporteCobrosPagosFilters,
+): Promise<void> {
+  const { blob, filename } = await apiFetchBlob(
+    `/reportes/cobros-pagos/reporte.pdf?${reporteQuery(filters)}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "reporte-cobros-pagos.pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export interface PagoProveedorFiltros {
+  desde?: string;
+  hasta?: string;
+  id_proveedor?: string;
+  estado?: "aprobado" | "pendiente" | "rechazado";
+  id_medio_pago?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listPagosProveedor(
+  filters: PagoProveedorFiltros = {},
+): Promise<PagoProveedorListadoApi[]> {
+  const params = new URLSearchParams();
+  const opcionales: Array<[string, string | number | undefined]> = [
+    ["desde", filters.desde],
+    ["hasta", filters.hasta],
+    ["id_proveedor", filters.id_proveedor],
+    ["estado", filters.estado],
+    ["id_medio_pago", filters.id_medio_pago],
+    ["limit", filters.limit],
+    ["offset", filters.offset],
+  ];
+  for (const [key, value] of opcionales) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const query = params.toString();
+  return apiRequest<PagoProveedorListadoApi[]>(
+    `/compras/pagos${query ? `?${query}` : ""}`,
+  );
 }
 
 export async function listPagos(): Promise<PaymentTransaction[]> {

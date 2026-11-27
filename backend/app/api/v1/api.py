@@ -14,6 +14,7 @@ from app.api.v1.routers import (
     presupuestos,
     productos,
     proveedores,
+    reportes_cobros_pagos,
 )
 
 api_router = APIRouter()
@@ -30,3 +31,4 @@ api_router.include_router(presupuestos.router)
 api_router.include_router(empresas.router)
 api_router.include_router(comprobantes.router)
 api_router.include_router(facturas_proveedor.router)
+api_router.include_router(reportes_cobros_pagos.router)

@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -21,6 +22,58 @@ SELECT p.id_pago,
            AS tipo_pago
 FROM pago p
 JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
+"""
+
+_SELECT_PAGOS_REPORTE = f"""
+SELECT p.id_pago,
+       p.fecha_pago,
+       p.monto,
+       p.estado,
+       p.id_medio_pago,
+       mp.medio_pago,
+       CASE WHEN p.id_factura_proveedor IS NULL THEN 'cobro' ELSE 'pago' END
+           AS tipo_pago
+FROM pago p
+JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
+LEFT JOIN comprobante_venta cv
+  ON cv.id_comprobante_venta = p.id_comprobante_venta
+LEFT JOIN pedido_cliente pv ON pv.id_pedido_cliente = cv.id_pedido_cliente
+LEFT JOIN factura_proveedor fp
+  ON fp.id_factura_proveedor = p.id_factura_proveedor
+WHERE p.id_empresa = %(id_empresa)s
+  AND p.fecha_pago BETWEEN %(desde)s AND %(hasta)s
+  AND (%(id_cliente)s::text IS NULL OR pv.id_cliente = %(id_cliente)s)
+  AND (%(id_proveedor)s::text IS NULL OR fp.id_proveedor = %(id_proveedor)s)
+ORDER BY p.fecha_pago, p.id_pago
+"""
+
+_SELECT_PAGOS_PROVEEDOR = """
+SELECT p.id_pago,
+       p.fecha_pago,
+       p.monto,
+       p.estado,
+       p.referencia,
+       p.id_medio_pago,
+       mp.medio_pago,
+       p.id_factura_proveedor,
+       fp.id_proveedor,
+       pr.razon_social AS proveedor_razon_social,
+       p.creado_en
+FROM pago p
+JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
+JOIN factura_proveedor fp
+  ON fp.id_factura_proveedor = p.id_factura_proveedor
+JOIN proveedor pr ON pr.id_proveedor = fp.id_proveedor
+WHERE p.id_empresa = %(id_empresa)s
+  AND p.id_factura_proveedor IS NOT NULL
+  AND (%(desde)s::date IS NULL OR p.fecha_pago >= %(desde)s)
+  AND (%(hasta)s::date IS NULL OR p.fecha_pago <= %(hasta)s)
+  AND (%(id_proveedor)s::text IS NULL OR fp.id_proveedor = %(id_proveedor)s)
+  AND (%(estado)s::text IS NULL OR p.estado = %(estado)s)
+  AND (%(id_medio_pago)s::text IS NULL
+       OR p.id_medio_pago = %(id_medio_pago)s)
+ORDER BY p.fecha_pago DESC, p.id_pago DESC
+LIMIT %(limit)s OFFSET %(offset)s
 """
 
 
@@ -140,6 +193,52 @@ class PagoRepository:
                 LIMIT %s OFFSET %s
                 """,
                 (self._id_empresa, limit, offset),
+            )
+            return cur.fetchall()
+
+    def listar_para_reporte(
+        self,
+        desde: date,
+        hasta: date,
+        id_cliente: str | None = None,
+        id_proveedor: str | None = None,
+    ) -> list[PagoRow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                _SELECT_PAGOS_REPORTE,
+                {
+                    "id_empresa": self._id_empresa,
+                    "desde": desde,
+                    "hasta": hasta,
+                    "id_cliente": id_cliente,
+                    "id_proveedor": id_proveedor,
+                },
+            )
+            return cur.fetchall()
+
+    def listar_pagos_proveedor(
+        self,
+        desde: date | None = None,
+        hasta: date | None = None,
+        id_proveedor: str | None = None,
+        estado: str | None = None,
+        id_medio_pago: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[PagoRow]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                _SELECT_PAGOS_PROVEEDOR,
+                {
+                    "id_empresa": self._id_empresa,
+                    "desde": desde,
+                    "hasta": hasta,
+                    "id_proveedor": id_proveedor,
+                    "estado": estado,
+                    "id_medio_pago": id_medio_pago,
+                    "limit": limit,
+                    "offset": offset,
+                },
             )
             return cur.fetchall()
 

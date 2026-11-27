@@ -479,5 +479,17 @@
   scroll the page to and focus the first invalid control. The list and detail
   expose the file metadata and allow viewing/downloading the stored original;
   all totals, type, number, ID and payment state remain backend-owned.
+- RF-20 reports are backend-owned and administrator-only:
+  `GET /reportes/cobros-pagos` and `GET /reportes/cobros-pagos/reporte.pdf`
+  accept a required `desde`/`hasta` pair plus optional `id_cliente` and
+  `id_proveedor`. JSON and PDF share the same calculated data; totals are
+  grouped by payment state and payment method, and "realizados" amounts count
+  only approved payments. The global supplier-payment listing
+  `GET /compras/pagos` is also administrator-only, while `GET /ventas/pagos`
+  remains available to `administrador` and `ventas`. The payments page hides
+  the Reports and Supplier payments tabs from non-administrators and no longer
+  computes totals locally. PDF-only export follows RF-28; no migration was
+  needed because `pago` already stores both comprobante and supplier invoice
+  references.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

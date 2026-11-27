@@ -19,6 +19,10 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import {
+  Combobox,
+  type ComboboxOption,
+} from "~/components/ui/combobox";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import {
@@ -42,8 +46,20 @@ import { useInitialLoading } from "~/lib/use-initial-loading";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
 import { formatMoney } from "~/lib/currency";
 import { compareByDateDesc } from "~/lib/utils";
+import { formatInputDate } from "../sales/sales-types";
 import { useCurrentUser } from "../auth/session-store";
+import { listCustomers } from "../customers/customers-api";
+import type { Customer } from "../customers/customers-types";
+import { listProviders } from "../purchases/providers-api";
+import type { Provider } from "../purchases/purchases-types";
 import type { Invoice, PaymentTransaction } from "./payments-types";
+import {
+  getReporteCobrosPagos,
+  downloadReporteCobrosPagosPdf,
+  listPagosProveedor,
+  type PagoProveedorListadoApi,
+  type ReporteCobrosPagosApi,
+} from "./payments-api";
 import {
   loadPayments,
   useInvoices,
@@ -59,11 +75,46 @@ import {
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { SendInvoiceDialog } from "./send-invoice-dialog";
 
-type PaymentTab = "cobros" | "reportes";
+type PaymentTab = "cobros" | "reportes" | "pagos-proveedor";
 
 interface Feedback {
   type: "success" | "error";
   text: string;
+}
+
+function primerDiaDelMes(): string {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function hoyISO(): string {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+}
+
+function normalizarBusqueda(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es");
+}
+
+function filtrarOpciones<T extends ComboboxOption>(
+  opciones: T[],
+  busqueda: string
+): T[] {
+  const texto = normalizarBusqueda(busqueda.trim());
+  if (!texto) return opciones;
+  const [todas, ...resto] = opciones;
+  if (!todas) return opciones;
+  return [
+    todas,
+    ...resto.filter((opcion) =>
+      normalizarBusqueda(
+        [opcion.label, ...(opcion.keywords ?? [])].join(" ")
+      ).includes(texto)
+    ),
+  ];
 }
 
 export function PaymentsPage() {
@@ -78,11 +129,31 @@ export function PaymentsPage() {
   const payments = usePayments();
 
   const requestedTab = searchParams.get("tab");
-  const activeTab: PaymentTab =
-    requestedTab === "reportes" ? "reportes" : "cobros";
+  const tabSolicitada: PaymentTab =
+    requestedTab === "reportes" || requestedTab === "pagos-proveedor"
+      ? requestedTab
+      : "cobros";
+  const activeTab: PaymentTab = isAdmin ? tabSolicitada : "cobros";
 
   const [query, setQuery] = useState("");
   const [methodFilter, setMethodFilter] = useState("all");
+  const [desde, setDesde] = useState(primerDiaDelMes);
+  const [hasta, setHasta] = useState(hoyISO);
+  const [idCliente, setIdCliente] = useState("");
+  const [idProveedor, setIdProveedor] = useState("");
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [busquedaProveedor, setBusquedaProveedor] = useState("");
+  const [clientes, setClientes] = useState<Customer[]>([]);
+  const [proveedores, setProveedores] = useState<Provider[]>([]);
+  const [reporte, setReporte] = useState<ReporteCobrosPagosApi | null>(null);
+  const [pagosProveedor, setPagosProveedor] = useState<
+    PagoProveedorListadoApi[]
+  >([]);
+  const [reporteLoading, setReporteLoading] = useState(false);
+  const [proveedorLoading, setProveedorLoading] = useState(false);
+  const [reporteError, setReporteError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState<Invoice | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sendTarget, setSendTarget] = useState<Invoice | null>(null);
@@ -90,6 +161,57 @@ export function PaymentsPage() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const debouncedQuery = useDebouncedValue(query);
+  const busquedaClienteDebounced = useDebouncedValue(busquedaCliente);
+  const busquedaProveedorDebounced = useDebouncedValue(busquedaProveedor);
+
+  const clienteOptions = useMemo(
+    () =>
+      filtrarOpciones(
+        [
+          { value: "", label: "Todos los clientes" },
+          ...clientes.map((cliente) => ({
+            value: cliente.id,
+            label: `${cliente.firstName} ${cliente.lastName}`.trim(),
+            keywords: [cliente.document, cliente.email],
+          })),
+        ],
+        busquedaClienteDebounced
+      ),
+    [clientes, busquedaClienteDebounced]
+  );
+  const proveedorOptions = useMemo(
+    () =>
+      filtrarOpciones(
+        [
+          { value: "", label: "Todos los proveedores" },
+          ...proveedores.map((proveedor) => ({
+            value: proveedor.id,
+            label: proveedor.name,
+            keywords: [proveedor.cuit, proveedor.email],
+          })),
+        ],
+        busquedaProveedorDebounced
+      ),
+    [proveedores, busquedaProveedorDebounced]
+  );
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    listCustomers()
+      .then((result) => {
+        if (active) setClientes(result);
+      })
+      .catch(() => undefined);
+    listProviders()
+      .then((result) => {
+        if (active) setProveedores(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     void loadPayments().catch((error: unknown) => {
@@ -152,32 +274,97 @@ export function PaymentsPage() {
       });
   }, [payments, normalizedQuery, methodFilter]);
 
-  const totals = useMemo(() => {
-    const collected = payments
-      .filter((payment) => payment.status === "aprobado")
-      .reduce((sum, payment) => sum + payment.amount, 0);
-    const pending = invoices
-      .filter((invoice) => invoice.status !== "rechazada")
-      .reduce((sum, invoice) => sum + invoice.balance, 0);
-    const byMethod = new Map<string, { label: string; amount: number }>();
-    for (const payment of payments) {
-      if (payment.status !== "aprobado") continue;
-      const entry = byMethod.get(payment.method) ?? {
-        label: payment.methodLabel,
-        amount: 0,
-      };
-      entry.amount += payment.amount;
-      byMethod.set(payment.method, entry);
+  const rangoValido = Boolean(desde && hasta && desde <= hasta);
+
+  useEffect(() => {
+    if (!isAdmin || !rangoValido) {
+      setReporte(null);
+      return;
     }
-    return {
-      collected,
-      pending,
-      byMethod: [...byMethod.entries()].map(([id, value]) => ({
-        id,
-        ...value,
-      })),
+    let active = true;
+    setReporteLoading(true);
+    setReporteError(null);
+    getReporteCobrosPagos({
+      desde,
+      hasta,
+      id_cliente: idCliente || undefined,
+      id_proveedor: idProveedor || undefined,
+    })
+      .then((result) => {
+        if (active) setReporte(result);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setReporte(null);
+        setReporteError(
+          cause instanceof Error
+            ? cause.message
+            : "No se pudo cargar el reporte de cobros y pagos."
+        );
+      })
+      .finally(() => {
+        if (active) setReporteLoading(false);
+      });
+    return () => {
+      active = false;
     };
-  }, [payments, invoices]);
+  }, [isAdmin, rangoValido, desde, hasta, idCliente, idProveedor]);
+
+  useEffect(() => {
+    if (!isAdmin || activeTab !== "pagos-proveedor" || !rangoValido) {
+      setPagosProveedor([]);
+      return;
+    }
+    let active = true;
+    setProveedorLoading(true);
+    listPagosProveedor({
+      desde,
+      hasta,
+      id_proveedor: idProveedor || undefined,
+    })
+      .then((result) => {
+        if (active) setPagosProveedor(result);
+      })
+      .catch(() => {
+        if (active) setPagosProveedor([]);
+      })
+      .finally(() => {
+        if (active) setProveedorLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, activeTab, rangoValido, desde, hasta, idProveedor]);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadReporteCobrosPagosPdf({
+        desde,
+        hasta,
+        id_cliente: idCliente || undefined,
+        id_proveedor: idProveedor || undefined,
+      });
+    } catch (cause: unknown) {
+      setExportError(
+        cause instanceof Error
+          ? cause.message
+          : "No se pudo descargar el reporte."
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function limpiarFiltros() {
+    setDesde(primerDiaDelMes());
+    setHasta(hoyISO());
+    setIdCliente("");
+    setIdProveedor("");
+    setBusquedaCliente("");
+    setBusquedaProveedor("");
+  }
 
   function setTab(tab: PaymentTab) {
     setSearchParams({ tab }, { replace: true });
@@ -240,13 +427,26 @@ export function PaymentsPage() {
         >
           Cobros
         </Button>
-        <Button
-          variant={activeTab === "reportes" ? "default" : "outline"}
-          className="flex-1 px-6"
-          onClick={() => setTab("reportes")}
-        >
-          Reportes
-        </Button>
+        {isAdmin && (
+          <>
+            <Button
+              variant={activeTab === "reportes" ? "default" : "outline"}
+              className="flex-1 px-6"
+              onClick={() => setTab("reportes")}
+            >
+              Reportes
+            </Button>
+            <Button
+              variant={
+                activeTab === "pagos-proveedor" ? "default" : "outline"
+              }
+              className="flex-1 px-6"
+              onClick={() => setTab("pagos-proveedor")}
+            >
+              Pagos a proveedores
+            </Button>
+          </>
+        )}
       </div>
 
       {feedback && (
@@ -263,16 +463,20 @@ export function PaymentsPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          icon={<Wallet className="size-4" />}
-          label="Total cobrado"
-          value={formatMoney(totals.collected)}
-        />
-        <KpiCard
-          icon={<Clock className="size-4" />}
-          label="Pendiente de cobro"
-          value={formatMoney(totals.pending)}
-        />
+        {isAdmin && reporte && (
+          <>
+            <KpiCard
+              icon={<Wallet className="size-4" />}
+              label="Cobros aprobados"
+              value={formatMoney(Number(reporte.totales.cobros_realizados))}
+            />
+            <KpiCard
+              icon={<Wallet className="size-4" />}
+              label="Pagos aprobados a proveedores"
+              value={formatMoney(Number(reporte.totales.pagos_realizados))}
+            />
+          </>
+        )}
         <KpiCard
           icon={<FileText className="size-4" />}
           label="Comprobantes"
@@ -325,6 +529,72 @@ export function PaymentsPage() {
             </p>
             <Button variant="outline" onClick={() => void retryLoad()}>
               Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && activeTab !== "cobros" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Filtros del reporte</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              El backend calcula todos los importes con estos filtros.
+            </p>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-1.5">
+              <Label
+                htmlFor="reporte-desde"
+                className="shrink-0 text-muted-foreground"
+              >
+                Desde
+              </Label>
+              <Input
+                id="reporte-desde"
+                type="date"
+                className="w-40"
+                value={desde}
+                onChange={(event) => setDesde(event.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label
+                htmlFor="reporte-hasta"
+                className="shrink-0 text-muted-foreground"
+              >
+                Hasta
+              </Label>
+              <Input
+                id="reporte-hasta"
+                type="date"
+                className="w-40"
+                value={hasta}
+                onChange={(event) => setHasta(event.target.value)}
+              />
+            </div>
+            <Combobox
+              value={idCliente}
+              onValueChange={setIdCliente}
+              options={clienteOptions}
+              searchValue={busquedaCliente}
+              onSearchChange={setBusquedaCliente}
+              searchPlaceholder="Buscar por nombre, DNI/CUIT o email…"
+              notFoundText="No se encontraron clientes"
+              className="w-56"
+            />
+            <Combobox
+              value={idProveedor}
+              onValueChange={setIdProveedor}
+              options={proveedorOptions}
+              searchValue={busquedaProveedor}
+              onSearchChange={setBusquedaProveedor}
+              searchPlaceholder="Buscar por razón social, CUIT o email…"
+              notFoundText="No se encontraron proveedores"
+              className="w-56"
+            />
+            <Button variant="ghost" onClick={limpiarFiltros}>
+              Limpiar filtros
             </Button>
           </CardContent>
         </Card>
@@ -384,43 +654,224 @@ export function PaymentsPage() {
 
       {activeTab === "reportes" && (
         <section className="space-y-4">
+          {!rangoValido && (
+            <p className="text-sm text-destructive" role="alert">
+              La fecha "desde" no puede ser posterior a la fecha "hasta".
+            </p>
+          )}
+          {reporteError && (
+            <p className="text-sm text-destructive" role="alert">
+              {reporteError}
+            </p>
+          )}
+          {exportError && (
+            <p className="text-sm text-destructive" role="alert">
+              {exportError}
+            </p>
+          )}
+
           <Card>
-            <CardHeader>
-              <CardTitle>Reportes de cobros y pagos</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Totales por medio de pago. Para exportar, descargue el reporte
-                PDF desde Analíticas.
-              </p>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Reportes de cobros y pagos</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Totales calculados por el backend para el rango seleccionado.
+                </p>
+              </div>
+              <Button
+                onClick={() => void handleExport()}
+                disabled={!rangoValido || exporting}
+              >
+                {exporting ? "Generando..." : "Descargar PDF"}
+              </Button>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <KpiCard
                 icon={<Wallet className="size-4" />}
-                label="Total cobrado"
-                value={formatMoney(totals.collected)}
+                label="Cobros aprobados"
+                value={formatMoney(Number(reporte?.totales.cobros_realizados ?? 0))}
               />
-              {totals.byMethod.map((entry) => (
-                <KpiCard
-                  key={entry.id}
-                  icon={<Wallet className="size-4" />}
-                  label={entry.label}
-                  value={formatMoney(entry.amount)}
-                />
-              ))}
+              <KpiCard
+                icon={<Wallet className="size-4" />}
+                label="Pagos aprobados"
+                value={formatMoney(Number(reporte?.totales.pagos_realizados ?? 0))}
+              />
+              <KpiCard
+                icon={<CheckCircle2 className="size-4" />}
+                label="Neto realizado"
+                value={formatMoney(Number(reporte?.totales.neto_realizado ?? 0))}
+              />
+              <KpiCard
+                icon={<Clock className="size-4" />}
+                label="Pendiente (no realizado)"
+                value={formatMoney(
+                  Number(reporte?.totales.cobros_pendientes ?? 0)
+                )}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Detalle de pagos</CardTitle>
+              <CardTitle>Totales por medio de pago</CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <TableSkeleton rows={8} columns={7} />
+              {reporteLoading && !reporte ? (
+                <TableSkeleton rows={5} columns={4} />
               ) : (
-                <PaymentsTable
-                  payments={filteredPayments}
-                  emptyText="No hay pagos registrados."
-                />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Medio de pago</TableHead>
+                      <TableHead className="text-right">Cobros</TableHead>
+                      <TableHead className="text-right">Pagos</TableHead>
+                      <TableHead className="text-right">Total aprobado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(reporte?.por_medio_pago ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="h-20 text-center text-muted-foreground"
+                        >
+                          No hay pagos aprobados en el rango seleccionado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      reporte?.por_medio_pago.map((medio) => (
+                        <TableRow key={medio.id_medio_pago}>
+                          <TableCell className="font-medium">
+                            {medio.medio_pago}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatMoney(Number(medio.cobros_aprobados))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatMoney(Number(medio.pagos_aprobados))}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatMoney(Number(medio.total_aprobado))}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Totales por estado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reporteLoading && !reporte ? (
+                <TableSkeleton rows={3} columns={5} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Cobros</TableHead>
+                      <TableHead className="text-right">Cantidad</TableHead>
+                      <TableHead className="text-right">Pagos</TableHead>
+                      <TableHead className="text-right">Cantidad</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(reporte?.por_estado ?? []).map((estado) => (
+                      <TableRow key={estado.estado}>
+                        <TableCell className="font-medium capitalize">
+                          {estado.estado}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatMoney(Number(estado.cobros.monto))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {estado.cobros.cantidad}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatMoney(Number(estado.pagos.monto))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {estado.pagos.cantidad}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {activeTab === "pagos-proveedor" && (
+        <section className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Pagos a proveedores</CardTitle>
+              <Badge variant="secondary">
+                {pagosProveedor.length} pagos
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {proveedorLoading ? (
+                <TableSkeleton rows={6} columns={7} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Pago</TableHead>
+                      <TableHead>Factura</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Medio de pago</TableHead>
+                      <TableHead>Referencia</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagosProveedor.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={8}
+                          className="h-20 text-center text-muted-foreground"
+                        >
+                          No hay pagos a proveedores en el rango seleccionado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pagosProveedor.map((pago) => (
+                        <TableRow key={pago.id_pago}>
+                          <TableCell className="font-mono text-xs">
+                            {pago.id_pago}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {pago.numero_factura}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {pago.proveedor_razon_social}
+                          </TableCell>
+                          <TableCell>
+                            {formatInputDate(pago.fecha_pago)}
+                          </TableCell>
+                          <TableCell>{pago.medio_pago}</TableCell>
+                          <TableCell>{pago.referencia || "-"}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatMoney(Number(pago.monto))}
+                          </TableCell>
+                          <TableCell>
+                            <PaymentStatusBadge status={pago.estado} />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>

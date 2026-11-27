@@ -191,6 +191,35 @@ class FacturaProveedorService:
             raise FacturaProveedorNoEncontrado(id_factura_proveedor)
         return self._pagos.listar_por_factura(id_factura_proveedor)
 
+    def listar_pagos_globales(
+        self,
+        desde: date | None,
+        hasta: date | None,
+        id_proveedor: str | None,
+        estado: str | None,
+        id_medio_pago: str | None,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        if desde is not None and hasta is not None and hasta < desde:
+            raise FacturaProveedorDatosInvalidos(
+                "La fecha 'desde' no puede ser posterior a la fecha 'hasta'"
+            )
+        pagos = self._pagos.listar_pagos_proveedor(
+            desde,
+            hasta,
+            id_proveedor,
+            estado,
+            id_medio_pago,
+            limit,
+            offset,
+        )
+        # El número visible de la factura es el ID generado FP-####.
+        return [
+            {**pago, "numero_factura": pago["id_factura_proveedor"]}
+            for pago in pagos
+        ]
+
     def crear(
         self,
         datos: FacturaProveedorCreate,

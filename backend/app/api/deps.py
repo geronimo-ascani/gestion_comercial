@@ -31,6 +31,9 @@ from app.services.comprobante_service import ComprobanteService
 from app.services.empresa_service import EmpresaService
 from app.services.factura_proveedor_service import FacturaProveedorService
 from app.services.pago_service import PagoService
+from app.services.reporte_cobros_pagos_service import (
+    ReporteCobrosPagosService,
+)
 from app.services.auth_service import AuthService
 from app.services.producto_service import ProductoService
 from app.services.proveedor_service import ProveedorService
@@ -52,6 +55,7 @@ __all__ = [
     "get_empresa_service",
     "get_comprobante_service",
     "get_pago_service",
+    "get_reporte_cobros_pagos_service",
     "get_factura_proveedor_service",
 ]
 
@@ -168,6 +172,15 @@ def get_pago_service(
     return PagoService(
         ComprobanteRepository(db, usuario["id_empresa"]),
         PagoRepository(db, usuario["id_empresa"]),
+    )
+
+
+def get_reporte_cobros_pagos_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> ReporteCobrosPagosService:
+    return ReporteCobrosPagosService(
+        PagoRepository(db, usuario["id_empresa"])
     )
 
 

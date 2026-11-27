@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI
@@ -78,9 +78,26 @@ _CREAR = {
 }
 
 
+_PAGO_PROVEEDOR_LISTADO = {
+    "id_pago": "PAG-0001",
+    "fecha_pago": "2026-11-20",
+    "monto": Decimal("100.00"),
+    "estado": "aprobado",
+    "referencia": "Transferencia",
+    "id_medio_pago": "MPG-0001",
+    "medio_pago": "Efectivo",
+    "id_factura_proveedor": "FP-0001",
+    "numero_factura": "FP-0001",
+    "id_proveedor": "PRV-0001",
+    "proveedor_razon_social": "Proveedor SA",
+    "creado_en": datetime(2026, 11, 20, tzinfo=timezone.utc),
+}
+
+
 class FakeService:
     def __init__(self) -> None:
         self.archivo_recibido = None
+        self.parametros_pagos: tuple | None = None
 
     def crear(self, _datos, _id_empleado, archivo):
         self.archivo_recibido = archivo
@@ -111,6 +128,10 @@ class FakeService:
         if id_factura == "FP-9999":
             raise FacturaProveedorNoEncontrado(id_factura)
         return [_PAGO]
+
+    def listar_pagos_globales(self, *args):
+        self.parametros_pagos = args
+        return [_PAGO_PROVEEDOR_LISTADO]
 
     def registrar_pago(self, id_factura, _datos):
         return _PAGO
@@ -216,6 +237,37 @@ def test_listado_y_detalle_devuelven_snapshot() -> None:
     assert listado.json()[0]["archivo_url"].endswith("/archivo")
     assert detalle.status_code == 200
     assert detalle.json()["empresa_cuit"] == "20111111112"
+
+
+def test_listado_global_de_pagos_a_proveedores() -> None:
+    service = FakeService()
+    with _client("administrador", lambda: service) as client:
+        response = client.get(
+            "/api/v1/compras/pagos"
+            "?desde=2026-11-01&hasta=2026-11-30"
+            "&id_proveedor=PRV-0001&estado=aprobado"
+            "&id_medio_pago=MPG-0001&limit=25&offset=5"
+        )
+
+    assert response.status_code == 200
+    assert response.json()[0]["numero_factura"] == "FP-0001"
+    assert response.json()[0]["proveedor_razon_social"] == "Proveedor SA"
+    assert service.parametros_pagos == (
+        date(2026, 11, 1),
+        date(2026, 11, 30),
+        "PRV-0001",
+        "aprobado",
+        "MPG-0001",
+        25,
+        5,
+    )
+
+
+def test_listado_global_de_pagos_es_admin_only() -> None:
+    for rol in ("ventas", "abastecimiento"):
+        with _client(rol) as client:
+            response = client.get("/api/v1/compras/pagos")
+        assert response.status_code == 403
 
 
 def test_facturas_por_pedido() -> None:
