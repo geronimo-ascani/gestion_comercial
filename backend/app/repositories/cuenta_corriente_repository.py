@@ -8,6 +8,21 @@ from psycopg.rows import dict_row
 
 CuentaRow = dict[str, Any]
 
+ZONA_HORARIA = "America/Argentina/Buenos_Aires"
+
+# Una factura registrada con fecha futura se reconoce el día en que se registró,
+# para que el saldo de la cuenta coincida con el saldo pendiente listado.
+_FECHA_FACTURA = f"""
+LEAST(
+  (fp.fecha_emision AT TIME ZONE '{ZONA_HORARIA}')::date,
+  (fp.creado_en AT TIME ZONE '{ZONA_HORARIA}')::date
+)
+"""
+_FECHA_PAGO = (
+    f"COALESCE(p.fecha_pago, "
+    f"(p.creado_en AT TIME ZONE '{ZONA_HORARIA}')::date)"
+)
+
 
 _CLIENTES = """
 SELECT c.id_cliente AS id,
@@ -31,7 +46,7 @@ WHERE p.id_empresa = %(id_empresa)s
 ORDER BY p.razon_social, p.id_proveedor
 """
 
-_MOVIMIENTOS_CLIENTES = """
+_MOVIMIENTOS_CLIENTES = f"""
 WITH movimientos AS (
     SELECT CONCAT('C-', cv.id_comprobante_venta) AS id_movimiento,
            cv.id_cliente AS entidad_id,
@@ -48,7 +63,11 @@ WITH movimientos AS (
     JOIN cliente c
       ON c.id_cliente = cv.id_cliente
      AND c.id_empresa = cv.id_empresa
+    JOIN pedido_cliente pv
+      ON pv.id_pedido_cliente = cv.id_pedido_cliente
+     AND pv.id_empresa = cv.id_empresa
     WHERE cv.id_empresa = %(id_empresa)s
+      AND pv.estado_envio <> 'cancelado'
 
     UNION ALL
 
@@ -57,7 +76,7 @@ WITH movimientos AS (
            'pago' AS tipo_movimiento,
            p.id_pago AS id_origen,
            NULL::text AS numero,
-           COALESCE(p.fecha_pago, p.creado_en::date) AS fecha,
+           {_FECHA_PAGO} AS fecha,
            'Cobro aprobado' AS descripcion,
            p.monto,
            -1 AS signo,
@@ -70,12 +89,16 @@ WITH movimientos AS (
     JOIN cliente c
       ON c.id_cliente = cv.id_cliente
      AND c.id_empresa = cv.id_empresa
+    JOIN pedido_cliente pv
+      ON pv.id_pedido_cliente = cv.id_pedido_cliente
+     AND pv.id_empresa = cv.id_empresa
     LEFT JOIN medio_pago mp
       ON mp.id_medio_pago = p.id_medio_pago
      AND mp.id_empresa = p.id_empresa
     WHERE p.id_empresa = %(id_empresa)s
       AND p.estado = 'aprobado'
       AND p.id_comprobante_venta IS NOT NULL
+      AND pv.estado_envio <> 'cancelado'
 )
 SELECT * FROM movimientos
 WHERE (%(hasta)s::date IS NULL OR fecha <= %(hasta)s::date)
@@ -83,14 +106,14 @@ WHERE (%(hasta)s::date IS NULL OR fecha <= %(hasta)s::date)
 ORDER BY fecha, id_origen, id_movimiento
 """
 
-_MOVIMIENTOS_PROVEEDORES = """
+_MOVIMIENTOS_PROVEEDORES = f"""
 WITH movimientos AS (
     SELECT CONCAT('F-', fp.id_factura_proveedor) AS id_movimiento,
            fp.id_proveedor AS entidad_id,
            'factura' AS tipo_movimiento,
            fp.id_factura_proveedor AS id_origen,
            fp.id_factura_proveedor::text AS numero,
-           fp.fecha_emision::date AS fecha,
+           {_FECHA_FACTURA} AS fecha,
            'Registro de factura' AS descripcion,
            fp.total AS monto,
            1 AS signo,
@@ -109,7 +132,7 @@ WITH movimientos AS (
            'pago' AS tipo_movimiento,
            p.id_pago AS id_origen,
            NULL::text AS numero,
-           COALESCE(p.fecha_pago, p.creado_en::date) AS fecha,
+           {_FECHA_PAGO} AS fecha,
            'Pago aprobado' AS descripcion,
            p.monto,
            -1 AS signo,

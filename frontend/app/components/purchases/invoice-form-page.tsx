@@ -193,9 +193,14 @@ export function InvoiceFormPage() {
     event.preventDefault();
     setSubmitError(null);
 
+    const ahora = defaultDateTimeInput();
     const nextErrors: Record<string, string | null> = {
       pedido: pedido ? null : "Seleccione una orden de compra",
-      fechaEmision: fechaEmision ? null : "Ingrese la fecha de emisión",
+      fechaEmision: !fechaEmision
+        ? "Ingrese la fecha de emisión"
+        : fechaEmision > ahora
+          ? "La fecha de emisión no puede ser futura"
+          : null,
       fechaVence:
         fechaVence && fechaVence >= fechaEmision
           ? null
@@ -334,6 +339,7 @@ export function InvoiceFormPage() {
                   id="invoice-fecha-emision"
                   type="datetime-local"
                   value={fechaEmision}
+                  max={defaultDateTimeInput()}
                   onChange={(event) =>
                     setField("fechaEmision", event.target.value, setFechaEmision)
                   }

@@ -8,8 +8,10 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 _CENTAVOS = Decimal("0.01")
+_ZONA_HORARIA = ZoneInfo("America/Argentina/Buenos_Aires")
 
 
 class CuentasCorrientesDatosInvalidos(Exception):
@@ -48,7 +50,7 @@ def resolver_rango(
     desde: date | None, hasta: date | None
 ) -> tuple[date, date]:
     """Aplica valores por defecto del mes corriente y valida el resultado."""
-    hoy = date.today()
+    hoy = datetime.now(_ZONA_HORARIA).date()
     return validar_rango(
         desde or hoy.replace(day=1),
         hasta or hoy,

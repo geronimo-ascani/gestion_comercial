@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -281,6 +281,13 @@ def test_metadatos_fuera_del_listado_se_rechazan() -> None:
             FacturaProveedorCreate.model_validate(
                 {**_datos().model_dump(), campo: valor}
             )
+
+
+def test_fecha_emision_futura_se_rechaza() -> None:
+    futura = datetime.now(timezone.utc) + timedelta(days=2)
+
+    with pytest.raises(ValidationError, match="no puede ser futura"):
+        _datos(fecha_emision=futura, fecha_vence=futura + timedelta(days=1))
 
 
 def test_listar_no_requiere_campos_legacy() -> None:

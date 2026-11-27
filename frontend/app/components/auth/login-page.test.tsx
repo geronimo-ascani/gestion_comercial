@@ -52,6 +52,21 @@ describe("LoginPage", () => {
     expect(screen.getByLabelText("Contraseña")).toBeInTheDocument();
   });
 
+  it("muestra y oculta la contraseña sin enviar el formulario", async () => {
+    const LoginPage = await loadPage();
+    renderLogin(LoginPage);
+    const password = screen.getByLabelText("Contraseña");
+
+    expect(password).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+
+    expect(password).toHaveAttribute("type", "text");
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+
+    expect(password).toHaveAttribute("type", "password");
+    expect(screen.getByTestId("location")).toHaveTextContent("/login");
+  });
+
   it("valida campos requeridos antes de enviar", async () => {
     const LoginPage = await loadPage();
     renderLogin(LoginPage);

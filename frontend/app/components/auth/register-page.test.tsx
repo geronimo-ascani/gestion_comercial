@@ -102,6 +102,27 @@ describe("RegisterPage", () => {
     );
   });
 
+  it("muestra solo la primera contraseña al togglear", async () => {
+    const RegisterPage = await loadPage();
+    render(
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>
+    );
+    await screen.findByRole("heading", { name: "Crea tu cuenta" });
+    const password = screen.getByLabelText("Contraseña");
+    const confirmation = screen.getByLabelText("Confirmar contraseña");
+
+    expect(password).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(confirmation).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+
+    expect(password).toHaveAttribute("type", "password");
+  });
+
   it("valida longitud mínima de contraseña", async () => {
     const RegisterPage = await loadPage();
     render(

@@ -54,6 +54,9 @@ def test_movimientos_clientes_son_tenant_y_solo_pagos_aprobados() -> None:
     assert "cv.id_empresa = %(id_empresa)s" in cur.sql
     assert "p.estado = 'aprobado'" in cur.sql
     assert "entidad_id = ANY(%(ids)s::text[])" in cur.sql
+    assert cur.sql.count("JOIN pedido_cliente pv") == 2
+    assert cur.sql.count("pv.estado_envio <> 'cancelado'") == 2
+    assert "pv.id_empresa = cv.id_empresa" in cur.sql
     assert cur.params == {
         "id_empresa": "EMP-0002",
         "ids": ["CLI-0001"],
@@ -69,6 +72,8 @@ def test_movimientos_proveedores_usan_total_como_monto() -> None:
     assert "fp.total AS monto" in cur.sql
     assert "p.estado = 'aprobado'" in cur.sql
     assert "fp.id_empresa = %(id_empresa)s" in cur.sql
+    assert "LEAST(" in cur.sql
+    assert "fp.creado_en AT TIME ZONE 'America/Argentina/Buenos_Aires'" in cur.sql
     assert cur.params["id_empresa"] == "EMP-0002"
     assert cur.params["ids"] is None
 

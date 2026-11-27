@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import Field, model_validator
 
@@ -9,6 +10,14 @@ from .pagos import PagoCreate, PagoRead
 
 TipoComprobanteCompra = Literal["A", "B", "C", "E"]
 EstadoPagoFactura = Literal["emitida", "pagada"]
+
+_ZONA_HORARIA = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def _fecha_local(valor: datetime) -> date:
+    if valor.tzinfo is None:
+        return valor.date()
+    return valor.astimezone(_ZONA_HORARIA).date()
 
 
 class FacturaProveedorCreate(SchemaBase):
@@ -27,6 +36,8 @@ class FacturaProveedorCreate(SchemaBase):
     def validar_fechas(self) -> "FacturaProveedorCreate":
         if self.fecha_vence < self.fecha_emision:
             raise ValueError("La fecha de vencimiento no puede ser anterior a la emisión")
+        if _fecha_local(self.fecha_emision) > datetime.now(_ZONA_HORARIA).date():
+            raise ValueError("'fecha_emision' no puede ser futura")
         return self
 
 

@@ -246,6 +246,10 @@
   `fecha_vence` and `total`. The supplier, comprobante type, balance, payment
   state, file data and ID are derived on the server. Every other fiscal detail
   stays inside the PDF/JPG and is not stored as a separate field.
+  `fecha_emision` cannot be in the future (422) and the form caps it at today.
+  For legacy rows with a future emission date, supplier current accounts
+  recognize the charge on `creado_en` (business timezone `America/Argentina/Buenos_Aires`),
+  so the invoice balance, supplier balance and account balance agree.
 - The file is stored in `factura_proveedor_archivo.contenido BYTEA` (PDF or JPG,
   max 3 MB, with MIME and file-signature validation) in the same transaction as
   the header. `GET /compras/facturas/{id}/archivo` returns the original inline
@@ -289,8 +293,13 @@
 
 - Current accounts are derived from emitted sales comprobantes or supplier
   invoices (charges) minus approved payments linked to those documents
-  (credits). Pending and rejected payments are never included, and changing an
-  order after emission does not alter an existing account entry.
+  (credits). Pending and rejected payments are never included. Comprobantes
+  stay immutable, but a customer account excludes the charge and its approved
+  collections when the linked sales order is currently `cancelado`; canceling
+  an order with an emitted comprobante therefore removes the charge from the
+  account without modifying the comprobante or the payment rows. Both branches
+  of the client movement query join `pedido_cliente` with `id_empresa` and apply
+  that predicate.
 - `saldo_inicial` is the balance before `desde`; movements inside the range
   produce `total_cargo`, `total_abono` and `saldo_final`. Parameter echoes and
   totals are backend-owned. Omitting `desde`/`hasta` defaults to the current
@@ -385,6 +394,10 @@
   changes. Password changes invalidate existing sessions and pending password
   recovery links. The public bootstrap registration at `POST /auth/register`
   remains separate.
+- The login and register screens have an eye toggle for the first password
+  field only; the "Confirmar contraseña" field on register always stays masked.
+  The button is `type="button"` and has an accessible label, so it never
+  submits the form.
 - Sales order endpoints are restricted to `administrador` and `ventas`.
   List/detail, pending-only edits, sequential state transitions, and
   idempotent cancellation are enforced by the backend.
@@ -549,6 +562,11 @@
   `/providers/accounts/:id` as standalone detail pages reached from the eye
   action in the customer/supplier list; those links are not in the side menu.
   No client-side balance math and no migration were needed.
+  Corrections: canceling a sales order with an emitted comprobante removes its
+  charge and approved collections from the derived client balance; supplier
+  invoices reject a future `fecha_emision` and legacy rows are recognized on
+  `creado_en` so the invoice, supplier list and account balances agree.
+  Verified with 321 backend tests and a PostgreSQL probe with rollback.
 - RF-15/RF-30 are implemented end to end. Migrations `012` and `013` were
   applied locally and probed against PostgreSQL with temporary data and
   rollback: enqueue, concurrent claim, sent/failed transitions, automatic
