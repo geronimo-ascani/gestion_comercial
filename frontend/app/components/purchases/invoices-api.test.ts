@@ -9,6 +9,7 @@ import {
   listInvoices,
   mapInvoiceDetalle,
   registerInvoicePayment,
+  updateInvoicePaymentStatus,
 } from "./invoices-api";
 import type { InvoicePayload } from "./invoices-types";
 
@@ -142,5 +143,33 @@ describe("invoices-api", () => {
     );
     expect(pago.monto).toBe(50);
     expect(pago.tipoPago).toBe("pago");
+  });
+
+  it("cambia el estado de un pago pendiente con PATCH", async () => {
+    api.apiRequest.mockResolvedValue({
+      id_pago: "PAG-0002",
+      estado: "aprobado",
+      fecha_pago: "2026-11-20",
+      monto: "50.00",
+      referencia: "",
+      id_medio_pago: "MPG-0001",
+      medio_pago: "Efectivo",
+      creado_en: "2026-11-20T10:05:00",
+      id_comprobante_venta: null,
+      id_factura_proveedor: "FAC-0001",
+      tipo_pago: "pago",
+    });
+
+    const pago = await updateInvoicePaymentStatus(
+      "FAC-0001",
+      "PAG-0002",
+      "aprobado"
+    );
+
+    expect(api.apiRequest).toHaveBeenCalledWith(
+      "/compras/facturas/FAC-0001/pagos/PAG-0002",
+      { method: "PATCH", body: JSON.stringify({ estado: "aprobado" }) }
+    );
+    expect(pago.estado).toBe("aprobado");
   });
 });

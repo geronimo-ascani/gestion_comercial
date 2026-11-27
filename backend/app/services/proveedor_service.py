@@ -56,6 +56,20 @@ class ProveedorService:
             },
         }
 
+    def _validar_condicion_iva(self, id_condicion_iva: str) -> None:
+        if not self._repo.condicion_iva_existe(id_condicion_iva):
+            raise ProveedorDatosInvalidos(
+                "La condición de IVA seleccionada no existe"
+            )
+        # Consumidor Final (código AFIP 5) es el default que el esquema
+        # histórico aplicaba en silencio y que deriva comprobantes tipo C
+        # aunque el proveedor sea responsable inscripto.
+        obtener_codigo = getattr(self._repo, "condicion_iva_codigo", None)
+        if obtener_codigo is not None and str(obtener_codigo(id_condicion_iva)) == "5":
+            raise ProveedorDatosInvalidos(
+                "Consumidor Final no es una condición de IVA válida para proveedores"
+            )
+
     def listar(
         self, q: str | None, limit: int, offset: int
     ) -> list[dict[str, Any]]:
@@ -73,12 +87,7 @@ class ProveedorService:
 
     def crear(self, datos: ProveedorCreate) -> dict[str, Any]:
         values = datos.model_dump(exclude={"direccion"})
-        if values.get("id_condicion_iva") and not self._repo.condicion_iva_existe(
-            values["id_condicion_iva"]
-        ):
-            raise ProveedorDatosInvalidos(
-                "La condición de IVA seleccionada no existe"
-            )
+        self._validar_condicion_iva(values["id_condicion_iva"])
         try:
             with self._repo.transaction():
                 if self._repo.cuit_existe(values["cuit"]):
@@ -111,12 +120,8 @@ class ProveedorService:
         if not cambios and direccion is None:
             raise ProveedorSinCambios(id_proveedor)
         self.obtener(id_proveedor)
-        if cambios.get("id_condicion_iva") and not self._repo.condicion_iva_existe(
-            cambios["id_condicion_iva"]
-        ):
-            raise ProveedorDatosInvalidos(
-                "La condición de IVA seleccionada no existe"
-            )
+        if "id_condicion_iva" in cambios:
+            self._validar_condicion_iva(cambios["id_condicion_iva"])
         try:
             with self._repo.transaction():
                 if "cuit" in cambios and self._repo.cuit_existe(

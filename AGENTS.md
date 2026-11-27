@@ -212,7 +212,13 @@
 - `id_proveedor` is stored explicitly on the invoice even though it could be
   reached through the purchase order. The backend derives it from the locked
   purchase order and never accepts it from the request body.
-- Supplier `id_condicion_iva` is required. The backend derives the comprobante
+- Supplier `id_condicion_iva` is required on creation: `ProveedorCreate` rejects
+  an empty value and the backend validates the catalog ID and rejects
+  `Consumidor Final` (AFIP code 5), whose historical database default silently
+  produced wrong type C comprobantes. Updates only validate when the field is
+  explicitly sent, so legacy suppliers can still be edited. The frontend form
+  requires a selection and hides code 5, except to display an unchanged legacy
+  value. The backend derives the comprobante
   type from the supplier's and the company's VAT conditions: A for a responsable
   inscripto supplier billing a responsable inscripto or monotributista company,
   B for other receivers, and C for a monotributista/exento supplier. Type E is
@@ -257,7 +263,15 @@
   `id_factura_proveedor`. Exactly one of `id_comprobante_venta` or
   `id_factura_proveedor` must be present. Approved payments reduce
   `saldo_pendiente` atomically; pending and rejected payments are stored but do
-  not affect balances. Supplier invoices expose only `emitida` and `pagada`:
+  not affect balances. A pending payment reserves the remaining amount because
+  it counts as `aprobado + pendiente` when validating new payments, and was
+  otherwise locked. `PATCH /compras/facturas/{id}/pagos/{id_pago}` accepts
+  `aprobado` or `rechazado` for a pending payment of that invoice: approving
+  recalculates the balance and may mark the invoice `pagada`, while rejecting
+  releases the reservation without changing the balance. The payment must belong
+  to the invoice, must still be pending, and approved payments may not exceed the
+  invoice total. Sales comprobante payments have no state-change endpoint.
+  Supplier invoices expose only `emitida` and `pagada`:
   partial payments reduce `saldo_pendiente` but keep the invoice `emitida`, and
   the invoice becomes `pagada` when the balance reaches zero. The detail screen
   has a manual "Marcar como pagada" action that registers an approved payment
@@ -347,6 +361,9 @@
   `backend/app/services/analitica_calculos.py` (KPIs, trends, AOV/UPT, new vs.
   recurring, heatmap, rankings, price comparison, category margin, idle
   inventory, payment methods, demand forecast, and percentage variation).
+  The "Medios de pago" section counts only approved sales collections: the SQL
+  filters `id_comprobante_venta IS NOT NULL` and the pure calculation ignores any
+  payment carrying `id_factura_proveedor`, so supplier payments cannot inflate it.
 - Analytics are served by `GET /analiticas?periodo=...` (roles
   `administrador`, `ventas`, `abastecimiento`), backed by
   `analitica_repository.py`, `analitica_service.py`, and the response schema in
@@ -412,15 +429,19 @@
 - Supplier invoice API: `GET/POST /compras/facturas` (multipart upload),
   `GET /compras/facturas/{id}`, `GET /compras/facturas/{id}/archivo`,
   `GET /compras/pedidos/{id}/facturas`, and
-  `GET/POST /compras/facturas/{id}/pagos`. Creation snapshots the supplier and
+  `GET/POST /compras/facturas/{id}/pagos` and
+  `PATCH /compras/facturas/{id}/pagos/{id_pago}` (approve/reject a pending
+  payment). Creation snapshots the supplier and
   receiver; the backend derives the company, supplier, employee, invoice ID and
   comprobante type, and stores the PDF/JPG as `BYTEA`. Invoices are
   immutable and do not affect stock. Migrations `010` and `011` were applied
   locally and the file creation/download path was probed with temporary data
   and rolled back.
-- Supplier `id_condicion_iva` is part of the provider form and API. Legacy
-  providers default to `Consumidor Final` so invoice registration can derive a
-  comprobante type; the administrator can correct the condition later.
+- Supplier `id_condicion_iva` is part of the provider form and API and is now
+  mandatory on creation; code 5 (`Consumidor Final`) is rejected because it
+  produced wrong type C comprobantes. Legacy providers still carry code 5 from
+  migration `010`; editing other fields is allowed and the administrator should
+  correct the condition before registering a new invoice.
 - The supplier invoice frontend is integrated at `/purchases/invoices` with
   creation, detail and payment registration routes. Only `administrador` and
   `abastecimiento` can see the navigation entry or access those routes; the

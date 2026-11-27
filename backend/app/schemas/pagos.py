@@ -33,6 +33,10 @@ class PagoCreate(SchemaBase):
     fecha_pago: date | None = None
 
 
+class PagoEstadoUpdate(SchemaBase):
+    estado: Literal["aprobado", "rechazado"]
+
+
 class PagoRead(SchemaBase):
     id_pago: str
     estado: Literal["aprobado", "pendiente", "rechazado"]

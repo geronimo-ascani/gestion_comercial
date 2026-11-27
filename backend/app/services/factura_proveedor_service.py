@@ -12,6 +12,7 @@ from app.schemas.facturas_proveedor import (
     FacturaProveedorCreate,
     PagoProveedorCreate,
 )
+from app.schemas.pagos import PagoEstadoUpdate
 from app.services.empresa_service import EmpresaService
 from app.services.factura_compra_calculos import (
     calcular_tipo_comprobante_compra,
@@ -322,3 +323,59 @@ class FacturaProveedorService:
             raise PagoFacturaDatosInvalidos(
                 "Los datos del pago no son válidos"
             ) from exc
+
+    def cambiar_estado_pago(
+        self,
+        id_factura_proveedor: str,
+        id_pago: str,
+        datos: PagoEstadoUpdate,
+    ) -> PagoRow:
+        """Aprueba o rechaza un pago pendiente y recalcula el saldo.
+
+        El pendiente reserva cupo pero no descuenta saldo; al aprobarlo se
+        descuenta, al rechazarlo se libera la reserva sin tocar el saldo.
+        """
+        with self._repo.transaction():
+            factura = self._repo.obtener(id_factura_proveedor, bloquear=True)
+            if factura is None:
+                raise FacturaProveedorNoEncontrado(id_factura_proveedor)
+
+            pago = self._pagos.obtener(id_pago)
+            if pago is None or pago.get("id_factura_proveedor") != id_factura_proveedor:
+                raise FacturaProveedorNoEncontrado(id_pago)
+            if pago["estado"] != "pendiente":
+                raise PagoFacturaDatosInvalidos(
+                    "Solo se puede cambiar el estado de un pago pendiente"
+                )
+
+            aprobados = self._pagos.sumar_factura(
+                id_factura_proveedor, ("aprobado",)
+            )
+            if datos.estado == "aprobado" and aprobados + pago["monto"] > factura["total"]:
+                disponible = factura["total"] - aprobados
+                raise PagoFacturaDatosInvalidos(
+                    "El pago excede el saldo pendiente. "
+                    f"Disponible: {disponible}"
+                )
+
+            if not self._pagos.actualizar_estado(
+                id_pago, datos.estado, id_factura_proveedor
+            ):
+                raise PagoFacturaDatosInvalidos(
+                    "El pago ya no está pendiente"
+                )
+
+            if datos.estado == "aprobado":
+                aprobados += pago["monto"]
+            saldo = factura["total"] - aprobados
+            if saldo < 0:
+                saldo = Decimal("0")
+            estado_pago = "pagada" if saldo == 0 else "emitida"
+            self._repo.actualizar_pago(id_factura_proveedor, estado_pago, saldo)
+
+            actualizado = self._pagos.obtener(id_pago)
+            if actualizado is None:
+                raise FacturaProveedorError(
+                    "No se pudo recuperar el pago actualizado"
+                )
+            return actualizado

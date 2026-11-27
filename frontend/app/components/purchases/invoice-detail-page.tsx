@@ -39,6 +39,7 @@ import {
   addInvoicePayment,
   getCachedInvoiceDetail,
   loadInvoiceDetail,
+  updateInvoicePaymentStatus,
 } from "./invoices-store";
 import {
   downloadInvoiceFile,
@@ -100,6 +101,7 @@ export function InvoiceDetailPage() {
   const [estado, setEstado] = useState<InvoicePagoEstado>("aprobado");
   const [fechaPago, setFechaPago] = useState(todayInput());
   const [paying, setPaying] = useState(false);
+  const [changingPayment, setChangingPayment] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -191,6 +193,27 @@ export function InvoiceDetailPage() {
       fecha_pago: fechaPago || undefined,
     });
     if (guardado) setReference("");
+  }
+
+  async function handlePaymentStatus(
+    idPago: string,
+    estadoPago: "aprobado" | "rechazado"
+  ) {
+    if (!id) return;
+    setPaymentError(null);
+    setChangingPayment(idPago);
+    try {
+      await updateInvoicePaymentStatus(id, idPago, estadoPago);
+      setInvoice(await loadInvoiceDetail(id, true));
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo cambiar el estado del pago."
+      );
+    } finally {
+      setChangingPayment(null);
+    }
   }
 
   async function handleMarkPaid() {
@@ -431,12 +454,13 @@ export function InvoiceDetailPage() {
                 <TableHead>Referencia</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoice.pagos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No hay pagos registrados.
                   </TableCell>
                 </TableRow>
@@ -449,6 +473,31 @@ export function InvoiceDetailPage() {
                     <TableCell>{pago.estado}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatMoney(pago.monto)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {pago.estado === "pendiente" ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={changingPayment === pago.id}
+                            onClick={() => void handlePaymentStatus(pago.id, "aprobado")}
+                          >
+                            Aprobar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={changingPayment === pago.id}
+                            onClick={() => void handlePaymentStatus(pago.id, "rechazado")}
+                          >
+                            Rechazar
+                          </Button>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

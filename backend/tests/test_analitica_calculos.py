@@ -835,6 +835,25 @@ def test_ventas_por_metodo_pago_solo_aprobados() -> None:
     assert filas[1]["monto"] == _D("150.00")
 
 
+def test_ventas_por_metodo_pago_excluye_pagos_a_proveedor() -> None:
+    pagos = [
+        {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("100"), "estado": "aprobado"},
+        {
+            "id_medio_pago": "MP-1",
+            "medio_pago": "Efectivo",
+            "monto": _D("999"),
+            "estado": "aprobado",
+            "id_factura_proveedor": "FP-0001",
+        },
+    ]
+
+    filas = calcular_ventas_por_metodo_pago(pagos)
+
+    assert filas == [
+        {"id_medio_pago": "MP-1", "medio_pago": "Efectivo", "monto": _D("100.00")}
+    ]
+
+
 # --- predicción de demanda -------------------------------------------------
 
 

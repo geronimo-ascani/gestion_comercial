@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_factura_proveedor_service
 from app.api.v1.routers.auth import get_current_user
 from app.api.v1.routers.facturas_proveedor import router
-from app.services.factura_proveedor_service import FacturaProveedorNoEncontrado
+from app.services.factura_proveedor_service import (
+    FacturaProveedorNoEncontrado,
+    PagoFacturaDatosInvalidos,
+)
 
 _CONTENIDO_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
 
@@ -111,6 +114,13 @@ class FakeService:
 
     def registrar_pago(self, id_factura, _datos):
         return _PAGO
+
+    def cambiar_estado_pago(self, id_factura, id_pago, datos):
+        if id_factura == "FP-9999":
+            raise FacturaProveedorNoEncontrado(id_factura)
+        if id_pago == "PAG-9999":
+            raise PagoFacturaDatosInvalidos("El pago ya no está pendiente")
+        return {**_PAGO, "estado": datos.estado}
 
 
 def _client(rol: str, service_factory=FakeService) -> TestClient:
@@ -225,6 +235,49 @@ def test_pagos_de_factura() -> None:
     assert listado.status_code == 200
     assert listado.json()[0]["tipo_pago"] == "pago"
     assert creado.status_code == 201
+
+
+def test_cambiar_estado_pago_pendiente_de_factura() -> None:
+    with _client("abastecimiento") as client:
+        aprobado = client.patch(
+            "/api/v1/compras/facturas/FP-0001/pagos/PAG-0001",
+            json={"estado": "aprobado"},
+        )
+        rechazado = client.patch(
+            "/api/v1/compras/facturas/FP-0001/pagos/PAG-0001",
+            json={"estado": "rechazado"},
+        )
+    assert aprobado.status_code == 200
+    assert aprobado.json()["estado"] == "aprobado"
+    assert rechazado.status_code == 200
+    assert rechazado.json()["estado"] == "rechazado"
+
+
+def test_cambiar_estado_pago_rechaza_estado_no_permitido() -> None:
+    with _client("administrador") as client:
+        response = client.patch(
+            "/api/v1/compras/facturas/FP-0001/pagos/PAG-0001",
+            json={"estado": "pendiente"},
+        )
+    assert response.status_code == 422
+
+
+def test_cambiar_estado_pago_invalido_devuelve_409() -> None:
+    with _client("administrador") as client:
+        response = client.patch(
+            "/api/v1/compras/facturas/FP-0001/pagos/PAG-9999",
+            json={"estado": "aprobado"},
+        )
+    assert response.status_code == 409
+
+
+def test_cambiar_estado_pago_requiere_permiso() -> None:
+    with _client("ventas") as client:
+        response = client.patch(
+            "/api/v1/compras/facturas/FP-0001/pagos/PAG-0001",
+            json={"estado": "aprobado"},
+        )
+    assert response.status_code == 403
 
 
 def test_factura_inexistente_devuelve_404() -> None:

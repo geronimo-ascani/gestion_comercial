@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 
 const mocks = vi.hoisted(() => ({
   getCachedInvoiceDetail: vi.fn(() => undefined),
   loadInvoiceDetail: vi.fn(),
   addInvoicePayment: vi.fn(),
+  updateInvoicePaymentStatus: vi.fn(async () => undefined),
   useCurrentUser: vi.fn(() => ({ role: "administrador" })),
   usePaymentMethods: vi.fn(() => [{ id: "MPG-0001", label: "Efectivo" }]),
   usePaymentMethodsLoading: vi.fn(() => false),
@@ -16,6 +17,7 @@ vi.mock("./invoices-store", () => ({
   getCachedInvoiceDetail: mocks.getCachedInvoiceDetail,
   loadInvoiceDetail: mocks.loadInvoiceDetail,
   addInvoicePayment: mocks.addInvoicePayment,
+  updateInvoicePaymentStatus: mocks.updateInvoicePaymentStatus,
 }));
 
 vi.mock("../auth/session-store", () => ({
@@ -29,8 +31,9 @@ vi.mock("../payments/payment-methods-store", () => ({
 }));
 
 import { InvoiceDetailPage } from "./invoice-detail-page";
+import type { SupplierInvoiceDetail } from "./invoices-types";
 
-const factura = {
+const factura: SupplierInvoiceDetail = {
   id: "FP-0006",
   numeroComprobante: "FP-0006",
   numeroCompleto: "FP-0006",
@@ -60,8 +63,21 @@ const factura = {
   pagos: [],
 };
 
-function renderPage() {
-  mocks.loadInvoiceDetail.mockResolvedValue(factura);
+const pagoPendiente: SupplierInvoiceDetail["pagos"][number] = {
+  id: "PAG-0002",
+  estado: "pendiente" as const,
+  fechaPago: "2026-11-20",
+  monto: 100,
+  referencia: "",
+  idMedioPago: "MPG-0001",
+  medioPago: "Efectivo",
+  creadoEn: "2026-11-20T10:05:00",
+  idFacturaProveedor: "FP-0006",
+  tipoPago: "pago" as const,
+};
+
+function renderPage(detalle: SupplierInvoiceDetail = factura) {
+  mocks.loadInvoiceDetail.mockResolvedValue(detalle);
   return render(
     <MemoryRouter initialEntries={["/purchases/invoices/FP-0006"]}>
       <Routes>
@@ -81,5 +97,52 @@ describe("InvoiceDetailPage - marcar como pagada", () => {
     expect(
       await screen.findByRole("button", { name: /Marcar como pagada/i })
     ).toBeTruthy();
+  });
+});
+
+describe("InvoiceDetailPage - pagos pendientes", () => {
+  it("permite aprobar un pago pendiente", async () => {
+    renderPage({ ...factura, pagos: [pagoPendiente] });
+    const aprobar = await screen.findByRole("button", { name: /Aprobar/i });
+
+    await act(async () => {
+      fireEvent.click(aprobar);
+    });
+
+    await waitFor(() =>
+      expect(mocks.updateInvoicePaymentStatus).toHaveBeenCalledWith(
+        "FP-0006",
+        "PAG-0002",
+        "aprobado"
+      )
+    );
+  });
+
+  it("permite rechazar un pago pendiente", async () => {
+    renderPage({ ...factura, pagos: [pagoPendiente] });
+    const rechazar = await screen.findByRole("button", { name: /Rechazar/i });
+
+    await act(async () => {
+      fireEvent.click(rechazar);
+    });
+
+    await waitFor(() =>
+      expect(mocks.updateInvoicePaymentStatus).toHaveBeenCalledWith(
+        "FP-0006",
+        "PAG-0002",
+        "rechazado"
+      )
+    );
+  });
+
+  it("no muestra acciones para pagos aprobados", async () => {
+    renderPage({
+      ...factura,
+      pagos: [{ ...pagoPendiente, estado: "aprobado" as const }],
+    });
+
+    await screen.findAllByText("Efectivo");
+    expect(screen.queryByRole("button", { name: /Aprobar/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Rechazar/i })).toBeNull();
   });
 });

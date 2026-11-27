@@ -25,6 +25,7 @@ from app.schemas.facturas_proveedor import (
     PagoProveedorCreate,
     PagoProveedorRead,
 )
+from app.schemas.pagos import PagoEstadoUpdate
 from app.services.factura_proveedor_service import (
     MAX_ARCHIVO_BYTES,
     FacturaProveedorDatosInvalidos,
@@ -228,6 +229,25 @@ def registrar_pago_de_factura(
     try:
         return PagoProveedorRead.model_validate(
             service.registrar_pago(id_factura, datos)
+        )
+    except FacturaProveedorError as exc:
+        raise _error_http(exc) from exc
+
+
+@router.patch(
+    "/facturas/{id_factura}/pagos/{id_pago}",
+    response_model=PagoProveedorRead,
+)
+def cambiar_estado_pago_de_factura(
+    datos: PagoEstadoUpdate,
+    service: ServiceDep,
+    id_factura: Id,
+    id_pago: Id,
+    _: PuedeGestionar,
+) -> PagoProveedorRead:
+    try:
+        return PagoProveedorRead.model_validate(
+            service.cambiar_estado_pago(id_factura, id_pago, datos)
         )
     except FacturaProveedorError as exc:
         raise _error_http(exc) from exc

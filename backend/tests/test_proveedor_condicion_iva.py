@@ -35,8 +35,11 @@ class FakeRepo:
     def transaction(self):
         return nullcontext()
 
-    def condicion_iva_existe(self, _id_condicion_iva):
-        return False
+    def condicion_iva_existe(self, id_condicion_iva):
+        return id_condicion_iva == "CIV-0005"
+
+    def condicion_iva_codigo(self, id_condicion_iva):
+        return "5" if id_condicion_iva == "CIV-0005" else "1"
 
     def cuit_existe(self, _cuit, excluir_id=None):
         return False
@@ -76,3 +79,31 @@ def test_actualizar_rechaza_condicion_iva_inexistente() -> None:
     datos = ProveedorUpdate.model_validate({"id_condicion_iva": "CIV-INVALIDA"})
     with pytest.raises(ProveedorDatosInvalidos):
         ProveedorService(FakeRepo()).actualizar("PRV-0001", datos)
+
+
+def test_crear_rechaza_consumidor_final() -> None:
+    datos = ProveedorCreate.model_validate(
+        {**_CREAR.model_dump(), "id_condicion_iva": "CIV-0005"}
+    )
+    with pytest.raises(ProveedorDatosInvalidos):
+        ProveedorService(FakeRepo()).crear(datos)
+
+
+def test_actualizar_rechaza_consumidor_final() -> None:
+    datos = ProveedorUpdate.model_validate({"id_condicion_iva": "CIV-0005"})
+    with pytest.raises(ProveedorDatosInvalidos):
+        ProveedorService(FakeRepo()).actualizar("PRV-0001", datos)
+
+
+def test_actualizar_proveedor_legacy_no_exige_condicion() -> None:
+    class RepoEditable(FakeRepo):
+        def actualizar(self, _id, cambios):
+            return True
+
+        def transaction(self):
+            return nullcontext()
+
+    actualizado = ProveedorService(RepoEditable()).actualizar(
+        "PRV-0001", ProveedorUpdate.model_validate({"telefono": "123"})
+    )
+    assert actualizado["id_proveedor"] == "PRV-0001"

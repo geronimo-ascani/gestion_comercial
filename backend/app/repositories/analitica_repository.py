@@ -111,6 +111,7 @@ FROM pago pg
 JOIN medio_pago mp ON mp.id_medio_pago = pg.id_medio_pago
 WHERE pg.id_empresa = %s
   AND pg.fecha_pago BETWEEN %s AND %s
+  AND pg.id_comprobante_venta IS NOT NULL
 """
 
 _SELECT_DEMANDA = f"""

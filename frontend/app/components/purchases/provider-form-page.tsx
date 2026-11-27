@@ -62,6 +62,7 @@ export function ProviderFormPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [idCondicionIVA, setIdCondicionIVA] = useState("");
+  const [condicionInicial, setCondicionInicial] = useState("");
   const [condicionesIVA, setCondicionesIVA] = useState<CondicionIVA[]>([]);
   const [cuit, setCuit] = useState("");
   const [phone, setPhone] = useState("");
@@ -97,6 +98,7 @@ export function ProviderFormPage() {
         if (cancelled) return;
         setName(provider.name);
         setIdCondicionIVA(provider.id_condicion_iva ?? "");
+        setCondicionInicial(provider.id_condicion_iva ?? "");
         setCuit(provider.cuit);
         setPhone(provider.phone);
         setEmail(provider.email);
@@ -134,10 +136,37 @@ export function ProviderFormPage() {
     setSubmitError(null);
   }
 
+  const condicionesValidas = condicionesIVA.filter(
+    (condicion) => condicion.codigo_afip !== "5"
+  );
+  const condicionLegacy =
+    Boolean(editId) &&
+    Boolean(condicionInicial) &&
+    condicionInicial === idCondicionIVA &&
+    condicionesIVA.some(
+      (condicion) =>
+        condicion.id_condicion_iva === condicionInicial &&
+        condicion.codigo_afip === "5"
+    );
+
+  const opcionesCondicion = Object.fromEntries(
+    [
+      ...condicionesValidas,
+      ...(condicionLegacy
+        ? condicionesIVA.filter(
+            (condicion) => condicion.id_condicion_iva === condicionInicial
+          )
+        : []),
+    ].map((condicion) => [condicion.id_condicion_iva, condicion.descripcion])
+  );
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next: Record<string, string | null> = {
       name: requireText(name, "Razón social"),
+      idCondicionIVA: idCondicionIVA
+        ? null
+        : "Seleccione una condición de IVA",
       cuit: cuit.trim()
         ? validateDocument(cuit)
         : requireText(cuit, "CUIT"),
@@ -162,7 +191,7 @@ export function ProviderFormPage() {
     const provider: Provider = {
       id: editId ?? "",
       name: name.trim(),
-      id_condicion_iva: idCondicionIVA || undefined,
+      id_condicion_iva: condicionLegacy ? undefined : idCondicionIVA,
       cuit: cuit.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -237,41 +266,36 @@ export function ProviderFormPage() {
               <div className="space-y-2">
                 <Label htmlFor="provider-condicion-iva">Condición de IVA</Label>
                 <Select
-                  value={idCondicionIVA || "__none__"}
-                  items={{
-                    __none__: "Sin especificar",
-                    ...Object.fromEntries(
-                      condicionesIVA.map((condicion) => [
-                        condicion.id_condicion_iva,
-                        condicion.descripcion,
-                      ])
-                    ),
-                  }}
+                  value={idCondicionIVA}
+                  items={opcionesCondicion}
                   onValueChange={(value) =>
-                    setIdCondicionIVA(value === "__none__" ? "" : (value ?? ""))
+                    setField("idCondicionIVA", value ?? "", setIdCondicionIVA)
                   }
                 >
-                  <SelectTrigger id="provider-condicion-iva" className="w-full">
-                    <SelectValue />
+                  <SelectTrigger
+                    id="provider-condicion-iva"
+                    className="w-full"
+                    aria-invalid={!!errors.idCondicionIVA}
+                  >
+                    <SelectValue>
+                      {(value) =>
+                        opcionesCondicion[value] ?? "Seleccionar condición"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">Sin especificar</SelectItem>
-                    {condicionesIVA.map((condicion) => (
-                      <SelectItem
-                        key={condicion.id_condicion_iva}
-                        value={condicion.id_condicion_iva}
-                      >
-                        {condicion.descripcion}
+                    {Object.entries(opcionesCondicion).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {editId && idCondicionIVA && (
+                <FieldError message={errors.idCondicionIVA} />
+                {condicionLegacy && (
                   <p className="text-xs text-muted-foreground">
-                    Condición actual:{" "}
-                    {condicionesIVA.find(
-                      (condicion) => condicion.id_condicion_iva === idCondicionIVA
-                    )?.descripcion ?? idCondicionIVA}
+                    Condición actual: Consumidor Final. Verifíquela: afecta el
+                    tipo de comprobante. Puede guardar otros campos sin cambiarla.
                   </p>
                 )}
               </div>

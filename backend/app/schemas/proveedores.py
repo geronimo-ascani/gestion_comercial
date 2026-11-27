@@ -35,7 +35,9 @@ class ProveedorFields(SchemaBase):
 
 
 class ProveedorCreate(ProveedorFields):
-    pass
+    # Alta siempre explicita la condición: la BD tiene default Consumidor Final
+    # (código AFIP 5) que derivaría comprobantes tipo C incorrectamente.
+    id_condicion_iva: str = Field(min_length=1, max_length=20)
 
 
 class ProveedorRead(ProveedorFields):

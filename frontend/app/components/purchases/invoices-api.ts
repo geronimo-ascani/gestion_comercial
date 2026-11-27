@@ -232,6 +232,19 @@ export async function registerInvoicePayment(
   return mapInvoicePago(pago);
 }
 
+/** Aprueba o rechaza un pago pendiente de una factura de proveedor. */
+export async function updateInvoicePaymentStatus(
+  id: string,
+  idPago: string,
+  estado: "aprobado" | "rechazado"
+): Promise<InvoicePago> {
+  const pago = await apiRequest<InvoicePagoApi>(
+    `/compras/facturas/${encodeURIComponent(id)}/pagos/${encodeURIComponent(idPago)}`,
+    { method: "PATCH", body: JSON.stringify({ estado }) }
+  );
+  return mapInvoicePago(pago);
+}
+
 export function formatInvoiceFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;

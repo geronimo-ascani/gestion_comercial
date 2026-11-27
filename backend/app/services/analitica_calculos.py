@@ -1,7 +1,7 @@
 import calendar
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Literal, Mapping, Sequence, TypedDict
+from typing import Literal, Mapping, NotRequired, Sequence, TypedDict
 
 _CENTAVOS = Decimal("0.01")
 _MILESIMAS = Decimal("0.001")
@@ -70,6 +70,7 @@ class PagoAnalitica(TypedDict):
     medio_pago: str
     monto: Decimal
     estado: str
+    id_factura_proveedor: NotRequired[str | None]
 
 
 class KpisAnalitica(TypedDict):
@@ -892,10 +893,14 @@ def calcular_mapa_calor(
 def calcular_ventas_por_metodo_pago(
     pagos: Sequence[PagoAnalitica],
 ) -> list[VentaMetodoPago]:
-    """Cobros aprobados agrupados por medio de pago, de mayor a menor."""
+    """Cobros aprobados agrupados por medio de pago, de mayor a menor.
+
+    Los pagos a proveedor no son cobros: se excluyen tanto en la consulta como
+    aquí para que no contaminen la métrica de medios de pago de ventas.
+    """
     acumulado: dict[str, _AcumuladoMedioPago] = {}
     for pago in pagos:
-        if pago["estado"] != "aprobado":
+        if pago["estado"] != "aprobado" or pago.get("id_factura_proveedor"):
             continue
         fila = acumulado.setdefault(
             pago["id_medio_pago"],

@@ -9,6 +9,7 @@ from app.schemas.facturas_proveedor import (
     FacturaProveedorCreate,
     PagoProveedorCreate,
 )
+from app.schemas.pagos import PagoEstadoUpdate
 from app.services.factura_proveedor_service import (
     MAX_ARCHIVO_BYTES,
     FacturaProveedorDatosInvalidos,
@@ -208,6 +209,19 @@ class FakePagoRepository:
     def listar_por_factura(self, _id_factura):
         return [dict(pago) for pago in self.pagos]
 
+    def actualizar_estado(self, id_pago, estado, id_factura):
+        pago = next(
+            (p for p in self.pagos if p["id_pago"] == id_pago), None
+        )
+        if (
+            pago is None
+            or pago["estado"] != "pendiente"
+            or pago["id_factura_proveedor"] != id_factura
+        ):
+            return False
+        pago["estado"] = estado
+        return True
+
 
 class FakeEmpresas:
     def obtener(self, _id_empresa):
@@ -393,6 +407,123 @@ def test_pago_pendiente_no_afecta_saldo() -> None:
     factura = servicio.obtener("FP-0001")
     assert factura["saldo_pendiente"] == Decimal("242.00")
     assert factura["estado_pago"] == "emitida"
+
+
+def _pago_pendiente(servicio, monto=Decimal("100.00")) -> str:
+    pago = servicio.registrar_pago(
+        "FP-0001",
+        PagoProveedorCreate.model_validate(
+            {
+                "id_medio_pago": "MPG-0001",
+                "monto": monto,
+                "estado": "pendiente",
+            }
+        ),
+    )
+    return pago["id_pago"]
+
+
+def test_pago_pendiente_aprobado_descuenta_saldo() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    id_pago = _pago_pendiente(servicio)
+
+    actualizado = servicio.cambiar_estado_pago(
+        "FP-0001", id_pago, PagoEstadoUpdate.model_validate({"estado": "aprobado"})
+    )
+
+    assert actualizado["estado"] == "aprobado"
+    factura = servicio.obtener("FP-0001")
+    assert factura["saldo_pendiente"] == Decimal("142.00")
+    assert factura["estado_pago"] == "emitida"
+
+
+def test_pago_pendiente_aprobado_puede_dejar_factura_pagada() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    id_pago = _pago_pendiente(servicio, Decimal("242.00"))
+
+    servicio.cambiar_estado_pago(
+        "FP-0001", id_pago, PagoEstadoUpdate.model_validate({"estado": "aprobado"})
+    )
+
+    factura = servicio.obtener("FP-0001")
+    assert factura["saldo_pendiente"] == Decimal("0.00")
+    assert factura["estado_pago"] == "pagada"
+
+
+def test_pago_pendiente_rechazado_libera_cupo_sin_tocar_saldo() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    id_pago = _pago_pendiente(servicio, Decimal("242.00"))
+
+    actualizado = servicio.cambiar_estado_pago(
+        "FP-0001", id_pago, PagoEstadoUpdate.model_validate({"estado": "rechazado"})
+    )
+
+    assert actualizado["estado"] == "rechazado"
+    factura = servicio.obtener("FP-0001")
+    assert factura["saldo_pendiente"] == Decimal("242.00")
+    assert factura["estado_pago"] == "emitida"
+    # El cupo liberado permite registrar otro pago por el total.
+    servicio.registrar_pago(
+        "FP-0001",
+        PagoProveedorCreate.model_validate(
+            {"id_medio_pago": "MPG-0001", "monto": Decimal("242.00")}
+        ),
+    )
+
+
+def test_aprobacion_se_rechaza_si_otro_pago_consumio_el_cupo() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    id_pago = _pago_pendiente(servicio)
+    # Pago aprobado concurrente/legacy que ya consumió el total.
+    servicio._pagos.pagos.append(
+        {
+            **_PAGO,
+            "id_pago": "PAG-9999",
+            "estado": "aprobado",
+            "monto": Decimal("242.00"),
+        }
+    )
+    with pytest.raises(PagoFacturaDatosInvalidos):
+        servicio.cambiar_estado_pago(
+            "FP-0001",
+            id_pago,
+            PagoEstadoUpdate.model_validate({"estado": "aprobado"}),
+        )
+
+
+def test_cambiar_estado_pago_ya_aprobado_se_rechaza() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    pago = servicio.registrar_pago(
+        "FP-0001",
+        PagoProveedorCreate.model_validate(
+            {"id_medio_pago": "MPG-0001", "monto": Decimal("100.00")}
+        ),
+    )
+    with pytest.raises(PagoFacturaDatosInvalidos):
+        servicio.cambiar_estado_pago(
+            "FP-0001",
+            pago["id_pago"],
+            PagoEstadoUpdate.model_validate({"estado": "rechazado"}),
+        )
+
+
+def test_cambiar_estado_pago_ajeno_a_la_factura_se_rechaza() -> None:
+    servicio = _servicio()
+    servicio.crear(_datos(), "EMP-0002", _archivo())
+    id_pago = _pago_pendiente(servicio)
+    # Simular un pago perteneciente a otra factura.
+    servicio._pagos.pagos[0]["id_factura_proveedor"] = "FP-9999"
+    with pytest.raises(FacturaProveedorNoEncontrado):
+        servicio.cambiar_estado_pago(
+            "FP-0001",
+            id_pago,
+            PagoEstadoUpdate.model_validate({"estado": "aprobado"}),
+        )
 
 
 def test_sobrepago_se_rechaza() -> None:

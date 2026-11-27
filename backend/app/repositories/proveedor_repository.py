@@ -106,8 +106,21 @@ class ProveedorRepository:
             row = cur.fetchone()
             return bool(row and row["existe"])
 
+    def condicion_iva_codigo(self, id_condicion_iva: str) -> str | None:
+        """Código AFIP de la condición; ``None`` si el ID no existe."""
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT codigo_afip FROM condicion_iva
+                WHERE id_condicion_iva = %s
+                """,
+                (id_condicion_iva,),
+            )
+            row = cur.fetchone()
+            return str(row["codigo_afip"]) if row else None
+
     def crear(self, datos: dict[str, Any]) -> str:
-        # Si no viene la condición IVA, la columna usa el DEFAULT de la BD.
+        # La condición IVA siempre viene explícita del servicio validado.
         values = {
             key: datos[key]
             for key in _FIELDS

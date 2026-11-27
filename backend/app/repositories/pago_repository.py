@@ -63,6 +63,24 @@ class PagoRepository:
             )
             return cur.fetchone()
 
+    def actualizar_estado(
+        self, id_pago: str, estado: str, id_factura_proveedor: str
+    ) -> bool:
+        """Cambia el estado de un pago pendiente de una factura propia."""
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE pago
+                SET estado = %s
+                WHERE id_pago = %s
+                  AND id_factura_proveedor = %s
+                  AND id_empresa = %s
+                  AND estado = 'pendiente'
+                """,
+                (estado, id_pago, id_factura_proveedor, self._id_empresa),
+            )
+            return cur.rowcount == 1
+
     def listar_por_comprobante(
         self, id_comprobante_venta: str
     ) -> list[PagoRow]:

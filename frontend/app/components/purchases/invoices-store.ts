@@ -4,6 +4,7 @@ import {
   getInvoice as getInvoiceApi,
   listInvoices as listInvoicesApi,
   registerInvoicePayment as registerInvoicePaymentApi,
+  updateInvoicePaymentStatus as updateInvoicePaymentStatusApi,
 } from "./invoices-api";
 import type {
   InvoicePaymentPayload,
@@ -122,6 +123,16 @@ export async function addInvoicePayment(
   payload: InvoicePaymentPayload
 ): Promise<InvoicePago> {
   const pago = await registerInvoicePaymentApi(id, payload);
+  await loadInvoiceDetail(id, true);
+  return pago;
+}
+
+export async function updateInvoicePaymentStatus(
+  id: string,
+  idPago: string,
+  estado: "aprobado" | "rechazado"
+): Promise<InvoicePago> {
+  const pago = await updateInvoicePaymentStatusApi(id, idPago, estado);
   await loadInvoiceDetail(id, true);
   return pago;
 }

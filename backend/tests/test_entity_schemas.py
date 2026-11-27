@@ -97,6 +97,22 @@ def test_proveedor_exige_cuit_de_once_digitos() -> None:
                 "cuit": "12345",
                 "direccion": _ADDRESS,
                 "email": "proveedor@example.com",
+                "id_condicion_iva": "CIV-0001",
+                "razon_social": "Proveedor Demo",
+                "telefono": "1144445555",
+            }
+        )
+
+
+def test_proveedor_exige_condicion_iva_en_alta() -> None:
+    with pytest.raises(ValidationError):
+        ProveedorCreate.model_validate(
+            {
+                "banco": "Banco Demo",
+                "cuenta": "12345",
+                "cuit": "20123456789",
+                "direccion": _ADDRESS,
+                "email": "proveedor@example.com",
                 "razon_social": "Proveedor Demo",
                 "telefono": "1144445555",
             }
@@ -111,6 +127,7 @@ def test_proveedor_normaliza_cuit_en_alta_y_edicion() -> None:
             "cuit": "20-12345678-9",
             "direccion": _ADDRESS,
             "email": "proveedor@example.com",
+            "id_condicion_iva": "CIV-0001",
             "razon_social": "Proveedor Demo",
             "telefono": "1144445555",
         }
