@@ -21,6 +21,7 @@ import {
   type ComboboxOption,
 } from "~/components/ui/combobox";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import {
   Card,
   CardContent,
@@ -353,20 +354,36 @@ export function AnalyticsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Input
-            type="date"
-            aria-label="Fecha desde"
-            className="w-40"
-            value={desde}
-            onChange={(event) => setDesde(event.target.value)}
-          />
-          <Input
-            type="date"
-            aria-label="Fecha hasta"
-            className="w-40"
-            value={hasta}
-            onChange={(event) => setHasta(event.target.value)}
-          />
+          <div className="flex items-center gap-1.5">
+            <Label
+              htmlFor="analytics-desde"
+              className="shrink-0 text-muted-foreground"
+            >
+              Desde
+            </Label>
+            <Input
+              id="analytics-desde"
+              type="date"
+              className="w-40"
+              value={desde}
+              onChange={(event) => setDesde(event.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Label
+              htmlFor="analytics-hasta"
+              className="shrink-0 text-muted-foreground"
+            >
+              Hasta
+            </Label>
+            <Input
+              id="analytics-hasta"
+              type="date"
+              className="w-40"
+              value={hasta}
+              onChange={(event) => setHasta(event.target.value)}
+            />
+          </div>
           <Combobox
             value={idCategoria}
             onValueChange={setIdCategoria}
