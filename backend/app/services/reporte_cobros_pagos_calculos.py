@@ -31,6 +31,20 @@ def validar_rango(desde: date | None, hasta: date | None) -> tuple[date, date]:
     return desde, hasta
 
 
+def validar_filtros(
+    desde: date | None,
+    hasta: date | None,
+    id_cliente: str | None = None,
+    id_proveedor: str | None = None,
+) -> tuple[date, date]:
+    """Valida el rango y que no se filtre cliente y proveedor a la vez."""
+    if id_cliente and id_proveedor:
+        raise ReporteCobrosPagosDatosInvalidos(
+            "No se puede filtrar por cliente y proveedor al mismo tiempo"
+        )
+    return validar_rango(desde, hasta)
+
+
 def _dinero(valor: Any) -> Decimal:
     return Decimal(str(valor or 0)).quantize(
         _CENTAVOS, rounding=ROUND_HALF_UP
@@ -46,9 +60,10 @@ def agregar_pagos(
     pendientes reservan saldo y los rechazados no afectan balances.
     """
     totales = {
-        f"{clave}_{ESTADOS_CLAVE[estado]}": Decimal("0.00")
-        for clave in TIPOS.values()
-        for estado in ESTADOS
+        "cobros_aprobados": Decimal("0.00"),
+        "pagos_aprobados": Decimal("0.00"),
+        "pagos_pendientes": Decimal("0.00"),
+        "pagos_rechazados": Decimal("0.00"),
     }
     por_estado = {
         estado: {
@@ -63,6 +78,10 @@ def agregar_pagos(
         estado = fila["estado"]
         tipo = fila["tipo_pago"]
         if estado not in ESTADOS or tipo not in TIPOS:
+            continue
+        # Los cobros no tienen transición de estado: solo existen aprobados.
+        # Los pendientes/rechazados de legacy no deben sumarse al reporte.
+        if tipo == "cobro" and estado != "aprobado":
             continue
         monto = _dinero(fila["monto"])
         clave_tipo = TIPOS[tipo]

@@ -6,7 +6,7 @@ from typing import Any
 from app.repositories.pago_repository import PagoRepository
 from app.services.reporte_cobros_pagos_calculos import (
     agregar_pagos,
-    validar_rango,
+    validar_filtros,
 )
 
 
@@ -21,7 +21,9 @@ class ReporteCobrosPagosService:
         id_cliente: str | None = None,
         id_proveedor: str | None = None,
     ) -> dict[str, Any]:
-        desde, hasta = validar_rango(desde, hasta)
+        desde, hasta = validar_filtros(
+            desde, hasta, id_cliente, id_proveedor
+        )
 
         filas = self._pagos.listar_para_reporte(
             desde, hasta, id_cliente, id_proveedor

@@ -578,6 +578,7 @@ export function InvoiceDetailPage() {
                 id="invoice-payment-fecha"
                 type="date"
                 value={fechaPago}
+                max={todayInput()}
                 onChange={(event) => setFechaPago(event.target.value)}
                 disabled={paying}
               />

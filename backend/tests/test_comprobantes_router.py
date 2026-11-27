@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI
@@ -347,6 +347,30 @@ def test_payment_over_balance_is_conflict() -> None:
         )
 
     assert response.status_code == 409
+
+
+def test_cobro_rechaza_fecha_futura_y_estado_no_aprobado() -> None:
+    futuro = (date.today() + timedelta(days=1)).isoformat()
+    with _client("ventas") as client:
+        fecha = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/pagos",
+            json={
+                "id_medio_pago": "MPG-0001",
+                "monto": "10.00",
+                "fecha_pago": futuro,
+            },
+        )
+        estado = client.post(
+            "/api/v1/ventas/comprobantes/FV-0001/pagos",
+            json={
+                "id_medio_pago": "MPG-0001",
+                "monto": "10.00",
+                "estado": "pendiente",
+            },
+        )
+
+    assert fecha.status_code == 422
+    assert estado.status_code == 422
 
 
 def test_send_comprobante_returns_envio() -> None:

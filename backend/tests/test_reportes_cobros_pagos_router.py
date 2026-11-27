@@ -28,8 +28,6 @@ def _datos() -> dict:
         },
         "totales": {
             "cobros_aprobados": Decimal("100.00"),
-            "cobros_pendientes": Decimal("20.00"),
-            "cobros_rechazados": Decimal("0.00"),
             "pagos_aprobados": Decimal("40.00"),
             "pagos_pendientes": Decimal("0.00"),
             "pagos_rechazados": Decimal("0.00"),
@@ -105,7 +103,7 @@ def test_administrador_puede_obtener_reporte() -> None:
         response = client.get(
             "/api/v1/reportes/cobros-pagos"
             "?desde=2026-11-01&hasta=2026-11-30"
-            "&id_cliente=CLI-0001&id_proveedor=PRV-0001"
+            "&id_cliente=CLI-0001"
         )
 
     assert response.status_code == 200
@@ -119,7 +117,7 @@ def test_administrador_puede_obtener_reporte() -> None:
         "desde": _DESDE,
         "hasta": _HASTA,
         "id_cliente": "CLI-0001",
-        "id_proveedor": "PRV-0001",
+        "id_proveedor": None,
     }
 
 
@@ -140,6 +138,26 @@ def test_rango_invertido_devuelve_422() -> None:
             "?desde=2026-11-30&hasta=2026-11-01"
         )
     assert response.status_code == 422
+
+
+def test_cliente_y_proveedor_juntos_devuelve_422() -> None:
+    service = FakeReporteService()
+    with _client("administrador", service) as client:
+        response = client.get(
+            "/api/v1/reportes/cobros-pagos"
+            "?desde=2026-11-01&hasta=2026-11-30"
+            "&id_cliente=CLI-0001&id_proveedor=PRV-0001"
+        )
+        pdf = client.get(
+            "/api/v1/reportes/cobros-pagos/reporte.pdf"
+            "?desde=2026-11-01&hasta=2026-11-30"
+            "&id_cliente=CLI-0001&id_proveedor=PRV-0001"
+        )
+
+    assert response.status_code == 422
+    assert pdf.status_code == 422
+    assert "cliente y proveedor" in response.json()["detail"]
+    assert service.parametros == {}
 
 
 def test_error_de_rango_del_servicio_devuelve_422() -> None:

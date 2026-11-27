@@ -133,8 +133,6 @@ class ReporteCobrosPagosPDF(FPDF):
         self._titulo("Totales del periodo")
         filas = [
             ["Cobros aprobados", _importe(totales.get("cobros_aprobados"))],
-            ["Cobros pendientes", _importe(totales.get("cobros_pendientes"))],
-            ["Cobros rechazados", _importe(totales.get("cobros_rechazados"))],
             ["Pagos aprobados", _importe(totales.get("pagos_aprobados"))],
             ["Pagos pendientes", _importe(totales.get("pagos_pendientes"))],
             ["Pagos rechazados", _importe(totales.get("pagos_rechazados"))],
@@ -147,8 +145,12 @@ class ReporteCobrosPagosPDF(FPDF):
         tabla = [
             [
                 fila["estado"],
-                _importe(fila["cobros"]["monto"]),
-                fila["cobros"]["cantidad"],
+                _importe(fila["cobros"]["monto"])
+                if fila["estado"] == "aprobado"
+                else "-",
+                fila["cobros"]["cantidad"]
+                if fila["estado"] == "aprobado"
+                else "-",
                 _importe(fila["pagos"]["monto"]),
                 fila["pagos"]["cantidad"],
             ]

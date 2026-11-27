@@ -11,8 +11,8 @@ from app.schemas.comprobantes import (
     ComprobanteVentaResumen,
 )
 from app.schemas.pagos import (
+    CobroCreate,
     ComprobanteEnvioRead,
-    PagoCreate,
     PagoListadoRead,
     PagoRead,
 )
@@ -209,7 +209,7 @@ def listar_pagos(
     status_code=status.HTTP_201_CREATED,
 )
 def registrar_pago(
-    datos: PagoCreate,
+    datos: CobroCreate,
     service: PagoDep,
     id_comprobante_venta: Id,
     _: Usuario,

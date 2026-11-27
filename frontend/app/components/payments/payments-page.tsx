@@ -275,9 +275,10 @@ export function PaymentsPage() {
   }, [payments, normalizedQuery, methodFilter]);
 
   const rangoValido = Boolean(desde && hasta && desde <= hasta);
+  const filtrosExclusivos = !(idCliente && idProveedor);
 
   useEffect(() => {
-    if (!isAdmin || !rangoValido) {
+    if (!isAdmin || !rangoValido || !filtrosExclusivos) {
       setReporte(null);
       return;
     }
@@ -308,7 +309,15 @@ export function PaymentsPage() {
     return () => {
       active = false;
     };
-  }, [isAdmin, rangoValido, desde, hasta, idCliente, idProveedor]);
+  }, [
+    isAdmin,
+    rangoValido,
+    filtrosExclusivos,
+    desde,
+    hasta,
+    idCliente,
+    idProveedor,
+  ]);
 
   useEffect(() => {
     if (!isAdmin || activeTab !== "pagos-proveedor" || !rangoValido) {
@@ -336,7 +345,18 @@ export function PaymentsPage() {
     };
   }, [isAdmin, activeTab, rangoValido, desde, hasta, idProveedor]);
 
+  function seleccionarCliente(valor: string) {
+    setIdCliente(valor);
+    if (valor) setIdProveedor("");
+  }
+
+  function seleccionarProveedor(valor: string) {
+    setIdProveedor(valor);
+    if (valor) setIdCliente("");
+  }
+
   async function handleExport() {
+    if (!rangoValido || !filtrosExclusivos) return;
     setExporting(true);
     setExportError(null);
     try {
@@ -539,7 +559,8 @@ export function PaymentsPage() {
           <CardHeader>
             <CardTitle>Filtros del reporte</CardTitle>
             <p className="text-sm text-muted-foreground">
-              El backend calcula todos los importes con estos filtros.
+              El backend calcula todos los importes con estos filtros. Elija
+              cliente o proveedor, nunca ambos.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-3">
@@ -555,6 +576,7 @@ export function PaymentsPage() {
                 type="date"
                 className="w-40"
                 value={desde}
+                max={hoyISO()}
                 onChange={(event) => setDesde(event.target.value)}
               />
             </div>
@@ -570,27 +592,32 @@ export function PaymentsPage() {
                 type="date"
                 className="w-40"
                 value={hasta}
+                max={hoyISO()}
                 onChange={(event) => setHasta(event.target.value)}
               />
             </div>
             <Combobox
+              id="reporte-cliente"
               value={idCliente}
-              onValueChange={setIdCliente}
+              onValueChange={seleccionarCliente}
               options={clienteOptions}
               searchValue={busquedaCliente}
               onSearchChange={setBusquedaCliente}
               searchPlaceholder="Buscar por nombre, DNI/CUIT o email…"
               notFoundText="No se encontraron clientes"
+              disabled={Boolean(idProveedor)}
               className="w-56"
             />
             <Combobox
+              id="reporte-proveedor"
               value={idProveedor}
-              onValueChange={setIdProveedor}
+              onValueChange={seleccionarProveedor}
               options={proveedorOptions}
               searchValue={busquedaProveedor}
               onSearchChange={setBusquedaProveedor}
               searchPlaceholder="Buscar por razón social, CUIT o email…"
               notFoundText="No se encontraron proveedores"
+              disabled={Boolean(idCliente)}
               className="w-56"
             />
             <Button variant="ghost" onClick={limpiarFiltros}>
@@ -659,6 +686,11 @@ export function PaymentsPage() {
               La fecha "desde" no puede ser posterior a la fecha "hasta".
             </p>
           )}
+          {!filtrosExclusivos && (
+            <p className="text-sm text-destructive" role="alert">
+              Seleccione un cliente o un proveedor, no ambos.
+            </p>
+          )}
           {reporteError && (
             <p className="text-sm text-destructive" role="alert">
               {reporteError}
@@ -680,7 +712,7 @@ export function PaymentsPage() {
               </div>
               <Button
                 onClick={() => void handleExport()}
-                disabled={!rangoValido || exporting}
+                disabled={!rangoValido || !filtrosExclusivos || exporting}
               >
                 {exporting ? "Generando..." : "Descargar PDF"}
               </Button>
@@ -703,9 +735,9 @@ export function PaymentsPage() {
               />
               <KpiCard
                 icon={<Clock className="size-4" />}
-                label="Pendiente (no realizado)"
+                label="Pagos pendientes"
                 value={formatMoney(
-                  Number(reporte?.totales.cobros_pendientes ?? 0)
+                  Number(reporte?.totales.pagos_pendientes ?? 0)
                 )}
               />
             </CardContent>
@@ -787,10 +819,14 @@ export function PaymentsPage() {
                           {estado.estado}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatMoney(Number(estado.cobros.monto))}
+                          {estado.estado === "aprobado"
+                            ? formatMoney(Number(estado.cobros.monto))
+                            : "—"}
                         </TableCell>
                         <TableCell className="text-right">
-                          {estado.cobros.cantidad}
+                          {estado.estado === "aprobado"
+                            ? estado.cobros.cantidad
+                            : "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           {formatMoney(Number(estado.pagos.monto))}

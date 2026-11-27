@@ -6,7 +6,7 @@ from psycopg import errors
 
 from app.repositories.comprobante_repository import ComprobanteRepository
 from app.repositories.pago_repository import PagoRepository, PagoRow
-from app.schemas.pagos import PagoCreate
+from app.schemas.pagos import CobroCreate
 from app.services.comprobante_service import ComprobanteNoEncontrado
 
 
@@ -40,8 +40,14 @@ class PagoService:
         return self._pagos.listar_todos(limit, offset)
 
     def registrar(
-        self, id_comprobante_venta: str, datos: PagoCreate
+        self, id_comprobante_venta: str, datos: CobroCreate
     ) -> PagoRow:
+        if datos.estado != "aprobado":
+            raise PagoDatosInvalidos(
+                "Los cobros solo pueden registrarse como aprobados"
+            )
+        if datos.fecha_pago and datos.fecha_pago > date.today():
+            raise PagoDatosInvalidos("'fecha_pago' no puede ser futura")
         try:
             with self._comprobantes.transaction():
                 comprobante = self._comprobantes.obtener(

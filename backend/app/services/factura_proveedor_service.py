@@ -290,6 +290,8 @@ class FacturaProveedorService:
         id_factura_proveedor: str,
         datos: PagoProveedorCreate,
     ) -> PagoRow:
+        if datos.fecha_pago and datos.fecha_pago > date.today():
+            raise PagoFacturaDatosInvalidos("'fecha_pago' no puede ser futura")
         try:
             with self._repo.transaction():
                 factura = self._repo.obtener(

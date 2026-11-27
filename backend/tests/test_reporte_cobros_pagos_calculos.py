@@ -6,6 +6,7 @@ import pytest
 from app.services.reporte_cobros_pagos_calculos import (
     ReporteCobrosPagosDatosInvalidos,
     agregar_pagos,
+    validar_filtros,
     validar_rango,
 )
 
@@ -37,8 +38,9 @@ def test_agrupacion_separa_cobros_pagos_y_estados() -> None:
     totales, por_estado, por_medio = agregar_pagos(filas)
 
     assert totales["cobros_aprobados"] == Decimal("100.00")
-    assert totales["cobros_pendientes"] == Decimal("20.00")
-    assert totales["cobros_rechazados"] == Decimal("5.00")
+    # Los cobros pendientes/rechazados no tienen workflow y no se contabilizan.
+    assert "cobros_pendientes" not in totales
+    assert "cobros_rechazados" not in totales
     assert totales["pagos_aprobados"] == Decimal("30.00")
     assert totales["pagos_pendientes"] == Decimal("10.00")
     assert totales["pagos_rechazados"] == Decimal("0.00")
@@ -50,9 +52,9 @@ def test_agrupacion_separa_cobros_pagos_y_estados() -> None:
     assert por_estado[0]["estado"] == "aprobado"
     assert por_estado[0]["cobros"] == {"monto": Decimal("100.00"), "cantidad": 1}
     assert por_estado[0]["pagos"] == {"monto": Decimal("30.00"), "cantidad": 1}
-    assert por_estado[1]["cobros"]["cantidad"] == 1
+    assert por_estado[1]["cobros"]["cantidad"] == 0
     assert por_estado[1]["pagos"]["cantidad"] == 1
-    assert por_estado[2]["cobros"]["monto"] == Decimal("5.00")
+    assert por_estado[2]["cobros"]["monto"] == Decimal("0.00")
     assert por_estado[2]["pagos"]["cantidad"] == 0
 
     assert por_medio == [
@@ -97,3 +99,17 @@ def test_validar_rango_rechaza_faltantes_e_invertido() -> None:
         date(2026, 11, 1),
         date(2026, 11, 30),
     )
+
+
+def test_validar_filtros_rechaza_cliente_y_proveedor_juntos() -> None:
+    with pytest.raises(ReporteCobrosPagosDatosInvalidos):
+        validar_filtros(
+            date(2026, 11, 1),
+            date(2026, 11, 30),
+            "CLI-0001",
+            "PRV-0001",
+        )
+
+    assert validar_filtros(
+        date(2026, 11, 1), date(2026, 11, 30), "CLI-0001", None
+    ) == (date(2026, 11, 1), date(2026, 11, 30))

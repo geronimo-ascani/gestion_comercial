@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 
 const reporte = {
@@ -14,8 +14,6 @@ const reporte = {
   },
   totales: {
     cobros_aprobados: "100.00",
-    cobros_pendientes: "20.00",
-    cobros_rechazados: "0.00",
     pagos_aprobados: "40.00",
     pagos_pendientes: "0.00",
     pagos_rechazados: "0.00",
@@ -94,6 +92,7 @@ function renderPage(entry: string) {
 describe("PaymentsPage - RF-20", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Element.prototype.scrollIntoView = vi.fn();
     mocks.useCurrentUser.mockReturnValue({ role: "administrador" });
     mocks.getReporteCobrosPagos.mockResolvedValue(reporte);
     mocks.listPagosProveedor.mockResolvedValue([]);
@@ -140,5 +139,66 @@ describe("PaymentsPage - RF-20", () => {
     ).toBeNull();
     expect(mocks.getReporteCobrosPagos).not.toHaveBeenCalled();
     expect(screen.getByText("Comprobantes emitidos")).toBeTruthy();
+  });
+
+  it("limita las fechas del reporte hasta hoy", () => {
+    const hoy = new Date();
+    const esperado = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+
+    renderPage("/payments?tab=reportes");
+
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).max).toBe(
+      esperado
+    );
+    expect((screen.getByLabelText("Hasta") as HTMLInputElement).max).toBe(
+      esperado
+    );
+  });
+
+  it("cliente y proveedor son excluyentes y solo envía el seleccionado", async () => {
+    mocks.listCustomers.mockResolvedValue([
+      {
+        id: "CLI-0001",
+        firstName: "Ana",
+        lastName: "Pérez",
+        document: "20123456789",
+        phone: "",
+        email: "ana@example.com",
+        address: {},
+      },
+    ] as never);
+    mocks.listProviders.mockResolvedValue([
+      {
+        id: "PRV-0001",
+        name: "Proveedor Uno",
+        cuit: "20123456789",
+        phone: "",
+        email: "proveedor@example.com",
+        address: {},
+        bank: "",
+        account: "",
+      },
+    ] as never);
+
+    renderPage("/payments?tab=reportes");
+
+    const cliente = document.getElementById("reporte-cliente") as HTMLButtonElement;
+    const proveedor = document.getElementById(
+      "reporte-proveedor"
+    ) as HTMLButtonElement;
+    await waitFor(() => expect(cliente.textContent).toContain("Todos los clientes"));
+
+    fireEvent.click(cliente);
+    fireEvent.click(await screen.findByText("Ana Pérez"));
+
+    expect(proveedor.disabled).toBe(true);
+    await waitFor(() => {
+      expect(mocks.getReporteCobrosPagos).toHaveBeenLastCalledWith({
+        desde: expect.any(String),
+        hasta: expect.any(String),
+        id_cliente: "CLI-0001",
+        id_proveedor: undefined,
+      });
+    });
   });
 });

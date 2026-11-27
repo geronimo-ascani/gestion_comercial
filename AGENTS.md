@@ -136,9 +136,12 @@
   PDF. `cliente_email` is returned by both summary and detail endpoints from
   that snapshot.
 - `estado_pago` derives from approved payments: `emitida` without payments,
-  `aprobada` with a partial payment, `pagada` at zero balance. Pending or
-  rejected payments are stored but do not affect the balance; the committed
-  amount cannot exceed the comprobante total. Partial payments are allowed.
+  `aprobada` with a partial payment, `pagada` at zero balance. Customer
+  collections are always approved: pending or rejected states are not accepted
+  for sales comprobantes, so they cannot appear as orphaned in reports. The
+  committed amount cannot exceed the comprobante total. Partial payments are
+  allowed. `fecha_pago` cannot be in the future for any payment, customer or
+  supplier; the API returns `422`.
 - Approved payments update the comprobante balance and
   `pedido_cliente.saldo_pendiente` atomically.
 - The backend generates the PDF with `fpdf2`. Sending by email attaches that
@@ -504,9 +507,12 @@
 - RF-20 reports are backend-owned and administrator-only:
   `GET /reportes/cobros-pagos` and `GET /reportes/cobros-pagos/reporte.pdf`
   accept a required `desde`/`hasta` pair plus optional `id_cliente` and
-  `id_proveedor`. JSON and PDF share the same calculated data; totals are
-  grouped by payment state and payment method, and "realizados" amounts count
-  only approved payments. The global supplier-payment listing
+  `id_proveedor`. Sending both filters at once returns `422` and the UI makes
+  them mutually exclusive. JSON and PDF share the same calculated data; totals
+  are grouped by payment state and payment method, and "realizados" amounts
+  count only approved payments. Pending and rejected states apply only to
+  supplier payments; collections have no such states and are not reported
+  under them. The global supplier-payment listing
   `GET /compras/pagos` is also administrator-only, while `GET /ventas/pagos`
   remains available to `administrador` and `ventas`. The payments page hides
   the Reports and Supplier payments tabs from non-administrators and no longer

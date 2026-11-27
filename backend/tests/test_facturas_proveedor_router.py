@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI
@@ -287,6 +287,20 @@ def test_pagos_de_factura() -> None:
     assert listado.status_code == 200
     assert listado.json()[0]["tipo_pago"] == "pago"
     assert creado.status_code == 201
+
+
+def test_pago_de_factura_rechaza_fecha_futura() -> None:
+    futuro = (date.today() + timedelta(days=1)).isoformat()
+    with _client("administrador") as client:
+        response = client.post(
+            "/api/v1/compras/facturas/FP-0001/pagos",
+            json={
+                "id_medio_pago": "MPG-0001",
+                "monto": 100,
+                "fecha_pago": futuro,
+            },
+        )
+    assert response.status_code == 422
 
 
 def test_cambiar_estado_pago_pendiente_de_factura() -> None:

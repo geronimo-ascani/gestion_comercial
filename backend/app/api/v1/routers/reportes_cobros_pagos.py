@@ -8,7 +8,7 @@ from app.api.v1.routers.auth import get_current_user, require_roles
 from app.schemas.reportes_cobros_pagos import ReporteCobrosPagosRead
 from app.services.reporte_cobros_pagos_calculos import (
     ReporteCobrosPagosDatosInvalidos,
-    validar_rango,
+    validar_filtros,
 )
 from app.services.reporte_cobros_pagos_pdf import (
     generar_pdf_reporte_cobros_pagos,
@@ -38,7 +38,7 @@ def obtener_parametros(
     id_proveedor: Annotated[str | None, Query(max_length=20)] = None,
 ) -> dict[str, Any]:
     try:
-        validar_rango(desde, hasta)
+        validar_filtros(desde, hasta, id_cliente, id_proveedor)
     except ReporteCobrosPagosDatosInvalidos as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

@@ -107,7 +107,7 @@ export interface PagoPayload {
   id_medio_pago: string;
   monto: string;
   referencia?: string;
-  estado?: "aprobado" | "pendiente" | "rechazado";
+  estado?: "aprobado";
 }
 
 /** RF-20: el backend calcula todos los importes del reporte. */
@@ -135,8 +135,6 @@ export interface ReporteCobrosPagosApi {
   };
   totales: {
     cobros_aprobados: string;
-    cobros_pendientes: string;
-    cobros_rechazados: string;
     pagos_aprobados: string;
     pagos_pendientes: string;
     pagos_rechazados: string;

@@ -64,3 +64,15 @@ def test_servicio_reporte_rechaza_rango_invertido() -> None:
             _HASTA,
             _DESDE,
         )
+
+
+def test_servicio_reporte_rechaza_cliente_y_proveedor_juntos() -> None:
+    repo = FakePagoRepository()
+    with pytest.raises(ReporteCobrosPagosDatosInvalidos):
+        ReporteCobrosPagosService(repo).obtener(  # type: ignore[arg-type]
+            _DESDE,
+            _HASTA,
+            id_cliente="CLI-0001",
+            id_proveedor="PRV-0001",
+        )
+    assert repo.llamada is None

@@ -9,7 +9,7 @@ from app.schemas.comprobantes import (
     ComprobanteVentaRead,
     ComprobanteVentaResumen,
 )
-from app.schemas.pagos import PagoCreate
+from app.schemas.pagos import CobroCreate, PagoCreate
 from app.services.comprobante_service import (
     ComprobanteEnvioFallido,
     ComprobanteEnvioNoConfigurado,
@@ -451,7 +451,7 @@ def test_pago_parcial_y_total_actualiza_estado_y_saldo() -> None:
 
     pago_service.registrar(
         comprobante["id_comprobante_venta"],
-        PagoCreate(id_medio_pago="MPG-0001", monto=Decimal("40.00")),
+        CobroCreate(id_medio_pago="MPG-0001", monto=Decimal("40.00")),
     )
     parcial = service.obtener(comprobante["id_comprobante_venta"])
     assert parcial["estado_pago"] == "aprobada"
@@ -460,7 +460,7 @@ def test_pago_parcial_y_total_actualiza_estado_y_saldo() -> None:
 
     pago_service.registrar(
         comprobante["id_comprobante_venta"],
-        PagoCreate(id_medio_pago="MPG-0001", monto=Decimal("60.00")),
+        CobroCreate(id_medio_pago="MPG-0001", monto=Decimal("60.00")),
     )
     total = service.obtener(comprobante["id_comprobante_venta"])
     assert total["estado_pago"] == "pagada"
@@ -478,24 +478,25 @@ def test_pago_que_excede_el_saldo_es_rechazado() -> None:
     with pytest.raises(PagoDatosInvalidos):
         pago_service.registrar(
             comprobante["id_comprobante_venta"],
-            PagoCreate(id_medio_pago="MPG-0001", monto=Decimal("150.00")),
+            CobroCreate(id_medio_pago="MPG-0001", monto=Decimal("150.00")),
         )
 
 
-def test_pago_rechazado_no_modifica_el_saldo() -> None:
+def test_cobro_rechazado_no_se_registra_ni_modifica_el_saldo() -> None:
     service, pago_service, repo, _pago_repo = _services()
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
 
-    pago_service.registrar(
-        comprobante["id_comprobante_venta"],
-        PagoCreate(
-            id_medio_pago="MPG-0001",
-            monto=Decimal("100.00"),
-            estado="rechazado",
-        ),
-    )
+    with pytest.raises(PagoDatosInvalidos):
+        pago_service.registrar(
+            comprobante["id_comprobante_venta"],
+            PagoCreate(
+                id_medio_pago="MPG-0001",
+                monto=Decimal("100.00"),
+                estado="rechazado",
+            ),
+        )
     actual = service.obtener(comprobante["id_comprobante_venta"])
 
     assert actual["estado_pago"] == "emitida"

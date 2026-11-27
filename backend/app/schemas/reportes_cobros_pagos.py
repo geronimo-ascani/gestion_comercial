@@ -36,8 +36,6 @@ class ReporteMedioPagoRead(SchemaBase):
 
 class ReporteTotalesRead(SchemaBase):
     cobros_aprobados: Decimal
-    cobros_pendientes: Decimal
-    cobros_rechazados: Decimal
     pagos_aprobados: Decimal
     pagos_pendientes: Decimal
     pagos_rechazados: Decimal

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .base import SchemaBase
 
@@ -31,6 +31,19 @@ class PagoCreate(SchemaBase):
     referencia: str = Field(default="", max_length=80)
     estado: Literal["aprobado", "pendiente", "rechazado"] = "aprobado"
     fecha_pago: date | None = None
+
+    @field_validator("fecha_pago")
+    @classmethod
+    def fecha_pago_no_futura(cls, valor: date | None) -> date | None:
+        if valor is not None and valor > date.today():
+            raise ValueError("'fecha_pago' no puede ser futura")
+        return valor
+
+
+class CobroCreate(PagoCreate):
+    """Cobro de comprobante: siempre aprobado, sin estados huérfanos."""
+
+    estado: Literal["aprobado"] = "aprobado"
 
 
 class PagoEstadoUpdate(SchemaBase):
