@@ -33,7 +33,9 @@ const mocks = vi.hoisted(() => ({
   useInvoices: vi.fn(() => []),
   usePayments: vi.fn(() => []),
   usePaymentsLoading: vi.fn(() => false),
-  getReporteCobrosPagos: vi.fn(async () => undefined),
+  getReporteCobrosPagos: vi.fn<(filters: unknown) => Promise<unknown>>(
+    async () => undefined
+  ),
   downloadReporteCobrosPagosPdf: vi.fn(async () => undefined),
   listPagosProveedor: vi.fn(async () => []),
   listCustomers: vi.fn(async () => []),

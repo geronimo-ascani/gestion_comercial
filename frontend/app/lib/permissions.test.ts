@@ -53,6 +53,16 @@ describe("permissions", () => {
 
     expect(canAccessRoute("ventas", "/customers")).toBe(true);
     expect(canAccessRoute("abastecimiento", "/customers")).toBe(false);
+
+    expect(canAccessRoute("ventas", "/customers/accounts")).toBe(true);
+    expect(canAccessRoute("ventas", "/customers/accounts/CLI-0001")).toBe(true);
+    expect(canAccessRoute("abastecimiento", "/customers/accounts")).toBe(false);
+    expect(canAccessRoute("abastecimiento", "/customers/accounts/CLI-0001")).toBe(false);
+
+    expect(canAccessRoute("abastecimiento", "/providers/accounts")).toBe(true);
+    expect(canAccessRoute("abastecimiento", "/providers/accounts/PRV-0001")).toBe(true);
+    expect(canAccessRoute("ventas", "/providers/accounts")).toBe(false);
+    expect(canAccessRoute("ventas", "/providers/accounts/PRV-0001")).toBe(false);
   });
 
   it("mantiene analíticas, catálogo y mi empresa para los tres roles", () => {

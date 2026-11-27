@@ -33,55 +33,12 @@ import {
 
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
-import { formatAddress } from "~/lib/address";
-import { formatMoney } from "~/lib/currency";
 import { useCurrentUser } from "../auth/session-store";
-import type { Provider } from "../purchases/purchases-types";
 import {
   refreshProviders,
   removeProvider,
   useProviders,
 } from "../purchases/purchases-store";
-
-function ProviderDetailDialog({
-  provider,
-  trigger,
-}: {
-  provider: Provider;
-  trigger: ReactElement;
-}) {
-  const details: Array<[string, string]> = [
-    ["CUIT", provider.cuit || "—"],
-    ["Teléfono", provider.phone || "—"],
-    ["Correo electrónico", provider.email || "—"],
-    ["Dirección", formatAddress(provider.address) || "—"],
-    ["Banco", provider.bank || "—"],
-    ["Número de cuenta", provider.account || "—"],
-    ["Saldo en cuenta corriente", formatMoney(provider.balance ?? 0)],
-  ];
-  return (
-    <Dialog>
-      <DialogTrigger render={trigger} />
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{provider.name}</DialogTitle>
-          <DialogDescription>Datos del proveedor</DialogDescription>
-        </DialogHeader>
-        <dl className="space-y-3">
-          {details.map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-4">
-              <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd className="text-right text-sm font-medium break-all">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cerrar</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function ConfirmDeleteDialog({
   title,
@@ -236,18 +193,16 @@ export function ProvidersPage() {
                     <TableCell>{provider.phone || "—"}</TableCell>
                     {canManage && <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <ProviderDetailDialog
-                          provider={provider}
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Ver proveedor ${provider.name}`}
-                            >
-                              <Eye />
-                            </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Ver proveedor ${provider.name}`}
+                          onClick={() =>
+                            navigate(`/providers/accounts/${provider.id}`)
                           }
-                        />
+                        >
+                          <Eye />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"

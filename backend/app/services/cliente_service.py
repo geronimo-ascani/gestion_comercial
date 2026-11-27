@@ -1,9 +1,11 @@
+from decimal import Decimal
 from typing import Any
 
 from psycopg import errors
 
 from app.repositories.cliente_repository import ClienteRepository, ClienteRow
 from app.schemas.clientes import ClienteCreate, ClienteUpdate
+from app.services.cuenta_corriente_service import CuentaCorrienteService
 
 
 class ClienteError(Exception):
@@ -31,18 +33,24 @@ class ClienteSinCambios(ClienteError):
 
 
 class ClienteService:
-    def __init__(self, repo: ClienteRepository) -> None:
+    def __init__(
+        self,
+        repo: ClienteRepository,
+        cuentas: CuentaCorrienteService | None = None,
+    ) -> None:
         self._repo = repo
+        self._cuentas = cuentas
 
-    @staticmethod
-    def _publico(row: ClienteRow) -> dict[str, Any]:
+    def _publico(
+        self, row: ClienteRow, saldo: Decimal | None = None
+    ) -> dict[str, Any]:
         return {
             "id_cliente": row["id_cliente"],
             "apellido": row["apellido"],
             "dni_cuit": row["dni_cuit"],
             "email": row["email"],
             "nombre": row["nombre"],
-            "saldo": row["saldo"],
+            "saldo": saldo if saldo is not None else row["saldo"],
             "telefono": row["telefono"],
             "id_condicion_iva": row["id_condicion_iva"],
             "condicion_iva_descripcion": row["condicion_iva_descripcion"],
@@ -56,15 +64,33 @@ class ClienteService:
             },
         }
 
+    def _publicos(self, filas: list[ClienteRow]) -> list[dict[str, Any]]:
+        saldos: dict[str, Decimal] = {}
+        if self._cuentas is not None:
+            saldos = self._cuentas.saldos_clientes(
+                [fila["id_cliente"] for fila in filas]
+            )
+        return [
+            self._publico(
+                fila,
+                saldos.get(fila["id_cliente"], Decimal("0.00"))
+                if self._cuentas is not None
+                else None,
+            )
+            for fila in filas
+        ]
+
     def listar(self, q: str | None, limit: int, offset: int) -> list[dict[str, Any]]:
         busqueda = q.strip() if q else None
-        return [self._publico(row) for row in self._repo.listar(busqueda or None, limit, offset)]
+        return self._publicos(
+            self._repo.listar(busqueda or None, limit, offset)
+        )
 
     def obtener(self, id_cliente: str) -> dict[str, Any]:
         row = self._repo.obtener(id_cliente)
         if row is None:
             raise ClienteNoEncontrado(id_cliente)
-        return self._publico(row)
+        return self._publicos([row])[0]
 
     def crear(self, datos: ClienteCreate) -> dict[str, Any]:
         values = datos.model_dump(exclude={"direccion"})
@@ -82,7 +108,7 @@ class ClienteService:
                 )
                 row = self._repo.obtener(id_cliente)
                 assert row is not None
-                return self._publico(row)
+                return self._publicos([row])[0]
         except errors.UniqueViolation as exc:
             raise ClienteDuplicado(
                 "Ya existe un cliente con ese DNI/CUIT"
@@ -127,7 +153,7 @@ class ClienteService:
                     )
                 row = self._repo.obtener(id_cliente)
                 assert row is not None
-                return self._publico(row)
+                return self._publicos([row])[0]
         except errors.UniqueViolation as exc:
             raise ClienteDuplicado(
                 "Ya existe un cliente con ese DNI/CUIT"

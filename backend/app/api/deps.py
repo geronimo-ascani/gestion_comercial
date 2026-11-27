@@ -10,6 +10,9 @@ from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.catalogo_repository import CatalogoRepository
 from app.repositories.categoria_repository import CategoriaRepository
 from app.repositories.comprobante_repository import ComprobanteRepository
+from app.repositories.cuenta_corriente_repository import (
+    CuentaCorrienteRepository,
+)
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.factura_proveedor_repository import (
     FacturaProveedorRepository,
@@ -28,6 +31,7 @@ from app.services.cliente_service import ClienteService
 from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
 from app.services.comprobante_service import ComprobanteService
+from app.services.cuenta_corriente_service import CuentaCorrienteService
 from app.services.empresa_service import EmpresaService
 from app.services.factura_proveedor_service import FacturaProveedorService
 from app.services.pago_service import PagoService
@@ -54,6 +58,7 @@ __all__ = [
     "get_presupuesto_service",
     "get_empresa_service",
     "get_comprobante_service",
+    "get_cuenta_corriente_service",
     "get_pago_service",
     "get_reporte_cobros_pagos_service",
     "get_factura_proveedor_service",
@@ -99,18 +104,33 @@ def get_catalogo_service(
     )
 
 
+def get_cuenta_corriente_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> CuentaCorrienteService:
+    return CuentaCorrienteService(
+        CuentaCorrienteRepository(db, usuario["id_empresa"])
+    )
+
+
 def get_cliente_service(
     db: DbDep,
     usuario: CurrentUser,
 ) -> ClienteService:
-    return ClienteService(ClienteRepository(db, usuario["id_empresa"]))
+    return ClienteService(
+        ClienteRepository(db, usuario["id_empresa"]),
+        get_cuenta_corriente_service(db, usuario),
+    )
 
 
 def get_proveedor_service(
     db: DbDep,
     usuario: CurrentUser,
 ) -> ProveedorService:
-    return ProveedorService(ProveedorRepository(db, usuario["id_empresa"]))
+    return ProveedorService(
+        ProveedorRepository(db, usuario["id_empresa"]),
+        get_cuenta_corriente_service(db, usuario),
+    )
 
 
 def get_pedido_compra_service(

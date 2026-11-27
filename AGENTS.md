@@ -280,6 +280,28 @@
 - Routes under `/compras/facturas` and `/compras/pedidos/{id}/facturas` are
   restricted to `administrador` and `abastecimiento`.
 
+### Customer and supplier current accounts
+
+- Current accounts are derived from emitted sales comprobantes or supplier
+  invoices (charges) minus approved payments linked to those documents
+  (credits). Pending and rejected payments are never included, and changing an
+  order after emission does not alter an existing account entry.
+- `saldo_inicial` is the balance before `desde`; movements inside the range
+  produce `total_cargo`, `total_abono` and `saldo_final`. Parameter echoes and
+  totals are backend-owned. Omitting `desde`/`hasta` defaults to the current
+  month; an inverted range returns `422`.
+- The legacy `cliente.saldo` and `proveedor.saldo` columns are no longer a
+  source of truth and need no migration: the client and supplier list/detail
+  endpoints replace them with the derived historical balance.
+- Customer accounts are available to `administrador` and `ventas`; supplier
+  accounts to `administrador` and `abastecimiento`. An entity ID outside the
+  authenticated company returns `404`.
+- Current accounts have no PDF export: there is no PDF endpoint and no download
+  control in the UI. The menu does not expose account entries; the eye action
+  on a customer or supplier row opens its account detail as a standalone page
+  (not a modal). The frontend renders backend figures only; it never
+  recalculates balances.
+
 ## API and Data Conventions
 
 - Use Pydantic request/response schemas and explicit service exceptions mapped
@@ -491,5 +513,16 @@
   computes totals locally. PDF-only export follows RF-28; no migration was
   needed because `pago` already stores both comprobante and supplier invoice
   references.
+- Customer and supplier current accounts are served by
+  `GET /cuentas-corrientes/clientes`, `GET /cuentas-corrientes/clientes/{id}`,
+  `GET /cuentas-corrientes/proveedores`, and
+  `GET /cuentas-corrientes/proveedores/{id}`. There are no PDF endpoints and no
+  `cuenta_corriente_pdf.py`. Pure calculations live in
+  `cuentas_corrientes_calculos.py` and tenant-scoped data access in
+  `cuenta_corriente_repository.py`. Company-scoped IDs are validated before
+  returning detail data. The frontend keeps `/customers/accounts/:id` and
+  `/providers/accounts/:id` as standalone detail pages reached from the eye
+  action in the customer/supplier list; those links are not in the side menu.
+  No client-side balance math and no migration were needed.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

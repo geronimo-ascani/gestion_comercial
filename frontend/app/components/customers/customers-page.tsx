@@ -35,51 +35,8 @@ import { formatAddress } from "~/lib/address";
 import { formatMoney } from "~/lib/currency";
 import { useCurrentUser } from "../auth/session-store";
 import { refreshCustomers, removeCustomer, useCustomers } from "./customers-store";
-import type { Customer } from "./customers-types";
 import { TableSkeleton } from "~/components/ui/skeleton";
 import { useDebouncedValue } from "~/lib/use-debounced-value";
-
-function CustomerDetailDialog({
-  customer,
-  trigger,
-}: {
-  customer: Customer;
-  trigger: ReactElement;
-}) {
-  const details: Array<[string, string]> = [
-    ["Documento", customer.document || "—"],
-    ["Teléfono", customer.phone || "—"],
-    ["Correo electrónico", customer.email || "—"],
-    ["Dirección", formatAddress(customer.address) || "—"],
-    ["Saldo en cuenta corriente", formatMoney(customer.balance ?? 0)],
-  ];
-  return (
-    <Dialog>
-      <DialogTrigger render={trigger} />
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {customer.firstName} {customer.lastName}
-          </DialogTitle>
-          <DialogDescription>Datos del cliente</DialogDescription>
-        </DialogHeader>
-        <dl className="space-y-3">
-          {details.map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-4">
-              <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd className="text-right text-sm font-medium break-all">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cerrar
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function ConfirmDeleteDialog({
   title,
@@ -252,18 +209,16 @@ export function CustomersPage() {
                     </TableCell>
                     {canManage && <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <CustomerDetailDialog
-                          customer={customer}
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Ver cliente ${customer.firstName} ${customer.lastName}`}
-                            >
-                              <Eye />
-                            </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Ver cliente ${customer.firstName} ${customer.lastName}`}
+                          onClick={() =>
+                            navigate(`/customers/accounts/${customer.id}`)
                           }
-                        />
+                        >
+                          <Eye />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"

@@ -1,9 +1,11 @@
+from decimal import Decimal
 from typing import Any
 
 from psycopg import errors
 
 from app.repositories.proveedor_repository import ProveedorRepository, ProveedorRow
 from app.schemas.proveedores import ProveedorCreate, ProveedorUpdate
+from app.services.cuenta_corriente_service import CuentaCorrienteService
 
 
 class ProveedorError(Exception):
@@ -31,11 +33,17 @@ class ProveedorDatosInvalidos(ProveedorError):
 
 
 class ProveedorService:
-    def __init__(self, repo: ProveedorRepository) -> None:
+    def __init__(
+        self,
+        repo: ProveedorRepository,
+        cuentas: CuentaCorrienteService | None = None,
+    ) -> None:
         self._repo = repo
+        self._cuentas = cuentas
 
-    @staticmethod
-    def _publico(row: ProveedorRow) -> dict[str, Any]:
+    def _publico(
+        self, row: ProveedorRow, saldo: Decimal | None = None
+    ) -> dict[str, Any]:
         return {
             "id_proveedor": row["id_proveedor"],
             "id_condicion_iva": row.get("id_condicion_iva"),
@@ -44,7 +52,7 @@ class ProveedorService:
             "cuit": row["cuit"],
             "email": row["email"],
             "razon_social": row["razon_social"],
-            "saldo": row["saldo"],
+            "saldo": saldo if saldo is not None else row["saldo"],
             "telefono": row["telefono"],
             "direccion": {
                 "altura": row["direccion_altura"] or "",
@@ -55,6 +63,22 @@ class ProveedorService:
                 "provincia": row["direccion_provincia"] or "",
             },
         }
+
+    def _publicos(self, filas: list[ProveedorRow]) -> list[dict[str, Any]]:
+        saldos: dict[str, Decimal] = {}
+        if self._cuentas is not None:
+            saldos = self._cuentas.saldos_proveedores(
+                [fila["id_proveedor"] for fila in filas]
+            )
+        return [
+            self._publico(
+                fila,
+                saldos.get(fila["id_proveedor"], Decimal("0.00"))
+                if self._cuentas is not None
+                else None,
+            )
+            for fila in filas
+        ]
 
     def _validar_condicion_iva(self, id_condicion_iva: str) -> None:
         if not self._repo.condicion_iva_existe(id_condicion_iva):
@@ -74,16 +98,15 @@ class ProveedorService:
         self, q: str | None, limit: int, offset: int
     ) -> list[dict[str, Any]]:
         busqueda = q.strip() if q else None
-        return [
-            self._publico(row)
-            for row in self._repo.listar(busqueda or None, limit, offset)
-        ]
+        return self._publicos(
+            self._repo.listar(busqueda or None, limit, offset)
+        )
 
     def obtener(self, id_proveedor: str) -> dict[str, Any]:
         row = self._repo.obtener(id_proveedor)
         if row is None:
             raise ProveedorNoEncontrado(id_proveedor)
-        return self._publico(row)
+        return self._publicos([row])[0]
 
     def crear(self, datos: ProveedorCreate) -> dict[str, Any]:
         values = datos.model_dump(exclude={"direccion"})
@@ -100,7 +123,7 @@ class ProveedorService:
                 )
                 row = self._repo.obtener(id_proveedor)
                 assert row is not None
-                return self._publico(row)
+                return self._publicos([row])[0]
         except errors.UniqueViolation as exc:
             raise ProveedorDuplicado(
                 "Ya existe un proveedor con ese CUIT"
@@ -138,7 +161,7 @@ class ProveedorService:
                     )
                 row = self._repo.obtener(id_proveedor)
                 assert row is not None
-                return self._publico(row)
+                return self._publicos([row])[0]
         except errors.UniqueViolation as exc:
             raise ProveedorDuplicado(
                 "Ya existe un proveedor con ese CUIT"
