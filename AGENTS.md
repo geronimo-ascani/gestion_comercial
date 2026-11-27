@@ -397,7 +397,9 @@
 - The login and register screens have an eye toggle for the first password
   field only; the "Confirmar contraseña" field on register always stays masked.
   The button is `type="button"` and has an accessible label, so it never
-  submits the form.
+  submits the form. It is centered with a flex wrapper instead of a translate
+  utility, and the shared `active:translate-y-px` effect is disabled on it, so
+  it does not jump away from the cursor while being pressed.
 - Sales order endpoints are restricted to `administrador` and `ventas`.
   List/detail, pending-only edits, sequential state transitions, and
   idempotent cancellation are enforced by the backend.

@@ -127,17 +127,19 @@ export function LoginPage() {
               aria-invalid={!!errors.password}
               className="pr-9"
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              aria-pressed={showPassword}
-              className="absolute top-1/2 right-1 -translate-y-1/2"
-              onClick={() => setShowPassword((visible) => !visible)}
-            >
-              {showPassword ? <EyeOff /> : <Eye />}
-            </Button>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                aria-pressed={showPassword}
+                className="pointer-events-auto active:not-aria-[haspopup]:translate-y-0!"
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </Button>
+            </div>
           </div>
           <FieldError message={errors.password} />
         </div>

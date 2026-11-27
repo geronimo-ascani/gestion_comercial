@@ -112,9 +112,11 @@ describe("RegisterPage", () => {
     await screen.findByRole("heading", { name: "Crea tu cuenta" });
     const password = screen.getByLabelText("Contraseña");
     const confirmation = screen.getByLabelText("Confirmar contraseña");
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
 
     expect(password).toHaveAttribute("type", "password");
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(toggle).not.toHaveClass("-translate-y-1/2");
+    fireEvent.click(toggle);
 
     expect(password).toHaveAttribute("type", "text");
     expect(confirmation).toHaveAttribute("type", "password");

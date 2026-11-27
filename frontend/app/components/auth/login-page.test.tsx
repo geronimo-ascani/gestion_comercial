@@ -56,9 +56,11 @@ describe("LoginPage", () => {
     const LoginPage = await loadPage();
     renderLogin(LoginPage);
     const password = screen.getByLabelText("Contraseña");
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
 
     expect(password).toHaveAttribute("type", "password");
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(toggle).not.toHaveClass("-translate-y-1/2");
+    fireEvent.click(toggle);
 
     expect(password).toHaveAttribute("type", "text");
     fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
