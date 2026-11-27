@@ -129,6 +129,7 @@ describe("payments-store", () => {
       cc: ["copia@example.com"],
       bcc: [],
       estado: "enviado",
+      origen: "manual",
       error: null,
       enviado_en: "2026-11-10T12:00:00",
     });
@@ -145,5 +146,28 @@ describe("payments-store", () => {
       bcc: [],
     });
     expect(envio.estado).toBe("enviado");
+  });
+
+  it("marks the invoice as pending while the backend queues the email", async () => {
+    api.listComprobantes.mockResolvedValue([invoice()]);
+    api.listPagos.mockResolvedValue([]);
+    await loadPayments(true);
+    api.enviarComprobante.mockResolvedValue({
+      id_envio: 2,
+      destinatario: "ana@example.com",
+      cc: [],
+      bcc: [],
+      estado: "pendiente",
+      origen: "automatico",
+      error: null,
+      enviado_en: "2026-11-19T12:00:00",
+    });
+
+    await enviarComprobante("CPB-0001");
+
+    const actual = getInvoiceByOrder("PV-0001");
+    expect(actual?.emailStatus).toBe("pendiente");
+    expect(actual?.emailOrigin).toBe("automatico");
+    expect(actual?.sent).toBe(false);
   });
 });

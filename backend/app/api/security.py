@@ -7,8 +7,10 @@ from psycopg import Connection
 
 from app.core.db import get_db
 from app.repositories.auth_repository import AuthRepository
+from app.repositories.email_cola_repository import EmailColaRepository
 from app.repositories.empresa_repository import EmpresaRepository
 from app.services.auth_service import AuthService
+from app.services.email_cola_service import EmailColaService
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -19,6 +21,7 @@ def get_auth_service(
     return AuthService(
         AuthRepository(db),
         empresa_repo=EmpresaRepository(db),
+        email_queue=EmailColaService(EmailColaRepository(db, "")),
     )
 
 

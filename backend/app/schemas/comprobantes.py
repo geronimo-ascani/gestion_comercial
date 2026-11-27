@@ -87,6 +87,8 @@ class ComprobanteVentaResumen(SchemaBase):
     cliente_apellido: str
     cliente_email: str
     enviado: bool
+    estado_email: Literal["pendiente", "enviado", "fallido"] | None = None
+    origen_email: Literal["automatico", "manual"] | None = None
     id_empresa: str
     empresa_razon_social: str
 

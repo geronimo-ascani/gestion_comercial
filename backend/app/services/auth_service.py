@@ -14,6 +14,7 @@ from app.repositories.auth_repository import (
     RegistroDuplicado,
 )
 from app.repositories.empresa_repository import EmpresaRepository
+from app.services.email_cola_service import EmailColaService
 from app.services.email_service import (
     EmailNoConfigurado as EmailNoConfiguradoBase,
     EmailService,
@@ -78,11 +79,13 @@ class AuthService:
         repo: AuthRepository,
         settings: Settings | None = None,
         empresa_repo: EmpresaRepository | None = None,
+        email_queue: EmailColaService | None = None,
     ) -> None:
         self._repo = repo
         self._settings = settings or get_settings()
         self._email = EmailService(self._settings)
         self._empresas = empresa_repo
+        self._correo = email_queue
 
     def autenticar(self, email: str, password: SecretStr) -> tuple[str, dict[str, Any]]:
         usuario = self._repo.buscar_por_email(email)
@@ -263,17 +266,26 @@ class AuthService:
             f"/reset-password?token={token}"
         )
 
+        cuerpo = (
+            "Recibimos una solicitud para restablecer tu contraseña.\n\n"
+            f"Usá este enlace dentro de "
+            f"{self._settings.password_reset_token_minutes} minutos:"
+            f"\n{url}\n\n"
+            "Si no solicitaste el cambio, ignorá este correo."
+        )
         try:
-            self._email.enviar(
+            if self._correo is None:
+                raise EmailNoConfiguradoBase(
+                    "El envío asíncrono de correo no está configurado"
+                )
+            self._correo.encolar(
+                id_empresa=usuario["id_empresa"],
+                tipo="recuperacion",
+                id_referencia=token_hash,
                 destinatario=usuario["email"],
                 asunto="Restablecer contraseña",
-                cuerpo=(
-                    "Recibimos una solicitud para restablecer tu contraseña.\n\n"
-                    f"Usá este enlace dentro de "
-                    f"{self._settings.password_reset_token_minutes} minutos:"
-                    f"\n{url}\n\n"
-                    "Si no solicitaste el cambio, ignorá este correo."
-                ),
+                cuerpo=cuerpo,
+                origen="automatico",
             )
         except EmailNoConfiguradoBase as exc:
             self._repo.invalidar_token_recuperacion(token_hash)

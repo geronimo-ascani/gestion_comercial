@@ -64,6 +64,10 @@ import {
   loadPayments,
   useInvoiceForOrder,
 } from "../payments/payments-store";
+import {
+  envioEnCurso,
+  textoBotonEnvio,
+} from "../payments/payments-api";
 import type { Invoice } from "../payments/payments-types";
 import { InvoiceStatusBadge } from "../payments/payments-views";
 import { RecordPaymentDialog } from "../payments/record-payment-dialog";
@@ -201,7 +205,7 @@ export function OrderDetailPage() {
   }
 
   function handleInvoiceSent() {
-    setSendFeedback("Comprobante enviado por correo.");
+    setSendFeedback("Comprobante programado para envío por correo.");
   }
 
   async function retryLoad() {
@@ -726,17 +730,17 @@ function OrderInvoiceCard({
                 )}
                 <Button
                   variant="outline"
-                  disabled={busy || invoice.sent}
+                  disabled={busy || envioEnCurso(invoice)}
                   onClick={onSend}
                 >
                   {busy ? (
                     <Loader2 className="size-4 animate-spin" />
-                  ) : invoice.sent ? (
+                  ) : invoice.emailStatus === "enviado" ? (
                     <CheckCircle2 />
                   ) : (
                     <Send />
                   )}
-                  {invoice.sent ? "Enviado" : "Enviar por email"}
+                  {textoBotonEnvio(invoice, "Enviar por email")}
                 </Button>
               </div>
             )}

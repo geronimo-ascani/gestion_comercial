@@ -181,7 +181,8 @@ export function SendInvoiceDialog({
               />
               <p className="text-xs text-muted-foreground">
                 Separá varias direcciones con coma o punto y coma. Hasta{" "}
-                {MAX_COPIAS} copias por campo. Se adjunta el PDF del comprobante.
+                {MAX_COPIAS} copias por campo. Se adjunta el PDF del comprobante
+                y el envío se procesa en segundo plano.
               </p>
             </div>
 

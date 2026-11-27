@@ -190,7 +190,8 @@ class FakeComprobanteService:
             "destinatario": destinatario or "cliente@example.com",
             "cc": list(cc or []),
             "bcc": list(bcc or []),
-            "estado": "enviado",
+            "estado": "pendiente",
+            "origen": "manual",
             "error": None,
             "enviado_en": datetime(2026, 11, 18, tzinfo=timezone.utc),
         }
@@ -380,8 +381,9 @@ def test_send_comprobante_returns_envio() -> None:
             json={"destinatario": "otro@example.com"},
         )
 
-    assert response.status_code == 200
-    assert response.json()["estado"] == "enviado"
+    assert response.status_code == 202
+    assert response.json()["estado"] == "pendiente"
+    assert response.json()["origen"] == "manual"
     assert response.json()["destinatario"] == "otro@example.com"
 
 
@@ -396,7 +398,7 @@ def test_send_comprobante_with_cc_and_bcc() -> None:
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert response.json()["cc"] == ["cc1@example.com", "cc2@example.com"]
     assert response.json()["bcc"] == ["bcc1@example.com"]
 
@@ -416,7 +418,7 @@ def test_send_comprobante_normaliza_y_deduplica_copias() -> None:
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert response.json()["destinatario"] == "cliente@example.com"
     assert response.json()["cc"] == ["cc@example.com", "otro@example.com"]
     assert response.json()["bcc"] == ["bcc@example.com"]
@@ -468,7 +470,7 @@ def test_list_envios_returns_history() -> None:
         response = client.get("/api/v1/ventas/comprobantes/FV-0001/envios")
 
     assert response.status_code == 200
-    assert response.json()[0]["estado"] == "enviado"
+    assert response.json()[0]["estado"] == "pendiente"
 
 
 def test_list_all_payments_includes_comprobante_data() -> None:

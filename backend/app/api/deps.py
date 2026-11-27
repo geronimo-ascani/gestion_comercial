@@ -13,6 +13,7 @@ from app.repositories.comprobante_repository import ComprobanteRepository
 from app.repositories.cuenta_corriente_repository import (
     CuentaCorrienteRepository,
 )
+from app.repositories.email_cola_repository import EmailColaRepository
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.factura_proveedor_repository import (
     FacturaProveedorRepository,
@@ -32,6 +33,7 @@ from app.services.catalogo_service import CatalogoService
 from app.services.categoria_service import CategoriaService
 from app.services.comprobante_service import ComprobanteService
 from app.services.cuenta_corriente_service import CuentaCorrienteService
+from app.services.email_cola_service import EmailColaService
 from app.services.empresa_service import EmpresaService
 from app.services.factura_proveedor_service import FacturaProveedorService
 from app.services.pago_service import PagoService
@@ -62,6 +64,7 @@ __all__ = [
     "get_pago_service",
     "get_reporte_cobros_pagos_service",
     "get_factura_proveedor_service",
+    "get_email_cola_service",
 ]
 
 DbDep = Annotated[Connection[dict[str, Any]], Depends(get_db)]
@@ -173,14 +176,25 @@ def get_empresa_service(
     return EmpresaService(EmpresaRepository(db))
 
 
+def get_email_cola_service(
+    db: DbDep,
+    usuario: CurrentUser,
+) -> EmailColaService:
+    return EmailColaService(
+        EmailColaRepository(db, usuario["id_empresa"])
+    )
+
+
 def get_comprobante_service(
     db: DbDep,
     usuario: CurrentUser,
+    correo: EmailColaService = Depends(get_email_cola_service),
 ) -> ComprobanteService:
     return ComprobanteService(
         ComprobanteRepository(db, usuario["id_empresa"]),
         PagoRepository(db, usuario["id_empresa"]),
         EmpresaService(EmpresaRepository(db)),
+        correo=correo,
         id_empresa=usuario["id_empresa"],
     )
 

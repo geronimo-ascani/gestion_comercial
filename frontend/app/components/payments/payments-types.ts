@@ -2,6 +2,10 @@ export type PaymentStatus = "aprobado" | "pendiente" | "rechazado";
 
 export type InvoiceStatus = "emitida" | "aprobada" | "pagada" | "rechazada";
 
+export type EmailEstado = "pendiente" | "enviado" | "fallido";
+
+export type EmailOrigen = "automatico" | "manual";
+
 export type InvoiceType = "A" | "B" | "C" | "E";
 
 export interface Invoice {
@@ -22,6 +26,9 @@ export interface Invoice {
   status: InvoiceStatus;
   /** true cuando el último intento de envío del comprobante fue exitoso. */
   sent?: boolean;
+  /** Estado del último correo, calculado por el backend. */
+  emailStatus?: EmailEstado | null;
+  emailOrigin?: EmailOrigen | null;
 }
 
 export interface PaymentTransaction {

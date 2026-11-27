@@ -54,9 +54,11 @@ import { listProviders } from "../purchases/providers-api";
 import type { Provider } from "../purchases/purchases-types";
 import type { Invoice, PaymentTransaction } from "./payments-types";
 import {
+  envioEnCurso,
   getReporteCobrosPagos,
   downloadReporteCobrosPagosPdf,
   listPagosProveedor,
+  textoBotonEnvio,
   type PagoProveedorListadoApi,
   type ReporteCobrosPagosApi,
 } from "./payments-api";
@@ -405,7 +407,7 @@ export function PaymentsPage() {
   function handleSent() {
     setFeedback({
       type: "success",
-      text: `Comprobante ${sendTarget?.number ?? ""} enviado por correo.`.trim(),
+      text: `Comprobante ${sendTarget?.number ?? ""} programado para envío por correo.`.trim(),
     });
   }
 
@@ -1005,11 +1007,11 @@ function InvoicesTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={invoice.sent}
+                    disabled={envioEnCurso(invoice)}
                     onClick={() => onSend(invoice)}
                   >
                     <Send />
-                    {invoice.sent ? "Enviado" : "Enviar"}
+                    {textoBotonEnvio(invoice)}
                   </Button>
                 </div>
               </TableCell>

@@ -11,14 +11,13 @@ from app.schemas.comprobantes import (
 )
 from app.schemas.pagos import CobroCreate, PagoCreate
 from app.services.comprobante_service import (
-    ComprobanteEnvioFallido,
     ComprobanteEnvioNoConfigurado,
     ComprobanteEnvioSinDestinatario,
     ComprobanteEstadoInvalido,
     ComprobanteService,
     calcular_tipo_comprobante,
 )
-from app.services.email_service import EmailNoConfigurado, ErrorEnvioEmail
+from app.services.email_service import EmailNoConfigurado
 from app.services.pago_service import PagoDatosInvalidos, PagoService
 
 
@@ -204,8 +203,22 @@ class FakeComprobanteRepository:
     def actualizar_saldo_pedido(self, _id_pedido, saldo):
         self.pedido_saldo = saldo
 
+    def existe_envio_cola(self, id_cola_email):
+        return any(
+            envio.get("id_cola_email") == id_cola_email
+            for envio in getattr(self, "envios", [])
+        )
+
     def registrar_envio(
-        self, id_comprobante, destinatario, estado, error, cc=None, bcc=None
+        self,
+        id_comprobante,
+        destinatario,
+        estado,
+        error,
+        cc=None,
+        bcc=None,
+        origen="manual",
+        id_cola_email=None,
     ):
         self.envios = getattr(self, "envios", [])
         id_envio = len(self.envios) + 1
@@ -216,6 +229,8 @@ class FakeComprobanteRepository:
                 "cc": list(cc or []),
                 "bcc": list(bcc or []),
                 "estado": estado,
+                "origen": origen,
+                "id_cola_email": id_cola_email,
                 "error": error,
                 "enviado_en": datetime.now(timezone.utc),
             }
@@ -296,18 +311,46 @@ class FakeEmailService:
         self.enviados.append(kwargs)
 
 
-def _services(condicion_iva="responsable_inscripto", email=None):
+class FakeColaEmail:
+    """Doble de EmailColaService: solo registra trabajos sin SMTP."""
+
+    def __init__(self, configurado: bool = True) -> None:
+        self.configurado = configurado
+        self.jobs: list[dict] = []
+
+    def encolar(self, **datos):
+        if not self.configurado:
+            raise EmailNoConfigurado("sin smtp")
+        id_cola = len(self.jobs) + 1
+        self.jobs.append({"id_cola_email": id_cola, **datos})
+        return id_cola
+
+    def vincular_envio(self, _id_empresa: str, id_cola_email: int, id_envio: int):
+        for job in self.jobs:
+            if job["id_cola_email"] == id_cola_email:
+                job["id_envio"] = id_envio
+                return
+
+
+def _services(
+    condicion_iva="responsable_inscripto",
+    email=None,
+    correo: FakeColaEmail | None = None,
+):
     comprobantes = FakeComprobanteRepository()
     pagos = FakePagoRepository()
     empresas = FakeEmpresaService(condicion_iva)
+    cola = correo or FakeColaEmail()
     service = ComprobanteService(
         comprobantes,
         pagos,
         empresas,
         email,
+        cola,
         id_empresa="EMP-0001",
     )
     service.empresa_fake = empresas
+    service.cola_fake = cola
     pago_service = PagoService(comprobantes, pagos)
     return service, pago_service, comprobantes, pagos
 
@@ -504,27 +547,53 @@ def test_cobro_rechazado_no_se_registra_ni_modifica_el_saldo() -> None:
     assert repo.pedido_saldo == Decimal("100.00")
 
 
-def test_enviar_adjunta_pdf_y_registra_envio() -> None:
-    email = FakeEmailService()
-    service, _pagos, repo, _pago_repo = _services(email=email)
+def test_emision_encola_correo_automatico() -> None:
+    service, _pagos, repo, _pago_repo = _services()
+    comprobante = service.emitir(
+        "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
+    )
+
+    cola = service.cola_fake
+    assert len(cola.jobs) == 1
+    job = cola.jobs[0]
+    assert job["id_empresa"] == "EMP-0001"
+    assert job["origen"] == "automatico"
+    assert job["id_referencia"] == comprobante["id_comprobante_venta"]
+    assert job["destinatario"] == "cliente@example.com"
+    assert job["reply_to"] == "empresa@example.com"
+    assert job["adjunto_contenido"].startswith(b"%PDF-")
+    assert repo.envios[0]["estado"] == "pendiente"
+    assert repo.envios[0]["origen"] == "automatico"
+    assert job["id_envio"] == repo.envios[0]["id_envio"]
+
+
+def test_emision_idempotente_no_duplica_correo_automatico() -> None:
+    service, _pagos, repo, _pago_repo = _services()
+    service.emitir("PV-0001", ComprobanteVentaCreate(), "EMP-0001")
+    service.emitir("PV-0001", ComprobanteVentaCreate(), "EMP-0001")
+
+    assert len(service.cola_fake.jobs) == 1
+    assert len(repo.envios) == 1
+
+
+def test_enviar_encola_envio_manual_con_pdf() -> None:
+    service, _pagos, repo, _pago_repo = _services()
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
 
     envio = service.enviar(comprobante["id_comprobante_venta"])
 
-    assert envio["estado"] == "enviado"
+    assert envio["estado"] == "pendiente"
     assert envio["destinatario"] == "cliente@example.com"
-    assert len(email.enviados) == 1
-    adjunto = email.enviados[0]["adjuntos"][0]
-    assert adjunto.tipo_mime == "application/pdf"
-    assert adjunto.contenido.startswith(b"%PDF-")
-    assert len(repo.envios) == 1
+    assert len(repo.envios) == 2
+    manual = service.cola_fake.jobs[-1]
+    assert manual["origen"] == "manual"
+    assert manual["adjunto_contenido"].startswith(b"%PDF-")
 
 
 def test_enviar_usa_destinatario_explicito() -> None:
-    email = FakeEmailService()
-    service, _pagos, _repo, _pago_repo = _services(email=email)
+    service, _pagos, _repo, _pago_repo = _services()
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
@@ -534,12 +603,11 @@ def test_enviar_usa_destinatario_explicito() -> None:
     )
 
     assert envio["destinatario"] == "otro@example.com"
-    assert email.enviados[0]["destinatario"] == "otro@example.com"
+    assert service.cola_fake.jobs[-1]["destinatario"] == "otro@example.com"
 
 
 def test_enviar_reenvia_copias_y_las_registra() -> None:
-    email = FakeEmailService()
-    service, _pagos, repo, _pago_repo = _services(email=email)
+    service, _pagos, repo, _pago_repo = _services()
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
@@ -553,35 +621,15 @@ def test_enviar_reenvia_copias_y_las_registra() -> None:
 
     assert envio["cc"] == ["cc1@example.com", "cc2@example.com"]
     assert envio["bcc"] == ["bcc@example.com"]
-    assert email.enviados[0]["cc"] == ["cc1@example.com", "cc2@example.com"]
-    assert email.enviados[0]["bcc"] == ["bcc@example.com"]
-    assert repo.envios[0]["cc"] == ["cc1@example.com", "cc2@example.com"]
-    assert repo.envios[0]["bcc"] == ["bcc@example.com"]
-
-
-def test_enviar_registra_copias_en_intento_fallido() -> None:
-    email = FakeEmailService(error=ErrorEnvioEmail("timeout"))
-    service, _pagos, repo, _pago_repo = _services(email=email)
-    comprobante = service.emitir(
-        "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
-    )
-
-    with pytest.raises(ComprobanteEnvioFallido):
-        service.enviar(
-            comprobante["id_comprobante_venta"],
-            None,
-            ["cc@example.com"],
-            ["bcc@example.com"],
-        )
-
-    assert repo.envios[0]["estado"] == "fallido"
-    assert repo.envios[0]["cc"] == ["cc@example.com"]
-    assert repo.envios[0]["bcc"] == ["bcc@example.com"]
+    manual = service.cola_fake.jobs[-1]
+    assert manual["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert manual["bcc"] == ["bcc@example.com"]
+    assert repo.envios[-1]["cc"] == ["cc1@example.com", "cc2@example.com"]
+    assert repo.envios[-1]["bcc"] == ["bcc@example.com"]
 
 
 def test_enviar_sin_destinatario_es_invalido() -> None:
-    email = FakeEmailService()
-    service, _pagos, repo, _pago_repo = _services(email=email)
+    service, _pagos, repo, _pago_repo = _services()
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
@@ -590,29 +638,20 @@ def test_enviar_sin_destinatario_es_invalido() -> None:
     with pytest.raises(ComprobanteEnvioSinDestinatario):
         service.enviar(comprobante["id_comprobante_venta"])
 
+    assert len(repo.envios) == 1
+    assert len(service.cola_fake.jobs) == 1
 
-def test_enviar_sin_smtp_configurado_registra_fallido() -> None:
-    email = FakeEmailService(error=EmailNoConfigurado("sin smtp"))
-    service, _pagos, repo, _pago_repo = _services(email=email)
+
+def test_enviar_sin_smtp_configurado_no_encola() -> None:
+    cola = FakeColaEmail(configurado=False)
+    service, _pagos, repo, _pago_repo = _services(correo=cola)
     comprobante = service.emitir(
         "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
     )
 
+    assert getattr(repo, "envios", []) == []
     with pytest.raises(ComprobanteEnvioNoConfigurado):
         service.enviar(comprobante["id_comprobante_venta"])
 
-    assert repo.envios[0]["estado"] == "fallido"
-
-
-def test_enviar_con_error_smtp_registra_fallido() -> None:
-    email = FakeEmailService(error=ErrorEnvioEmail("timeout"))
-    service, _pagos, repo, _pago_repo = _services(email=email)
-    comprobante = service.emitir(
-        "PV-0001", ComprobanteVentaCreate(), "EMP-0001"
-    )
-
-    with pytest.raises(ComprobanteEnvioFallido):
-        service.enviar(comprobante["id_comprobante_venta"])
-
-    assert repo.envios[0]["estado"] == "fallido"
-    assert repo.envios[0]["error"] == "timeout"
+    assert cola.jobs == []
+    assert getattr(repo, "envios", []) == []

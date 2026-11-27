@@ -243,6 +243,7 @@ def listar_envios(
 @router.post(
     "/comprobantes/{id_comprobante_venta}/envio",
     response_model=ComprobanteEnvioRead,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def enviar_comprobante(
     service: ComprobanteDep,

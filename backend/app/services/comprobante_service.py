@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -10,17 +11,14 @@ from app.repositories.comprobante_repository import (
 )
 from app.repositories.pago_repository import PagoRepository
 from app.schemas.comprobantes import ComprobanteVentaCreate
-from app.services.email_service import (
-    AdjuntoEmail,
-    EmailError,
-    EmailNoConfigurado,
-    EmailService,
-    ErrorEnvioEmail,
-)
+from app.services.email_cola_service import EmailColaService
+from app.services.email_service import EmailNoConfigurado, EmailService
 from app.services.comprobante_pdf import generar_pdf_comprobante
 from app.services.empresa_service import EmpresaError, EmpresaService
 
 _ESTADOS_EMITIBLES = ("pendiente", "proceso", "enviado", "entregado")
+
+logger = logging.getLogger(__name__)
 
 
 class ComprobanteError(Exception):
@@ -78,6 +76,7 @@ class ComprobanteService:
         pagos: PagoRepository,
         empresas: EmpresaService,
         email: EmailService | None = None,
+        correo: EmailColaService | None = None,
         *,
         id_empresa: str,
     ) -> None:
@@ -85,6 +84,7 @@ class ComprobanteService:
         self._pagos = pagos
         self._empresas = empresas
         self._email = email
+        self._correo = correo
         self._id_empresa = id_empresa
 
     def listar(
@@ -123,6 +123,7 @@ class ComprobanteService:
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
     ) -> dict[str, Any]:
+        """Encola el reenvío; el worker hace la entrega fuera de la request."""
         comprobante = self.obtener(id_comprobante_venta)
         destino = (destinatario or comprobante["cliente"]["email"] or "").strip()
         if not destino:
@@ -132,67 +133,108 @@ class ComprobanteService:
             )
         copias = list(cc or [])
         copias_ocultas = list(bcc or [])
+        mensaje = self._mensaje_comprobante(comprobante)
 
         try:
-            pdf = generar_pdf_comprobante(comprobante)
-        except Exception as exc:
-            raise ComprobanteError(
-                "No se pudo generar el PDF del comprobante"
-            ) from exc
-
-        numero = comprobante["numero_completo"] or comprobante[
-            "id_comprobante_venta"
-        ]
-        try:
-            self._email_service().enviar(
-                destinatario=destino,
-                asunto=f"Comprobante {numero}",
-                cuerpo=self._cuerpo_texto(comprobante),
-                cuerpo_html=self._cuerpo_html(comprobante),
-                adjuntos=[
-                    AdjuntoEmail(
-                        nombre=f"comprobante-{numero}.pdf",
-                        contenido=pdf,
-                    )
-                ],
-                cc=copias,
-                bcc=copias_ocultas,
-            )
+            with self._repo.transaction():
+                id_cola = self._correo_service().encolar(
+                    id_empresa=self._id_empresa,
+                    tipo="comprobante",
+                    id_referencia=comprobante["id_comprobante_venta"],
+                    destinatario=destino,
+                    origen="manual",
+                    reply_to=comprobante["empresa"]["email"] or None,
+                    cc=copias,
+                    bcc=copias_ocultas,
+                    **mensaje,
+                )
+                id_envio = self._registrar_envio(
+                    id_comprobante_venta,
+                    destino,
+                    "pendiente",
+                    None,
+                    copias,
+                    copias_ocultas,
+                    origen="manual",
+                    id_cola_email=id_cola,
+                )
+                self._vincular_envio(id_cola, id_envio)
         except EmailNoConfigurado as exc:
-            self._registrar_envio(
-                id_comprobante_venta,
-                destino,
-                "fallido",
-                str(exc),
-                copias,
-                copias_ocultas,
-            )
             raise ComprobanteEnvioNoConfigurado(str(exc)) from exc
-        except EmailError as exc:
-            self._registrar_envio(
-                id_comprobante_venta,
-                destino,
-                "fallido",
-                str(exc),
-                copias,
-                copias_ocultas,
-            )
-            raise ComprobanteEnvioFallido(str(exc)) from exc
 
-        id_envio = self._registrar_envio(
-            id_comprobante_venta,
-            destino,
-            "enviado",
-            None,
-            copias,
-            copias_ocultas,
-        )
         envio = self._repo.obtener_envio(id_envio)
         if envio is None:
             raise ComprobanteError(
                 "No se pudo recuperar el envío registrado"
             )
         return envio
+
+    def _encolar_automatico(self, comprobante: dict[str, Any]) -> None:
+        """RF-15: envío por defecto al emitir, sin bloquear la emisión."""
+        if self._correo is None:
+            return
+        destino = (comprobante["cliente"]["email"] or "").strip()
+        if not destino:
+            logger.info(
+                "Comprobante %s sin email de cliente; no se encola correo",
+                comprobante["id_comprobante_venta"],
+            )
+            return
+        id_comprobante = comprobante["id_comprobante_venta"]
+        try:
+            with self._repo.transaction():
+                mensaje = self._mensaje_comprobante(comprobante)
+                id_cola = self._correo.encolar(
+                    id_empresa=self._id_empresa,
+                    tipo="comprobante",
+                    id_referencia=id_comprobante,
+                    destinatario=destino,
+                    origen="automatico",
+                    reply_to=comprobante["empresa"]["email"] or None,
+                    **mensaje,
+                )
+                if id_cola is None or self._repo.existe_envio_cola(id_cola):
+                    return
+                id_envio = self._registrar_envio(
+                    id_comprobante,
+                    destino,
+                    "pendiente",
+                    None,
+                    [],
+                    [],
+                    origen="automatico",
+                    id_cola_email=id_cola,
+                )
+                self._vincular_envio(id_cola, id_envio)
+        except EmailNoConfigurado:
+            logger.warning(
+                "No se encoló el correo automático de %s: SMTP no configurado",
+                id_comprobante,
+            )
+        except Exception:  # noqa: BLE001 - la emisión no debe fallar por email
+            logger.exception(
+                "No se pudo encolar el correo automático de %s",
+                id_comprobante,
+            )
+
+    def _mensaje_comprobante(self, comprobante: dict[str, Any]) -> dict[str, Any]:
+        try:
+            pdf = generar_pdf_comprobante(comprobante)
+        except Exception as exc:
+            raise ComprobanteError(
+                "No se pudo generar el PDF del comprobante"
+            ) from exc
+        numero = comprobante["numero_completo"] or comprobante[
+            "id_comprobante_venta"
+        ]
+        return {
+            "asunto": f"Comprobante {numero}",
+            "cuerpo": self._cuerpo_texto(comprobante),
+            "cuerpo_html": self._cuerpo_html(comprobante),
+            "adjunto_nombre": f"comprobante-{numero}.pdf",
+            "adjunto_contenido": pdf,
+            "adjunto_tipo_mime": "application/pdf",
+        }
 
     def _registrar_envio(
         self,
@@ -202,16 +244,36 @@ class ComprobanteService:
         error: str | None,
         cc: list[str],
         bcc: list[str],
+        *,
+        origen: str = "manual",
+        id_cola_email: int | None = None,
     ) -> int:
-        with self._repo.transaction():
-            return self._repo.registrar_envio(
-                id_comprobante_venta, destinatario, estado, error, cc, bcc
-            )
+        return self._repo.registrar_envio(
+            id_comprobante_venta,
+            destinatario,
+            estado,
+            error,
+            cc,
+            bcc,
+            origen,
+            id_cola_email,
+        )
 
-    def _email_service(self) -> EmailService:
-        if self._email is None:
-            self._email = EmailService()
-        return self._email
+    def _vincular_envio(
+        self, id_cola_email: int | None, id_envio: int
+    ) -> None:
+        if self._correo is None or id_cola_email is None:
+            return
+        self._correo.vincular_envio(
+            self._id_empresa, id_cola_email, id_envio
+        )
+
+    def _correo_service(self) -> EmailColaService:
+        if self._correo is None:
+            raise ComprobanteEnvioNoConfigurado(
+                "El envío asíncrono de correo no está configurado"
+            )
+        return self._correo
 
     @staticmethod
     def _cuerpo_texto(comprobante: dict[str, Any]) -> str:
@@ -359,7 +421,9 @@ class ComprobanteService:
                     raise ComprobanteError(
                         "No se pudo recuperar el comprobante emitido"
                     )
-                return self._componer(comprobante)
+                resultado = self._componer(comprobante)
+                self._encolar_automatico(resultado)
+                return resultado
         except errors.UniqueViolation as exc:
             existente = self._repo.buscar_por_pedido(id_pedido_cliente)
             if existente is not None:
@@ -453,6 +517,8 @@ class ComprobanteService:
             "cliente_apellido": row["cliente_apellido"],
             "cliente_email": row["cliente_email"],
             "enviado": bool(row["enviado"]),
+            "estado_email": row.get("estado_email"),
+            "origen_email": row.get("origen_email"),
         }
 
     @staticmethod
@@ -474,6 +540,8 @@ class ComprobanteService:
             "id_empresa": row["id_empresa"],
             "empresa_razon_social": row["empresa_razon_social"],
             "enviado": bool(row["enviado"]),
+            "estado_email": row.get("estado_email"),
+            "origen_email": row.get("origen_email"),
         }
 
     @staticmethod

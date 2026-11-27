@@ -59,7 +59,17 @@ SELECT cv.id_comprobante_venta,
            SELECT 1 FROM comprobante_envio ce
            WHERE ce.id_comprobante_venta = cv.id_comprobante_venta
              AND ce.estado = 'enviado'
-       ) AS enviado
+       ) AS enviado,
+       (
+           SELECT ce.estado FROM comprobante_envio ce
+           WHERE ce.id_comprobante_venta = cv.id_comprobante_venta
+           ORDER BY ce.id_envio DESC LIMIT 1
+       ) AS estado_email,
+       (
+           SELECT ce.origen FROM comprobante_envio ce
+           WHERE ce.id_comprobante_venta = cv.id_comprobante_venta
+           ORDER BY ce.id_envio DESC LIMIT 1
+       ) AS origen_email
 FROM comprobante_venta cv
 """
 
@@ -396,6 +406,18 @@ class ComprobanteRepository:
                 (saldo_pendiente, id_pedido_cliente, self._id_empresa),
             )
 
+    def existe_envio_cola(self, id_cola_email: int) -> bool:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM comprobante_envio
+                WHERE id_cola_email = %s
+                LIMIT 1
+                """,
+                (id_cola_email,),
+            )
+            return cur.fetchone() is not None
+
     def registrar_envio(
         self,
         id_comprobante_venta: str,
@@ -404,14 +426,17 @@ class ComprobanteRepository:
         error: str | None,
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
+        origen: str = "manual",
+        id_cola_email: int | None = None,
     ) -> int:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 INSERT INTO comprobante_envio (
-                    id_comprobante_venta, destinatario, estado, error, cc, bcc
+                    id_comprobante_venta, destinatario, estado, error, cc, bcc,
+                    origen, id_cola_email
                 )
-                VALUES (%s, %s, %s, %s, %s::text[], %s::text[])
+                VALUES (%s, %s, %s, %s, %s::text[], %s::text[], %s, %s)
                 RETURNING id_envio
                 """,
                 (
@@ -421,6 +446,8 @@ class ComprobanteRepository:
                     error,
                     list(cc or []),
                     list(bcc or []),
+                    origen,
+                    id_cola_email,
                 ),
             )
             row = cur.fetchone()
@@ -432,7 +459,8 @@ class ComprobanteRepository:
             cur.execute(
                 """
                 SELECT ce.id_envio, ce.destinatario, ce.cc, ce.bcc,
-                       ce.estado, ce.error, ce.enviado_en
+                       ce.estado, ce.error, ce.enviado_en, ce.origen,
+                       ce.id_cola_email
                 FROM comprobante_envio ce
                 JOIN comprobante_venta cv
                   ON cv.id_comprobante_venta = ce.id_comprobante_venta
@@ -447,7 +475,8 @@ class ComprobanteRepository:
             cur.execute(
                 """
                 SELECT ce.id_envio, ce.destinatario, ce.cc, ce.bcc,
-                       ce.estado, ce.error, ce.enviado_en
+                       ce.estado, ce.error, ce.enviado_en, ce.origen,
+                       ce.id_cola_email
                 FROM comprobante_envio ce
                 JOIN comprobante_venta cv
                   ON cv.id_comprobante_venta = ce.id_comprobante_venta

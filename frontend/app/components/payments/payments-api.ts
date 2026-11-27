@@ -43,6 +43,8 @@ interface ComprobanteResumenApi {
   cliente_apellido: string;
   cliente_email: string;
   enviado?: boolean;
+  estado_email?: "pendiente" | "enviado" | "fallido" | null;
+  origen_email?: "automatico" | "manual" | null;
   id_empresa: string;
   empresa_razon_social: string;
 }
@@ -92,7 +94,8 @@ export interface EnvioApi {
   destinatario: string;
   cc: string[];
   bcc: string[];
-  estado: "enviado" | "fallido";
+  estado: "pendiente" | "enviado" | "fallido";
+  origen: "automatico" | "manual";
   error: string | null;
   enviado_en: string;
 }
@@ -233,6 +236,8 @@ function mapResumen(comprobante: ComprobanteResumenApi): Invoice {
     method: "",
     status: comprobante.estado_pago,
     sent: comprobante.enviado ?? false,
+    emailStatus: comprobante.estado_email ?? null,
+    emailOrigin: comprobante.origen_email ?? null,
   };
 }
 
@@ -414,6 +419,23 @@ export async function listEnvios(
 
 export function formatEnvioDate(value: string): string {
   return formatDateTime(value);
+}
+
+/** RF-30: el frontend solo muestra el estado que calcula el backend. */
+export function textoBotonEnvio(
+  invoice: Invoice,
+  porDefecto = "Enviar",
+): string {
+  if (invoice.emailStatus === "pendiente") return "Programado";
+  if (invoice.emailStatus === "enviado") return "Enviado";
+  if (invoice.emailStatus === "fallido") return "Reenviar";
+  return porDefecto;
+}
+
+export function envioEnCurso(invoice: Invoice): boolean {
+  return (
+    invoice.emailStatus === "pendiente" || invoice.emailStatus === "enviado"
+  );
 }
 
 export async function listMediosPago(): Promise<MedioPagoApi[]> {

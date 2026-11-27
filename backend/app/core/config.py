@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     smtp_sender: str | None = None
     smtp_starttls: bool = True
     smtp_use_ssl: bool = False
+    email_worker_interval_seconds: float = Field(default=5, gt=0, le=300)
+    email_worker_max_intentos: int = Field(default=3, gt=0, le=10)
+    email_worker_retry_minutes: float = Field(default=5, gt=0, le=1440)
+    email_worker_stale_minutes: float = Field(default=10, gt=0, le=1440)
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

@@ -47,6 +47,7 @@ describe("SendInvoiceDialog", () => {
       cc: [],
       bcc: [],
       estado: "enviado",
+      origen: "manual",
       error: null,
       enviado_en: "2026-11-19T12:00:00",
     });

@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.core.config import get_settings
 from app.core.db import close_pool, get_pool, open_pool
+from app.services.email_worker import detener_worker, iniciar_worker
 
 settings = get_settings()
 
@@ -14,9 +15,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     open_pool()
+    iniciar_worker()
     try:
         yield
     finally:
+        detener_worker()
         close_pool()
 
 

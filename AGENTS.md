@@ -18,10 +18,12 @@
   `005_comprobantes_pagos.sql`, `006_multiempresa.sql`,
   `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`,
   `009_costo_unitario_venta.sql`, `010_factura_proveedor.sql`,
-  `011_factura_proveedor_archivo.sql`.
+  `011_factura_proveedor_archivo.sql`, `012_email_automatico.sql`,
+  `013_email_cola_referencia.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
-- Backend tests: `python -m pytest -q` from `backend/`.
+- Backend tests: `.\.venv\Scripts\python.exe -m pytest -q` from `backend/`
+  (the global `python` has no `pytest` installed).
 - Frontend tests: `npm test`; typecheck: `npm run typecheck`; production build:
   `npm run build`, from `frontend/`.
 - Do not commit `.env`, credentials, or database test data.
@@ -457,15 +459,32 @@
   backend PDF replaces the former client-side PDF, and the simulated gateway
   and reconciliation flows were removed.
 - SMTP delivery is centralized in `backend/app/services/email_service.py` and
-  shared by comprobante sending and password recovery. Sending requires SMTP
-  configuration; without it the API returns `409`, and a failed delivery
-  returns `502`.
+  shared by comprobante sending and password recovery. Delivery now happens in
+  a persistent worker, outside the request: `email_cola` is the durable outbox,
+  `EmailColaRepository` claims jobs with `FOR UPDATE SKIP LOCKED`, and
+  `EmailColaService` applies bounded retries and marks terminal failures.
+  `backend/app/services/email_worker.py` runs as a daemon thread started and
+  stopped by the FastAPI lifespan. Enqueueing requires SMTP configuration;
+  without it the API returns `409`. A terminal delivery failure is recorded as
+  `fallido` and is visible in the comprobante history; it no longer returns
+  `502` from the synchronous request.
+- RF-15: emitting a comprobante automatically enqueues the PDF email by
+  default. The automatic job is idempotent per comprobante and recipient, is
+  skipped when the customer has no email or SMTP is unavailable, and never
+  blocks or fails emission. Its `Reply-To` comes from the email snapshotted in
+  the comprobante, never from per-tenant environment variables.
+- RF-30: `POST /ventas/comprobantes/{id}/envio` returns `202` with an
+  `pendiente` record; `comprobante_envio.estado` is `pendiente`, `enviado` or
+  `fallido`, and `origen` is `automatico` or `manual`. Manual recipients, CC and
+  BCC keep the existing validation and deduplication rules. Password recovery
+  is enqueued only when the user submits the `forgot-password` form; the token
+  is invalidated only when that job reaches a terminal failure.
 - The current development `backend/.env` uses Brevo. When deploying, replace
   `SMTP_SENDER` with a verified address on the deployed application's own
   domain, and keep SPF/DKIM/DMARC aligned for that domain. SMTP credentials and
   the sender remain global; each company's identity is carried by the
-  comprobante snapshot and, once implemented, its `Reply-To`. Never put tenant
-  credentials or per-company senders in the environment.
+  comprobante snapshot and its `Reply-To`. Never put tenant credentials or
+  per-company senders in the environment.
 - Multi-tenant isolation is implemented across products and stock, categories,
   customers, suppliers, sales orders, budgets, purchase orders, comprobantes,
   payments, and payment methods. Migration `006_multiempresa.sql` adds the
@@ -530,5 +549,12 @@
   `/providers/accounts/:id` as standalone detail pages reached from the eye
   action in the customer/supplier list; those links are not in the side menu.
   No client-side balance math and no migration were needed.
+- RF-15/RF-30 are implemented end to end. Migrations `012` and `013` were
+  applied locally and probed against PostgreSQL with temporary data and
+  rollback: enqueue, concurrent claim, sent/failed transitions, automatic
+  idempotency and 64-character recovery references. The frontend renders the
+  backend-owned email state (`Programado`, `Enviado`, `Reenviar`) instead of a
+  local `sent` boolean. No payment gateway, MercadoPago or reconciliation was
+  added; those remain outside the current scope.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

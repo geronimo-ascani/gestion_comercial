@@ -71,6 +71,21 @@ def test_enviar_incluye_cc_bcc_y_adjunto(monkeypatch) -> None:
     assert adjunto.get_filename() == "comprobante.pdf"
 
 
+def test_enviar_incluye_reply_to_de_la_empresa(monkeypatch) -> None:
+    FakeSMTP.instancias.clear()
+    monkeypatch.setattr(modulo_email, "SMTP", FakeSMTP)
+    servicio = EmailService(settings=_settings())
+
+    servicio.enviar(
+        destinatario="destinatario@example.com",
+        asunto="Comprobante",
+        cuerpo="Cuerpo",
+        reply_to="empresa@example.com",
+    )
+
+    assert FakeSMTP.instancias[-1].mensaje["Reply-To"] == "empresa@example.com"
+
+
 def test_enviar_sin_copias_no_agrega_headers(monkeypatch) -> None:
     FakeSMTP.instancias.clear()
     monkeypatch.setattr(modulo_email, "SMTP", FakeSMTP)

@@ -43,6 +43,7 @@ class EmailService:
         adjuntos: list[AdjuntoEmail] | None = None,
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
+        reply_to: str | None = None,
     ) -> None:
         if not self.configurado:
             raise EmailNoConfigurado(
@@ -57,6 +58,8 @@ class EmailService:
             mensaje["Cc"] = ", ".join(cc)
         if bcc:
             mensaje["Bcc"] = ", ".join(bcc)
+        if reply_to:
+            mensaje["Reply-To"] = reply_to
         mensaje.set_content(cuerpo)
         if cuerpo_html:
             mensaje.add_alternative(cuerpo_html, subtype="html")

@@ -80,6 +80,7 @@ class ComprobanteEnvioRead(SchemaBase):
     destinatario: str
     cc: list[str] = Field(default_factory=list)
     bcc: list[str] = Field(default_factory=list)
-    estado: Literal["enviado", "fallido"]
+    estado: Literal["pendiente", "enviado", "fallido"]
+    origen: Literal["automatico", "manual"] = "manual"
     error: str | None
     enviado_en: datetime

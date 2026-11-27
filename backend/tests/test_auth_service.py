@@ -16,6 +16,7 @@ from app.services.auth_service import (
     AuthDatosDuplicados,
     CredencialesInvalidas,
     EmpleadoEnUso,
+    EmailNoConfigurado,
     EmpleadoNoEncontrado,
     LimiteIntentosExcedido,
 )
@@ -125,6 +126,24 @@ class FakeAuthRepository:
         self, _bucket: str, _limite: int, _ventana: int
     ) -> bool:
         return self.allow_attempt
+
+    def guardar_token_recuperacion(
+        self, _id_empleado: str, token_hash: str, _vence: object
+    ) -> None:
+        self.token_recuperacion = token_hash
+
+    def invalidar_token_recuperacion(self, token_hash: str) -> None:
+        self.token_invalidado = token_hash
+
+
+class FakeColaEmail:
+    def __init__(self) -> None:
+        self.configurado = True
+        self.jobs: list[dict] = []
+
+    def encolar(self, **datos):
+        self.jobs.append(datos)
+        return len(self.jobs)
 
 
 def create_settings() -> Settings:
@@ -345,6 +364,46 @@ def test_registrar_empleado_queda_en_la_empresa_indicada() -> None:
     assert repo.registro is not None
     assert repo.registro[2] == "EMP-0007"
     assert repo.registro[3] == "ventas"
+
+
+def test_solicitar_recuperacion_encola_en_la_empresa_del_usuario() -> None:
+    repo = FakeAuthRepository(create_usuario("password"))
+    settings = create_settings().model_copy(
+        update={
+            "smtp_host": "smtp.example.com",
+            "smtp_sender": "noreply@example.com",
+        }
+    )
+    cola = FakeColaEmail()
+    service = AuthService(
+        repo, settings, FakeEmpresaRepository(), email_queue=cola
+    )
+
+    service.solicitar_recuperacion("admin@example.com")
+
+    assert len(cola.jobs) == 1
+    job = cola.jobs[0]
+    assert job["id_empresa"] == "EMP-0001"
+    assert job["tipo"] == "recuperacion"
+    assert job["id_referencia"] == repo.token_recuperacion
+    assert job["destinatario"] == "admin@example.com"
+    assert "/reset-password?token=" in job["cuerpo"]
+
+
+def test_recuperacion_sin_cola_invalida_el_token() -> None:
+    repo = FakeAuthRepository(create_usuario("password"))
+    settings = create_settings().model_copy(
+        update={
+            "smtp_host": "smtp.example.com",
+            "smtp_sender": "noreply@example.com",
+        }
+    )
+    service = AuthService(repo, settings, FakeEmpresaRepository())
+
+    with pytest.raises(EmailNoConfigurado):
+        service.solicitar_recuperacion("admin@example.com")
+
+    assert repo.token_invalidado == repo.token_recuperacion
 
 
 def test_rate_limit_rechaza_exceso_de_intentos() -> None:
