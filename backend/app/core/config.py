@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_access_token_minutes: int = Field(default=60, gt=0, le=1440)
     password_reset_token_minutes: int = Field(default=30, gt=0, le=1440)
-    data_encryption_key: str = ""
     frontend_base_url: str = "http://localhost:5173"
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)

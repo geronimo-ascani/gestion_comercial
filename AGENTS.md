@@ -19,7 +19,7 @@
   `007_comprobante_envio_copias.sql`, `008_comprobante_snapshot.sql`,
   `009_costo_unitario_venta.sql`, `010_factura_proveedor.sql`,
   `011_factura_proveedor_archivo.sql`, `012_email_automatico.sql`,
-  `013_email_cola_referencia.sql`.
+  `013_email_cola_referencia.sql`, `014_auditoria_multiempresa.sql`.
 - Start the backend from `backend/` with `fastapi dev app/main.py`.
 - Start the frontend from `frontend/` with `npm run dev`.
 - Backend tests: `.\.venv\Scripts\python.exe -m pytest -q` from `backend/`
@@ -576,5 +576,30 @@
   backend-owned email state (`Programado`, `Enviado`, `Reenviar`) instead of a
   local `sent` boolean. No payment gateway, MercadoPago or reconciliation was
   added; those remain outside the current scope.
+- RNF-06: unexpected exceptions are handled centrally in
+  `backend/app/core/errores.py`. The client receives a generic message plus an
+  `id_correlacion`; the exact cause and traceback go only to the server log.
+  `CorrelationIdMiddleware` accepts `X-Request-ID` or generates one and echoes
+  it on every response, including 500s.
+- RNF-10: audit logging is intentionally minimal — a single additive migration
+  (`014_auditoria_multiempresa.sql`) installs database triggers on the twelve
+  business tables instead of scattering calls through services. Each mutation
+  writes `crear`/`editar`/`eliminar` with `id_empresa`, actor, correlation ID,
+  client IP and user agent **inside the same transaction**, so a rollback also
+  removes the audit row. The trigger strips password/token fields before
+  storing snapshots, skips audit when the tenant context is missing, omits
+  self-deletion to preserve the employee FK, and blocks `UPDATE`/`DELETE` on
+  `log_auditoria`. `get_db` seeds the context per request and clears it on exit;
+  `get_current_user` sets `app.id_empleado` from the JWT. Applied locally and
+  verified with a PostgreSQL probe (create/edit/delete, immutability, rollback)
+  and 326 backend tests.
+- RNF-07 decision: passwords stay with `PasswordHash.recommended()` (Argon2),
+  which is stronger than reversible AES-256 for this use case, and no payment
+  data is stored. The unused `data_encryption_key` setting was removed; there
+  is no field requiring encryption today. A field-level encryption layer would
+  only be added if a genuinely sensitive field is introduced later.
+- RNF-11 decision: comprobantes remain immutable and no privacy/export endpoints
+  are added. Personal-data retention is an operational/legal policy, not a
+  schema change in this project.
 - `README.md` and `backend/README.md` are intentionally empty; this file is the
   maintained project context.

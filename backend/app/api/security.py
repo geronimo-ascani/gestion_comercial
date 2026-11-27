@@ -58,13 +58,24 @@ def _usuario_desde_credenciales(
     return usuario
 
 
+DbDep = Annotated[Connection[dict[str, Any]], Depends(get_db)]
+
+
 def get_current_user(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(_bearer)
     ],
     service: ServiceDep,
+    db: DbDep,
 ) -> dict[str, Any]:
-    return _usuario_desde_credenciales(credentials, service)
+    usuario = _usuario_desde_credenciales(credentials, service)
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT set_config('app.id_empleado', %s, false)",
+            (usuario["id_empleado"],),
+        )
+    db.commit()
+    return usuario
 
 
 def _usuario_opcional(

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,7 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.core.config import get_settings
 from app.core.db import close_pool, get_pool, open_pool
+from app.core.errores import instalar_manejador_errores
+from app.core.middleware import CorrelationIdMiddleware
 from app.services.email_worker import detener_worker, iniciar_worker
+
+logging.basicConfig(level=logging.INFO)
 
 settings = get_settings()
 
@@ -37,6 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
+
+app.add_middleware(CorrelationIdMiddleware)
+instalar_manejador_errores(app)
 
 app.include_router(api_router, prefix="/api/v1")
 
